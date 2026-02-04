@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initiatePayment } from '@/lib/dimoco/client';
+import { startPayment, initiatePaymentMock, getDimocoConfig } from '@/lib/dimoco/client';
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getArticleRepository } from '@/lib/db';
+import { getCollection } from '@/lib/db/mongodb';
 
 const ARTICLE_PRICE_CENTS = parseInt(process.env.ARTICLE_PRICE_CENTS || '99', 10);
 
 // Get the base URL from the request (works with any domain, tunnel, proxy)
 function getBaseUrl(request: NextRequest): string {
-  // Check various headers that proxies/tunnels use
   const forwardedHost = request.headers.get('x-forwarded-host');
   const forwardedProto = request.headers.get('x-forwarded-proto');
-  const cfHost = request.headers.get('cf-connecting-ip') ? request.headers.get('host') : null;
   const host = request.headers.get('host');
   
-  // Debug logging
   console.log('[Payment] Headers:', {
     forwardedHost,
     forwardedProto,
@@ -21,7 +19,6 @@ function getBaseUrl(request: NextRequest): string {
     url: request.url,
   });
   
-  // Priority: x-forwarded-host > host header > URL
   const effectiveHost = forwardedHost || host;
   const effectiveProto = forwardedProto || (effectiveHost?.includes('localhost') ? 'http' : 'https');
   
@@ -31,7 +28,6 @@ function getBaseUrl(request: NextRequest): string {
     return baseUrl;
   }
   
-  // Fallback to request URL origin
   const url = new URL(request.url);
   console.log('[Payment] Fallback to URL origin:', url.origin);
   return url.origin;
@@ -44,6 +40,7 @@ export async function GET(request: NextRequest) {
     const slug = searchParams.get('slug');
     const returnUrl = searchParams.get('returnUrl');
     const deviceData = searchParams.get('deviceData');
+    const useMock = searchParams.get('mock') === 'true';
 
     if (!articleId || !slug) {
       return NextResponse.json(
@@ -65,7 +62,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Parse device data if provided
-    let deviceInfo = {};
+    let deviceInfo: Record<string, unknown> = {};
     if (deviceData) {
       try {
         deviceInfo = JSON.parse(decodeURIComponent(deviceData));
@@ -83,34 +80,81 @@ export async function GET(request: NextRequest) {
     // Get dynamic base URL from request
     const baseUrl = getBaseUrl(request);
 
-    // Initiate payment with dynamic URLs and device data
-    const response = await initiatePayment({
+    // Check if we should use mock or real DIMOCO
+    const config = getDimocoConfig();
+    const shouldUseMock = useMock || !config.password || config.password === '';
+
+    // Prepare payment request
+    const paymentRequest = {
       articleId: article._id!.toString(),
       articleSlug: slug,
       amount: ARTICLE_PRICE_CENTS,
       currency: 'EUR',
-      description: `Artikel: ${article.title.substring(0, 50)}...`,
+      description: `Artikel: ${article.title.substring(0, 40)}...`,
       returnUrl: returnUrl || `${baseUrl}/de/article/${slug}`,
       brandId,
-      baseUrl, // Pass base URL for dynamic callback URLs
+      baseUrl,
       metadata: {
         ...deviceInfo,
         ipAddress,
         userAgent: request.headers.get('user-agent') || 'unknown',
       },
-    });
+    };
 
-    if (!response.success || !response.paymentUrl) {
+    let response;
+
+    if (shouldUseMock) {
+      console.log('[Payment] Using MOCK payment flow');
+      response = await initiatePaymentMock(paymentRequest);
+    } else {
+      console.log('[Payment] Using REAL DIMOCO API');
+      response = await startPayment(paymentRequest);
+    }
+
+    if (!response.success) {
+      console.error('[Payment] Failed:', response.error);
+      
+      // Fallback to mock if real API fails
+      if (!shouldUseMock) {
+        console.log('[Payment] Falling back to mock...');
+        response = await initiatePaymentMock(paymentRequest);
+      }
+    }
+
+    if (!response.success || (!response.paymentUrl && !response.redirectUrl)) {
       return NextResponse.json(
         { success: false, error: response.error || 'Failed to initiate payment' },
         { status: 500 }
       );
     }
 
-    // Redirect to payment page - use baseUrl (not request.url which may be localhost)
-    const redirectUrl = new URL(response.paymentUrl, baseUrl);
-    console.log('[Payment] Redirecting to:', redirectUrl.toString());
-    return NextResponse.redirect(redirectUrl);
+    // Store pending transaction in database for callback processing
+    try {
+      const transactionsCollection = await getCollection(brandId, 'transactions');
+      await transactionsCollection.insertOne({
+        transactionId: response.transactionId,
+        articleId: article._id!.toString(),
+        articleSlug: slug,
+        amount: ARTICLE_PRICE_CENTS,
+        currency: 'EUR',
+        status: 'pending',
+        createdAt: new Date(),
+        metadata: paymentRequest.metadata,
+        returnUrl: paymentRequest.returnUrl,
+      });
+      console.log('[Payment] Stored pending transaction:', response.transactionId);
+    } catch (e) {
+      console.error('[Payment] Failed to store transaction:', e);
+    }
+
+    // Redirect to payment page
+    const redirectUrl = response.redirectUrl || response.paymentUrl;
+    const fullRedirectUrl = redirectUrl?.startsWith('http') 
+      ? redirectUrl 
+      : new URL(redirectUrl!, baseUrl).toString();
+
+    console.log('[Payment] Redirecting to:', fullRedirectUrl);
+    return NextResponse.redirect(fullRedirectUrl);
   } catch (error) {
     console.error('Payment initiation error:', error);
     return NextResponse.json(

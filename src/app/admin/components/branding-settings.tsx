@@ -68,12 +68,10 @@ interface BrandSettings {
   };
   dimoco: {
     apiUrl: string;
-    apiKey: string;
     merchantId: string;
-    serviceId: string;
-    callbackSecret: string;
-    successUrl: string;
-    cancelUrl: string;
+    password: string;
+    orderId: string;
+    useMock: boolean;
   };
   openai: {
     apiKey: string;
@@ -133,13 +131,11 @@ const defaultSettings: BrandSettings = {
     currency: 'EUR',
   },
   dimoco: {
-    apiUrl: 'https://api.dimoco.eu',
-    apiKey: '',
-    merchantId: '',
-    serviceId: '',
-    callbackSecret: '',
-    successUrl: '/payment/success',
-    cancelUrl: '/payment/cancel',
+    apiUrl: 'https://sandbox-dcb.dimoco.at/sph/payment',
+    merchantId: '8000',
+    password: '',
+    orderId: '8000',
+    useMock: false,
   },
   openai: {
     apiKey: '',
@@ -760,38 +756,57 @@ export function BrandingSettings() {
               <CardDescription>Configure DIMOCO pay:smart integration for carrier billing</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Mode Toggle */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <p className="font-medium">Payment Mode</p>
+                  <p className="text-sm text-muted-foreground">
+                    {settings.dimoco.useMock ? 'Using mock payments for testing' : 'Using real DIMOCO API'}
+                  </p>
+                </div>
+                <Button
+                  variant={settings.dimoco.useMock ? 'outline' : 'default'}
+                  onClick={() => updateNestedSetting('dimoco', 'useMock', !settings.dimoco.useMock)}
+                >
+                  {settings.dimoco.useMock ? 'Switch to Real API' : 'Switch to Mock'}
+                </Button>
+              </div>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>API URL</Label>
                   <Input 
                     value={settings.dimoco.apiUrl}
                     onChange={(e) => updateNestedSetting('dimoco', 'apiUrl', e.target.value)}
-                    placeholder="https://api.dimoco.eu"
+                    placeholder="https://sandbox-dcb.dimoco.at/sph/payment"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Sandbox: https://sandbox-dcb.dimoco.at/sph/payment
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>Merchant ID</Label>
                   <Input 
                     value={settings.dimoco.merchantId}
                     onChange={(e) => updateNestedSetting('dimoco', 'merchantId', e.target.value)}
-                    placeholder="your-merchant-id"
+                    placeholder="8000"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Service ID</Label>
+                  <Label>Order ID</Label>
                   <Input 
-                    value={settings.dimoco.serviceId}
-                    onChange={(e) => updateNestedSetting('dimoco', 'serviceId', e.target.value)}
-                    placeholder="your-service-id"
+                    value={settings.dimoco.orderId}
+                    onChange={(e) => updateNestedSetting('dimoco', 'orderId', e.target.value)}
+                    placeholder="8000"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>API Key</Label>
+                  <Label>Password</Label>
                   <div className="flex gap-2">
                     <Input 
                       type={showApiKeys['dimoco'] ? 'text' : 'password'}
-                      value={settings.dimoco.apiKey}
-                      onChange={(e) => updateNestedSetting('dimoco', 'apiKey', e.target.value)}
+                      value={settings.dimoco.password}
+                      onChange={(e) => updateNestedSetting('dimoco', 'password', e.target.value)}
                       placeholder="••••••••"
                     />
                     <Button 
@@ -803,47 +818,43 @@ export function BrandingSettings() {
                     </Button>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Callback Secret</Label>
-                  <div className="flex gap-2">
-                    <Input 
-                      type={showApiKeys['dimocoSecret'] ? 'text' : 'password'}
-                      value={settings.dimoco.callbackSecret}
-                      onChange={(e) => updateNestedSetting('dimoco', 'callbackSecret', e.target.value)}
-                      placeholder="••••••••"
-                    />
-                    <Button 
-                      variant="outline" 
-                      size="icon"
-                      onClick={() => toggleApiKeyVisibility('dimocoSecret')}
-                    >
-                      {showApiKeys['dimocoSecret'] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </div>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Success Redirect URL</Label>
-                  <Input 
-                    value={settings.dimoco.successUrl}
-                    onChange={(e) => updateNestedSetting('dimoco', 'successUrl', e.target.value)}
-                    placeholder="/payment/success"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Cancel Redirect URL</Label>
-                  <Input 
-                    value={settings.dimoco.cancelUrl}
-                    onChange={(e) => updateNestedSetting('dimoco', 'cancelUrl', e.target.value)}
-                    placeholder="/payment/cancel"
-                  />
-                </div>
+
+              {/* Status indicator */}
+              <div className={`p-4 rounded-lg text-sm ${
+                settings.dimoco.useMock 
+                  ? 'bg-yellow-50 border border-yellow-200 text-yellow-700'
+                  : settings.dimoco.password 
+                    ? 'bg-green-50 border border-green-200 text-green-700'
+                    : 'bg-red-50 border border-red-200 text-red-700'
+              }`}>
+                <p className="font-medium flex items-center gap-2">
+                  {settings.dimoco.useMock ? (
+                    <>⚠️ Mock Mode Active</>
+                  ) : settings.dimoco.password ? (
+                    <>✓ DIMOCO API Configured</>
+                  ) : (
+                    <>✗ Password Required</>
+                  )}
+                </p>
+                <p className="mt-1">
+                  {settings.dimoco.useMock 
+                    ? 'Payments are simulated. No real charges will occur.'
+                    : settings.dimoco.password
+                      ? `Connected to ${settings.dimoco.apiUrl.includes('sandbox') ? 'Sandbox' : 'Production'} API`
+                      : 'Enter your DIMOCO credentials to enable real carrier billing.'
+                  }
+                </p>
               </div>
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm">
-                <p className="font-medium">Note: DIMOCO Integration</p>
-                <p>Full DIMOCO integration requires completing the carrier billing setup. Currently using mock payment for development.</p>
-              </div>
+
+              {/* Sandbox info */}
+              {settings.dimoco.apiUrl.includes('sandbox') && !settings.dimoco.useMock && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm">
+                  <p className="font-medium">Sandbox Mode</p>
+                  <p>All payments will use test MSISDN: <code className="bg-blue-100 px-1 rounded">436763602302</code></p>
+                  <p>Operator: AT_SANDBOX</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
