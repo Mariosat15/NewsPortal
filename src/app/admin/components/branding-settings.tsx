@@ -1148,57 +1148,114 @@ export function BrandingSettings() {
                 Danger Zone - Reset Database
               </CardTitle>
               <CardDescription className="text-red-600">
-                Permanently delete all data and start fresh. This action cannot be undone!
+                Permanently delete data and start fresh. This action cannot be undone!
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 pt-4">
-              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-700 mb-2">
-                  <strong>Warning:</strong> This will permanently delete:
+            <CardContent className="space-y-6 pt-4">
+              {/* Reset User Data (preserves articles) */}
+              <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                <p className="font-medium text-orange-800 mb-2">
+                  Reset User Data (Keep Articles)
                 </p>
-                <ul className="text-sm text-red-600 list-disc list-inside space-y-1">
+                <p className="text-sm text-orange-700 mb-2">
+                  This will delete:
+                </p>
+                <ul className="text-sm text-orange-600 list-disc list-inside space-y-1 mb-3">
                   <li>All registered users and their sessions</li>
-                  <li>All articles and content</li>
-                  <li>All transactions and payment records</li>
-                  <li>All landing pages</li>
-                  <li>All tracking data and analytics</li>
+                  <li>All transactions, unlocks, and billing events</li>
                   <li>All customer records and purchases</li>
+                  <li>All tracking data and analytics</li>
+                  <li>All landing pages</li>
                 </ul>
-                <p className="text-sm text-red-700 mt-3">
-                  <strong>Preserved:</strong> Admin credentials and system settings will be kept.
+                <p className="text-sm text-orange-700">
+                  <strong>Preserved:</strong> Articles, settings, categories
                 </p>
               </div>
               
               <div className="space-y-2">
-                <Label className="text-red-700">
-                  Type <code className="bg-red-100 px-2 py-1 rounded font-mono">RESET_DATABASE</code> to confirm:
+                <Label className="text-orange-700">
+                  Type <code className="bg-orange-100 px-2 py-1 rounded font-mono">RESET_DATABASE</code> to confirm:
                 </Label>
                 <Input 
                   value={resetConfirmation}
                   onChange={(e) => setResetConfirmation(e.target.value)}
                   placeholder="RESET_DATABASE"
-                  className="font-mono border-red-200 focus:border-red-400 focus:ring-red-400"
+                  className="font-mono border-orange-200 focus:border-orange-400 focus:ring-orange-400"
                 />
               </div>
 
               <Button 
                 onClick={handleResetDatabase}
                 disabled={resettingDb || resetConfirmation !== 'RESET_DATABASE'}
-                variant="destructive"
-                className="w-full"
+                className="w-full bg-orange-600 hover:bg-orange-700 text-white"
               >
                 {resettingDb ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Resetting Database...
+                    Resetting User Data...
                   </>
                 ) : (
                   <>
                     <AlertCircle className="h-4 w-4 mr-2" />
-                    Reset Database & Delete All Data
+                    Reset User Data (Keep Articles)
                   </>
                 )}
               </Button>
+
+              <div className="border-t border-gray-200 pt-6">
+                {/* Reset Articles */}
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="font-medium text-red-800 mb-2">
+                    Reset Articles Only
+                  </p>
+                  <p className="text-sm text-red-700 mb-2">
+                    This will permanently delete all articles and content.
+                  </p>
+                  <p className="text-sm text-red-700">
+                    <strong>Preserved:</strong> Users, transactions, settings, categories
+                  </p>
+                </div>
+                
+                <Button 
+                  onClick={async () => {
+                    if (!confirm('⚠️ This will permanently delete ALL articles. Are you sure?')) return;
+                    setResettingDb(true);
+                    setResetResult(null);
+                    try {
+                      const response = await fetch('/api/admin/database/reset', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ resetType: 'RESET_ARTICLES' }),
+                      });
+                      const data = await response.json();
+                      if (response.ok) {
+                        setResetResult(data.results);
+                      } else {
+                        setError(data.error || 'Failed to reset articles');
+                      }
+                    } catch (err) {
+                      setError('Network error');
+                    } finally {
+                      setResettingDb(false);
+                    }
+                  }}
+                  disabled={resettingDb}
+                  variant="destructive"
+                  className="w-full mt-4"
+                >
+                  {resettingDb ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Deleting Articles...
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="h-4 w-4 mr-2" />
+                      Reset All Articles
+                    </>
+                  )}
+                </Button>
+              </div>
 
               {resetResult && (
                 <div className="mt-4 space-y-4">

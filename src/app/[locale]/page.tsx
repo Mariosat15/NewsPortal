@@ -31,11 +31,17 @@ const categoryLabels: Record<string, Record<string, string>> = {
     world: 'Welt',
     politics: 'Politik',
     business: 'Wirtschaft',
+    recipes: 'Rezepte',
+    relationships: 'Beziehungen',
+    travel: 'Reisen',
+    science: 'Wissenschaft',
+    culture: 'Kultur',
+    music: 'Musik',
   },
   en: {
     technology: 'Tech',
     health: 'Health',
-    finance: 'Business',
+    finance: 'Finance',
     sports: 'Sports',
     lifestyle: 'Lifestyle',
     news: 'News',
@@ -43,6 +49,12 @@ const categoryLabels: Record<string, Record<string, string>> = {
     world: 'World',
     politics: 'Politics',
     business: 'Business',
+    recipes: 'Recipes',
+    relationships: 'Relationships',
+    travel: 'Travel',
+    science: 'Science',
+    culture: 'Culture',
+    music: 'Music',
   },
 };
 
@@ -54,6 +66,12 @@ const categoryColors: Record<string, string> = {
   sports: 'bg-red-600',
   lifestyle: 'bg-purple-600',
   entertainment: 'bg-pink-600',
+  recipes: 'bg-orange-500',
+  relationships: 'bg-rose-500',
+  travel: 'bg-cyan-600',
+  science: 'bg-indigo-600',
+  culture: 'bg-violet-600',
+  music: 'bg-fuchsia-600',
 };
 
 function groupByCategory(articles: ArticlePreview[]): Record<string, ArticlePreview[]> {
@@ -174,7 +192,9 @@ export default async function HomePage({
   const popularArticles = [...articles].sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0)).slice(0, 8);
   
   const articlesByCategory = groupByCategory(articles);
-  const categories = ['entertainment', 'sports', 'technology', 'health', 'finance', 'lifestyle'];
+  // Show all categories that have articles (dynamically)
+  const allCategories = ['news', 'technology', 'health', 'finance', 'sports', 'lifestyle', 'entertainment', 'recipes', 'relationships', 'travel', 'science', 'culture', 'music'];
+  const categories = allCategories.filter(cat => articlesByCategory[cat] && articlesByCategory[cat].length >= 2);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">

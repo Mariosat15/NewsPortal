@@ -60,7 +60,7 @@ const categories = [
     gradient: 'from-amber-600 to-orange-700',
     image: 'https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?w=600&h=400&fit=crop',
     labelDe: 'Finanzen',
-    labelEn: 'Business',
+    labelEn: 'Finance',
     descDe: 'Finanznachrichten und Anlagestrategien',
     descEn: 'Financial news and investment strategies'
   },
@@ -73,6 +73,36 @@ const categories = [
     labelEn: 'Lifestyle',
     descDe: 'Lifestyle, Mode und Trends',
     descEn: 'Lifestyle, fashion and trends'
+  },
+  { 
+    key: 'recipes',
+    icon: '🍳',
+    gradient: 'from-orange-500 to-red-600',
+    image: 'https://images.unsplash.com/photo-1466637574441-749b8f19452f?w=600&h=400&fit=crop',
+    labelDe: 'Rezepte',
+    labelEn: 'Recipes',
+    descDe: 'Leckere Rezepte und Kochtipps',
+    descEn: 'Delicious recipes and cooking tips'
+  },
+  { 
+    key: 'relationships',
+    icon: '💕',
+    gradient: 'from-rose-500 to-pink-600',
+    image: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=600&h=400&fit=crop',
+    labelDe: 'Beziehungen',
+    labelEn: 'Relationships',
+    descDe: 'Dating, Beziehungstipps und Ratgeber',
+    descEn: 'Dating, relationship tips and advice'
+  },
+  { 
+    key: 'travel',
+    icon: '✈️',
+    gradient: 'from-cyan-500 to-blue-600',
+    image: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&h=400&fit=crop',
+    labelDe: 'Reisen',
+    labelEn: 'Travel',
+    descDe: 'Reiseziele, Tipps und Abenteuer',
+    descEn: 'Destinations, tips and adventures'
   },
 ];
 

@@ -11,7 +11,7 @@ async function verifyAdmin(): Promise<boolean> {
   return adminToken === validToken;
 }
 
-// POST /api/admin/database/reset - Reset database (delete all data except settings)
+// POST /api/admin/database/reset - Reset database (delete user data, preserve articles and settings)
 export async function POST(request: NextRequest) {
   if (!(await verifyAdmin())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -19,12 +19,15 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { confirmation } = body;
+    const { confirmation, resetType } = body;
 
-    // Require explicit confirmation
-    if (confirmation !== 'RESET_DATABASE') {
+    // Determine reset type
+    const isArticleReset = resetType === 'RESET_ARTICLES';
+    const isDatabaseReset = confirmation === 'RESET_DATABASE';
+
+    if (!isArticleReset && !isDatabaseReset) {
       return NextResponse.json(
-        { error: 'Invalid confirmation. Please type "RESET_DATABASE" to confirm.' },
+        { error: 'Invalid confirmation. Please type "RESET_DATABASE" or use resetType: "RESET_ARTICLES".' },
         { status: 400 }
       );
     }
@@ -33,20 +36,51 @@ export async function POST(request: NextRequest) {
     const results = {
       deleted: [] as string[],
       errors: [] as string[],
-      preserved: ['settings'] as string[],
+      preserved: [] as string[],
     };
 
-    // Collections to delete (everything except settings)
+    if (isArticleReset) {
+      // Reset ONLY articles
+      try {
+        const collection = await getCollection(brandId, 'articles');
+        const result = await collection.deleteMany({});
+        results.deleted.push(`articles: ${result.deletedCount} documents deleted`);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        if (!errorMessage.includes('ns not found')) {
+          results.errors.push(`articles: ${errorMessage}`);
+        } else {
+          results.deleted.push(`articles: collection empty or not found`);
+        }
+      }
+
+      results.preserved = ['settings', 'users', 'customers', 'transactions', 'unlocks', 'billing_events'];
+
+      console.log('[Articles Reset] Completed:', results);
+
+      return NextResponse.json({
+        success: true,
+        message: 'Articles reset completed successfully',
+        results,
+      });
+    }
+
+    // Database reset - delete user/transaction data but PRESERVE articles
+    results.preserved = ['settings', 'articles', 'categories'];
+
+    // Collections to delete (user data, transactions, unlocks, etc.)
     const collectionsToDelete = [
       'users',
       'sessions',
       'transactions',
-      'articles',
+      'unlocks',          // Added
+      'billing_events',   // Added
       'landing_pages',
       'tracking_sessions',
       'tracking_events',
       'customers',
       'purchases',
+      'visitor_sessions',
     ];
 
     for (const collectionName of collectionsToDelete) {
@@ -69,7 +103,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Database reset completed successfully',
+      message: 'Database reset completed successfully (articles preserved)',
       results,
     });
   } catch (error) {
