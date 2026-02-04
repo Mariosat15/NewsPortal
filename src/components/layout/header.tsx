@@ -7,7 +7,7 @@ import { Menu, Search, Globe, X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useBrand } from '@/lib/brand';
+import { useBrand } from '@/lib/brand/context';
 import { cn } from '@/lib/utils';
 
 export function Header() {

@@ -3,7 +3,7 @@ import { gatherTopics } from './gatherer';
 import { createDrafts } from './drafter';
 import { editDrafts } from './editor';
 import { publishArticles, isDuplicate } from './publisher';
-import { getBrandConfig } from '@/lib/brand';
+import { getBrandConfig } from '@/lib/brand/config';
 
 // Main orchestrator that runs all agents in sequence
 export async function runAgentPipeline(brandId: string): Promise<AgentRunLog> {

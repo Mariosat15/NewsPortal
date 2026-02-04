@@ -24,8 +24,8 @@ export async function generateMetadata({
   }
 
   return {
-    title: t(`${page}Title` as keyof IntlMessages),
-    description: `${t(`${page}Title` as keyof IntlMessages)} - ${brand.name}`,
+    title: t(`${page}Title`),
+    description: `${t(`${page}Title`)} - ${brand.name}`,
   };
 }
 

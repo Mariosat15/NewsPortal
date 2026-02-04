@@ -1,7 +1,7 @@
 export interface AgentConfig {
   enabled: boolean;
   topics: string[];
-  language: 'de' | 'en';
+  defaultLanguage: 'de' | 'en';
   maxArticlesPerRun: number;
   cronSchedule: string;
 }

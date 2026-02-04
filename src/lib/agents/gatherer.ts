@@ -30,7 +30,7 @@ export async function gatherTopics(config: AgentConfig): Promise<AgentResult<Gat
         try {
           // Use OpenAI to generate simulated search results
           // In production, replace with actual BrightData web scraping
-          const searchResults = await simulateWebSearch(query, config.language);
+          const searchResults = await simulateWebSearch(query, config.defaultLanguage);
           
           if (searchResults.length > 0) {
             gatheredTopics.push({

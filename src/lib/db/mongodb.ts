@@ -1,4 +1,4 @@
-import { MongoClient, Db, Collection, ObjectId } from 'mongodb';
+import { MongoClient, Db, Collection, ObjectId, Document } from 'mongodb';
 
 // Cache the MongoDB client connections per database
 const clientCache: Map<string, MongoClient> = new Map();

@@ -64,7 +64,7 @@ export function ArticleCard({ article, variant = 'default' }: ArticleCardProps) 
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
             <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 text-white">
               <Badge variant="secondary" className="mb-2">
-                {t(`categories.${article.category}` as keyof IntlMessages)}
+                {t(`categories.${article.category}`)}
               </Badge>
               <h2 className="font-bold text-xl md:text-2xl line-clamp-2 mb-2">
                 {article.title}
@@ -97,7 +97,7 @@ export function ArticleCard({ article, variant = 'default' }: ArticleCardProps) 
         </div>
         <CardContent className="flex-1 p-4">
           <Badge variant="outline" className="mb-2">
-            {t(`categories.${article.category}` as keyof IntlMessages)}
+            {t(`categories.${article.category}`)}
           </Badge>
           <h3 className="font-semibold text-lg line-clamp-2 mb-2">{article.title}</h3>
           <p className="text-sm text-muted-foreground line-clamp-2">

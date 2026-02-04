@@ -12,7 +12,20 @@ import { cookies } from 'next/headers';
 import Image from 'next/image';
 
 // Sample article for demo
-const sampleArticle = {
+const sampleArticle: {
+  _id: string;
+  slug: string;
+  title: string;
+  teaser: string;
+  content: string;
+  thumbnail: string;
+  category: string;
+  tags: string[];
+  publishDate: Date;
+  language: 'de' | 'en';
+  viewCount: number;
+  isUnlocked: boolean;
+} = {
   _id: 'demo-id',
   slug: 'example-article-1',
   title: 'Die neuesten Entwicklungen in der Technologiebranche',
@@ -35,7 +48,7 @@ const sampleArticle = {
   category: 'technology',
   tags: ['KI', 'Technologie', 'Innovation', 'Quantencomputing'],
   publishDate: new Date(),
-  language: 'de' as const,
+  language: 'de',
   viewCount: 1247,
   isUnlocked: false,
 };
@@ -55,7 +68,20 @@ export async function generateMetadata({
     const repo = getArticleRepository(brandId);
     const found = await repo.findBySlug(slug);
     if (found) {
-      article = { ...sampleArticle, ...found };
+      article = {
+        ...sampleArticle,
+        _id: found._id?.toString() || 'demo-id',
+        slug: found.slug,
+        title: found.title,
+        teaser: found.teaser,
+        content: found.content,
+        thumbnail: found.thumbnail,
+        category: found.category,
+        tags: found.tags,
+        publishDate: found.publishDate,
+        language: found.language,
+        viewCount: found.viewCount,
+      };
     }
   } catch {
     // Use sample article
@@ -148,7 +174,7 @@ export default async function ArticlePage({
           {/* Article header */}
           <header className="mb-6">
             <Badge variant="outline" className="mb-3">
-              {t(`categories.${article.category}` as keyof IntlMessages)}
+              {t(`categories.${article.category}`)}
             </Badge>
             <h1 className="text-2xl md:text-3xl font-bold mb-3">{article.title}</h1>
             <p className="text-muted-foreground mb-4">{article.teaser}</p>

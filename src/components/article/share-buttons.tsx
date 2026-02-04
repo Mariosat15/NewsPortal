@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Share2, Check, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useBrand } from '@/lib/brand';
+import { useBrand } from '@/lib/brand/context';
 import { cn } from '@/lib/utils';
 
 interface ShareButtonsProps {

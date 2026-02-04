@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
-import { useBrand } from '@/lib/brand';
+import { useBrand } from '@/lib/brand/context';
 
 export function Footer() {
   const t = useTranslations();

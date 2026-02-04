@@ -1,52 +1,56 @@
-import { betterAuth } from 'better-auth';
-import { mongodbAdapter } from 'better-auth/adapters/mongodb';
-import { MongoClient } from 'mongodb';
+// Note: This is a simplified auth configuration.
+// For MSISDN-based authentication, we use cookie-based session management.
+// better-auth is available for admin panel authentication if needed.
+
+import { MongoClient, Db } from 'mongodb';
+
+let cachedClient: MongoClient | null = null;
+let cachedDb: Db | null = null;
 
 // Get MongoDB client for auth
-const getMongoClient = async () => {
+export async function getAuthDb(): Promise<Db> {
+  if (cachedDb) {
+    return cachedDb;
+  }
+
   const uri = process.env.MONGODB_URI;
   if (!uri) {
     throw new Error('MONGODB_URI environment variable is not set');
   }
-  const client = new MongoClient(uri);
-  await client.connect();
-  return client;
-};
 
-// Create the auth instance
-export const auth = betterAuth({
-  database: mongodbAdapter(getMongoClient),
+  if (!cachedClient) {
+    cachedClient = new MongoClient(uri);
+    await cachedClient.connect();
+  }
+
+  cachedDb = cachedClient.db();
+  return cachedDb;
+}
+
+// Admin authentication (simple email/password)
+export async function verifyAdminCredentials(email: string, password: string): Promise<boolean> {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
   
-  // Session configuration
-  session: {
-    expiresIn: 60 * 60 * 24 * 30, // 30 days
-    updateAge: 60 * 60 * 24, // Update session every day
-    cookieCache: {
-      enabled: true,
-      maxAge: 60 * 5, // 5 minutes cache
-    },
-  },
+  if (!adminEmail || !adminPassword) {
+    console.warn('Admin credentials not configured');
+    return false;
+  }
 
-  // Secret for signing tokens
-  secret: process.env.BETTER_AUTH_SECRET,
+  return email === adminEmail && password === adminPassword;
+}
 
-  // Base URL
-  baseURL: process.env.BETTER_AUTH_URL || 'http://localhost:3000',
+// Session types
+export interface Session {
+  id: string;
+  userId: string;
+  createdAt: Date;
+  expiresAt: Date;
+}
 
-  // Email and password authentication (for admin)
-  emailAndPassword: {
-    enabled: true,
-    autoSignIn: true,
-  },
-
-  // Advanced configuration
-  advanced: {
-    generateId: () => {
-      // Use crypto for generating IDs
-      return crypto.randomUUID();
-    },
-  },
-});
-
-export type Session = typeof auth.$Infer.Session;
-export type User = typeof auth.$Infer.Session.user;
+export interface User {
+  id: string;
+  email: string;
+  name?: string;
+  role: 'admin' | 'user';
+}

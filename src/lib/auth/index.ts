@@ -1,5 +1,5 @@
 // Auth configuration
-export { auth, type Session, type User } from './config';
+export { getAuthDb, verifyAdminCredentials, type Session, type User } from './config';
 
 // Session management
 export {
