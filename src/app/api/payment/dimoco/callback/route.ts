@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCallbackSignature, parseAmount, type PaymentCallbackData } from '@/lib/dimoco/client';
-import { getBrandIdSync } from '@/lib/brand';
-import { getUnlockRepository, getArticleRepository, getUserRepository, createUnlock } from '@/lib/db';
+import { getBrandIdSync } from '@/lib/brand/server';
+import { getUnlockRepository, getArticleRepository, getUserRepository, getBillingRepository, getCustomerRepository, getTrackingRepository } from '@/lib/db';
 import { normalizeMSISDN } from '@/lib/utils';
+import { normalizePhoneNumber } from '@/lib/utils/phone';
 
 // POST /api/payment/dimoco/callback - DIMOCO payment callback
 export async function POST(request: NextRequest) {
@@ -54,8 +55,36 @@ export async function POST(request: NextRequest) {
     // Process based on status
     if (callbackData.status === 'success' && callbackData.msisdn) {
       const normalizedMsisdn = normalizeMSISDN(callbackData.msisdn);
+      const e164Msisdn = normalizePhoneNumber(callbackData.msisdn);
 
-      // Create unlock record
+      // Parse device metadata if provided
+      let deviceMetadata: Record<string, unknown> = {};
+      const metadataStr = body.metadata;
+      console.log('[Payment Callback] Raw metadata string:', metadataStr ? `"${metadataStr.substring(0, 100)}..."` : 'null');
+      
+      if (metadataStr && metadataStr !== 'null' && metadataStr !== '') {
+        try {
+          // Try to decode - might be URL-encoded JSON
+          let decoded = metadataStr;
+          // If it looks URL-encoded, decode it
+          if (decoded.includes('%')) {
+            decoded = decodeURIComponent(decoded);
+          }
+          deviceMetadata = JSON.parse(decoded);
+          console.log('[Payment Callback] Parsed device metadata:', deviceMetadata);
+        } catch (e) {
+          console.error('[Payment Callback] Failed to parse metadata:', e, 'Raw:', metadataStr);
+          // Try parsing without decoding
+          try {
+            deviceMetadata = JSON.parse(metadataStr);
+            console.log('[Payment Callback] Parsed without decoding:', deviceMetadata);
+          } catch (e2) {
+            console.error('[Payment Callback] Also failed without decoding:', e2);
+          }
+        }
+      }
+
+      // Create unlock record with device fingerprint data
       const unlock = await unlockRepo.create({
         msisdn: callbackData.msisdn,
         articleId,
@@ -65,6 +94,19 @@ export async function POST(request: NextRequest) {
         status: 'completed',
         paymentProvider: 'dimoco',
         metadata: {
+          // Device fingerprint data
+          browser: deviceMetadata.browser,
+          browserVersion: deviceMetadata.browserVersion,
+          os: deviceMetadata.os,
+          osVersion: deviceMetadata.osVersion,
+          screenResolution: deviceMetadata.screen,
+          timezone: deviceMetadata.tz,
+          language: deviceMetadata.lang,
+          ipAddress: deviceMetadata.ipAddress,
+          userAgent: deviceMetadata.userAgent,
+          gpu: deviceMetadata.gpu,
+          deviceFingerprint: deviceMetadata.fp,
+          // Original payment data
           originalPayload: body,
         },
       });
@@ -76,6 +118,69 @@ export async function POST(request: NextRequest) {
       await userRepo.upsert({
         msisdn: callbackData.msisdn,
       });
+
+      // Create billing event for unified history
+      try {
+        const billingRepo = getBillingRepository(brandId);
+        const customerRepo = getCustomerRepository(brandId);
+        const article = await articleRepo.findById(articleId);
+
+        await billingRepo.createBillingEvent({
+          billingEventId: `dimoco_${callbackData.transactionId}`,
+          msisdn: callbackData.msisdn,
+          normalizedMsisdn: e164Msisdn,
+          tenantId: brandId,
+          source: 'PORTAL_PURCHASE',
+          amount: callbackData.amount || 99,
+          currency: callbackData.currency,
+          productCode: 'article_unlock',
+          serviceName: 'Article Purchase',
+          description: article ? `Purchased: ${article.title}` : 'Article unlock',
+          eventTime: new Date(),
+          status: 'billed',
+          transactionId: callbackData.transactionId,
+          articleId,
+          articleSlug: article?.slug,
+          rawRowJson: body,
+        });
+
+        // Update customer billing total
+        await customerRepo.upsert({
+          msisdn: callbackData.msisdn,
+          normalizedMsisdn: e164Msisdn,
+          tenantId: brandId,
+        });
+        await customerRepo.addBillingAmount(e164Msisdn, callbackData.amount || 99);
+
+        // Link MSISDN to any recent landing page sessions from same IP/device
+        try {
+          const trackingRepo = getTrackingRepository(brandId);
+          const ip = deviceMetadata.ipAddress as string;
+          
+          if (ip && ip !== 'unknown') {
+            // Find recent sessions from this IP without MSISDN (last 24 hours)
+            const recentSessions = await trackingRepo.findRecentSessionsByIp(ip, 24);
+            
+            for (const session of recentSessions) {
+              if (!session.msisdn) {
+                // Update session with MSISDN from purchase
+                await trackingRepo.updateSession(session.sessionId, {
+                  msisdn: callbackData.msisdn,
+                  normalizedMsisdn: e164Msisdn,
+                  msisdnConfidence: 'CONFIRMED',
+                  purchaseCompleted: true,
+                });
+                console.log(`[Payment Callback] Linked MSISDN ${e164Msisdn} to session ${session.sessionId}`);
+              }
+            }
+          }
+        } catch (trackingError) {
+          console.error('[Payment Callback] Error linking MSISDN to sessions:', trackingError);
+        }
+      } catch (billingError) {
+        console.error('Error creating billing event:', billingError);
+        // Don't fail the payment callback if billing event creation fails
+      }
 
       console.log('Payment successful:', {
         transactionId: callbackData.transactionId,
@@ -107,14 +212,20 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   
-  // Convert GET params to callback data
+  // Convert GET params to callback data (including metadata for device fingerprint)
   const body = {
     transactionId: searchParams.get('transactionId'),
     status: searchParams.get('status') || 'success',
     msisdn: searchParams.get('msisdn'),
     amount: searchParams.get('amount'),
     articleId: searchParams.get('articleId'),
+    metadata: searchParams.get('metadata'), // Device fingerprint data
   };
+
+  console.log('[Payment Callback GET] Received params:', {
+    ...body,
+    metadata: body.metadata ? 'present' : 'missing',
+  });
 
   // Process as POST
   const response = await POST(new NextRequest(request.url, {

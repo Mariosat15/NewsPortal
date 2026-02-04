@@ -12,34 +12,103 @@ export function Footer() {
 
   const footerLinks = [
     { key: 'hilfe', href: brand.footer.hilfeUrl.replace('/de/', `/${locale}/`) },
-    { key: 'kundenportal', href: brand.footer.kundenportalUrl.replace('/de/', `/${locale}/`) },
-    { key: 'widerrufsbelehrung', href: brand.footer.widerrufsbelehrungUrl.replace('/de/', `/${locale}/`) },
     { key: 'impressum', href: brand.footer.impressumUrl.replace('/de/', `/${locale}/`) },
-    { key: 'kuendigung', href: brand.footer.kuendigungUrl.replace('/de/', `/${locale}/`) },
     { key: 'agb', href: brand.footer.agbUrl.replace('/de/', `/${locale}/`) },
     { key: 'datenschutz', href: brand.footer.datenschutzUrl.replace('/de/', `/${locale}/`) },
   ];
 
-  return (
-    <footer className="border-t bg-muted/30">
-      <div className="container px-4 py-8">
-        {/* Footer links */}
-        <nav className="flex flex-wrap justify-center gap-4 md:gap-6 mb-6">
-          {footerLinks.map((link) => (
-            <Link
-              key={link.key}
-              href={link.href}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {t(`footer.${link.key}`)}
-            </Link>
-          ))}
-        </nav>
+  const categories = [
+    { key: 'news', label: locale === 'de' ? 'Nachrichten' : 'News' },
+    { key: 'technology', label: locale === 'de' ? 'Technologie' : 'Tech' },
+    { key: 'entertainment', label: locale === 'de' ? 'Unterhaltung' : 'Entertainment' },
+    { key: 'sports', label: locale === 'de' ? 'Sport' : 'Sports' },
+    { key: 'health', label: locale === 'de' ? 'Gesundheit' : 'Health' },
+    { key: 'finance', label: locale === 'de' ? 'Finanzen' : 'Business' },
+  ];
 
-        {/* Copyright */}
-        <p className="text-center text-sm text-muted-foreground">
-          {t('footer.copyright', { year: currentYear, brandName: brand.name })}
-        </p>
+  return (
+    <footer className="bg-gray-900 text-gray-300">
+      {/* Main Footer */}
+      <div className="container mx-auto px-4 py-12">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          {/* Brand */}
+          <div className="col-span-2 md:col-span-1">
+            <h3 className="text-lg font-bold text-white mb-4">{brand.name}</h3>
+            <p className="text-sm text-gray-400 leading-relaxed">
+              {locale === 'de' 
+                ? 'Aktuelle Nachrichten und Analysen aus aller Welt.'
+                : 'Current news and analysis from around the world.'}
+            </p>
+          </div>
+
+          {/* Categories */}
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-4">
+              {locale === 'de' ? 'Kategorien' : 'Categories'}
+            </h4>
+            <ul className="space-y-2">
+              {categories.slice(0, 4).map((cat) => (
+                <li key={cat.key}>
+                  <Link 
+                    href={`/${locale}/categories/${cat.key}`}
+                    className="text-sm text-gray-400 hover:text-white transition-colors"
+                  >
+                    {cat.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Quick Links */}
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-4">
+              {locale === 'de' ? 'Links' : 'Links'}
+            </h4>
+            <ul className="space-y-2">
+              <li>
+                <Link href={`/${locale}`} className="text-sm text-gray-400 hover:text-white transition-colors">
+                  {locale === 'de' ? 'Startseite' : 'Home'}
+                </Link>
+              </li>
+              <li>
+                <Link href={`/${locale}/login`} className="text-sm text-gray-400 hover:text-white transition-colors">
+                  {locale === 'de' ? 'Anmelden' : 'Login'}
+                </Link>
+              </li>
+              <li>
+                <Link href={`/${locale}/register`} className="text-sm text-gray-400 hover:text-white transition-colors">
+                  {locale === 'de' ? 'Registrieren' : 'Register'}
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Legal */}
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-4">
+              {locale === 'de' ? 'Rechtliches' : 'Legal'}
+            </h4>
+            <ul className="space-y-2">
+              {footerLinks.map((link) => (
+                <li key={link.key}>
+                  <Link href={link.href} className="text-sm text-gray-400 hover:text-white transition-colors">
+                    {t(`footer.${link.key}`)}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom */}
+      <div className="border-t border-gray-800">
+        <div className="container mx-auto px-4 py-4">
+          <p className="text-center text-xs text-gray-500">
+            © {currentYear} {brand.name}. {locale === 'de' ? 'Alle Rechte vorbehalten.' : 'All rights reserved.'}
+          </p>
+        </div>
       </div>
     </footer>
   );

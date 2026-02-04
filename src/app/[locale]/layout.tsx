@@ -1,8 +1,10 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { getServerBrandConfig } from '@/lib/brand/server';
 import { BrandProvider } from '@/lib/brand/provider';
+import { AppLayout } from '@/components/layout/app-layout';
 
 // Supported locales
 const locales = ['de', 'en'];
@@ -29,6 +31,21 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   };
 }
 
+// Get current user from session
+async function getCurrentUser() {
+  try {
+    const cookieStore = await cookies();
+    const userCookie = cookieStore.get('user_session')?.value;
+    if (userCookie) {
+      const userData = JSON.parse(userCookie);
+      return userData;
+    }
+  } catch {
+    // No user session
+  }
+  return null;
+}
+
 export default async function LocaleLayout({
   children,
   params,
@@ -49,10 +66,15 @@ export default async function LocaleLayout({
   // Get messages for the locale
   const messages = await getMessages();
 
+  // Get current user
+  const user = await getCurrentUser();
+
   return (
     <NextIntlClientProvider messages={messages} locale={locale}>
       <BrandProvider config={brandConfig}>
-        {children}
+        <AppLayout user={user}>
+          {children}
+        </AppLayout>
       </BrandProvider>
     </NextIntlClientProvider>
   );

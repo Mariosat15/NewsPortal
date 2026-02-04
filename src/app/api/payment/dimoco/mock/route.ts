@@ -9,10 +9,25 @@ export async function GET(request: NextRequest) {
   const description = searchParams.get('description');
   const successUrl = searchParams.get('successUrl');
   const cancelUrl = searchParams.get('cancelUrl');
+  const callbackUrl = searchParams.get('callbackUrl');
+  const metadata = searchParams.get('metadata'); // Device fingerprint data
   
   // Get articleId from successUrl
   const successUrlObj = new URL(successUrl || 'http://localhost:3000');
   const articleId = successUrlObj.searchParams.get('articleId');
+  
+  // Parse callback URL to get the base for building the full callback
+  const callbackBase = callbackUrl || '/api/payment/dimoco/callback';
+  
+  // Parse metadata for display/logging
+  let deviceInfo: Record<string, string> = {};
+  if (metadata) {
+    try {
+      deviceInfo = JSON.parse(decodeURIComponent(metadata));
+    } catch (e) {
+      console.error('Failed to parse metadata:', e);
+    }
+  }
 
   const html = `
 <!DOCTYPE html>
@@ -175,8 +190,9 @@ export async function GET(request: NextRequest) {
       // Simulate payment processing
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // Build callback URL
-      const callbackUrl = '/api/payment/dimoco/callback?' + new URLSearchParams({
+      // Build callback URL - use the dynamic callback base passed from initiate
+      // Note: metadata is already URL-encoded, so we build the URL manually to avoid double-encoding
+      const baseParams = new URLSearchParams({
         transactionId: '${transactionId}',
         status: 'success',
         msisdn: phone.replace(/[^0-9+]/g, ''),
@@ -185,7 +201,12 @@ export async function GET(request: NextRequest) {
         returnUrl: '${successUrl}'
       }).toString();
       
-      window.location.href = callbackUrl;
+      // Append metadata separately (it's already URL-encoded)
+      const metadataParam = '${metadata || ''}';
+      const fullCallbackUrl = '${callbackBase}' + '?' + baseParams + (metadataParam ? '&metadata=' + metadataParam : '');
+      
+      console.log('[Payment Mock] Callback URL:', fullCallbackUrl);
+      window.location.href = fullCallbackUrl;
     });
     
     function handleCancel() {

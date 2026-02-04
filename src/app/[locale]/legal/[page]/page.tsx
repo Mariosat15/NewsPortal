@@ -1,8 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { Header } from '@/components/layout/header';
-import { Footer } from '@/components/layout/footer';
-import { getServerBrandConfig } from '@/lib/brand';
+import { getServerBrandConfig } from '@/lib/brand/server';
 
 const legalPages = ['hilfe', 'kundenportal', 'widerrufsbelehrung', 'impressum', 'kuendigung', 'agb', 'datenschutz'];
 
@@ -195,19 +193,13 @@ export default async function LegalPage({
   const content = getLegalContent(page, locale, brand);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-      
-      <main className="flex-1">
-        <div className="container px-4 py-8 max-w-3xl mx-auto">
-          <div 
-            className="prose prose-lg max-w-none"
-            dangerouslySetInnerHTML={{ __html: content }}
-          />
-        </div>
-      </main>
-
-      <Footer />
+    <div className="min-h-screen bg-white">
+      <div className="container px-4 py-8 max-w-3xl mx-auto">
+        <div 
+          className="prose prose-lg max-w-none"
+          dangerouslySetInnerHTML={{ __html: content }}
+        />
+      </div>
     </div>
   );
 }

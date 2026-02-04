@@ -5,6 +5,7 @@ import { Lock, CreditCard, Shield, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatPrice } from '@/lib/utils';
+import { collectDeviceInfo, storeDeviceInfo } from '@/lib/utils/device-fingerprint';
 
 interface PaywallProps {
   articleId: string;
@@ -24,8 +25,25 @@ export function Paywall({
   const formattedPrice = formatPrice(priceInCents, locale === 'de' ? 'de-DE' : 'en-US');
 
   const handleUnlock = () => {
-    // Redirect to DIMOCO payment
-    const paymentUrl = `/api/payment/dimoco/initiate?articleId=${articleId}&slug=${articleSlug}&returnUrl=${encodeURIComponent(window.location.href)}`;
+    // Collect device fingerprint before payment
+    const deviceInfo = storeDeviceInfo();
+    console.log('[Payment] Device fingerprint collected:', deviceInfo.deviceFingerprint);
+    
+    // Encode device info for URL (will be passed through payment flow)
+    const deviceData = encodeURIComponent(JSON.stringify({
+      fp: deviceInfo.deviceFingerprint,
+      browser: deviceInfo.browser,
+      browserVersion: deviceInfo.browserVersion,
+      os: deviceInfo.os,
+      osVersion: deviceInfo.osVersion,
+      screen: deviceInfo.screenResolution,
+      tz: deviceInfo.timezone,
+      lang: deviceInfo.language,
+      gpu: deviceInfo.gpu,
+    }));
+    
+    // Redirect to DIMOCO payment with device data
+    const paymentUrl = `/api/payment/dimoco/initiate?articleId=${articleId}&slug=${articleSlug}&returnUrl=${encodeURIComponent(window.location.href)}&deviceData=${deviceData}`;
     window.location.href = paymentUrl;
   };
 

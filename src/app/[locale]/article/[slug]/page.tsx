@@ -1,12 +1,10 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { Header } from '@/components/layout/header';
-import { Footer } from '@/components/layout/footer';
 import { Paywall } from '@/components/article/paywall';
 import { ShareButtons } from '@/components/article/share-buttons';
 import { Badge } from '@/components/ui/badge';
 import { getArticleRepository, getUnlockRepository } from '@/lib/db';
-import { getBrandId, getServerBrandConfig } from '@/lib/brand';
+import { getBrandId, getServerBrandConfig } from '@/lib/brand/server';
 import { formatDate } from '@/lib/utils';
 import { cookies } from 'next/headers';
 import Image from 'next/image';
@@ -112,11 +110,21 @@ export default async function ArticlePage({
   // Try to fetch real article
   let article = { ...sampleArticle };
   let isUnlocked = false;
+  let pricingEnabled = true;
   
   try {
     const brandId = await getBrandId();
     const articleRepo = getArticleRepository(brandId);
     const unlockRepo = getUnlockRepository(brandId);
+    
+    // Check if pricing is enabled from settings
+    const { getCollection } = await import('@/lib/db/mongodb');
+    const settingsCollection = await getCollection(brandId, 'settings');
+    const pricingSetting = await settingsCollection.findOne({ key: 'pricing' });
+    if (pricingSetting?.value && typeof pricingSetting.value === 'object') {
+      const pricingValue = pricingSetting.value as { enabled?: boolean };
+      pricingEnabled = pricingValue.enabled !== false;
+    }
     
     const found = await articleRepo.findBySlug(slug);
     if (found) {
@@ -135,30 +143,35 @@ export default async function ArticlePage({
         viewCount: found.viewCount,
       };
       
-      // Check if unlocked
-      const cookieStore = await cookies();
-      const msisdn = cookieStore.get('user_msisdn')?.value;
-      if (msisdn) {
-        isUnlocked = await unlockRepo.hasUnlocked(msisdn, found._id!);
+      // Check if unlocked (only if pricing is enabled)
+      if (pricingEnabled) {
+        const cookieStore = await cookies();
+        const msisdn = cookieStore.get('user_msisdn')?.value;
+        if (msisdn) {
+          isUnlocked = await unlockRepo.hasUnlocked(msisdn, found._id!);
+        }
+      } else {
+        // Pricing disabled - all articles are free
+        isUnlocked = true;
       }
     }
   } catch (error) {
     console.log('Using sample article for demo:', error);
   }
 
-  // For demo, show as unlocked if the slug is in the sample
-  if (slug === 'example-article-1') {
+  // If pricing is disabled globally, show article as unlocked
+  if (!pricingEnabled) {
+    isUnlocked = true;
+  }
+
+  // For demo, show as unlocked if the slug is in the sample (only when pricing enabled)
+  if (slug === 'example-article-1' && pricingEnabled) {
     isUnlocked = false; // Keep locked to demo paywall
   }
 
-  const articleUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/${locale}/article/${slug}`;
-
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-      
-      <main className="flex-1">
-        <article className="container px-4 py-6 max-w-3xl mx-auto">
+    <div className="min-h-screen bg-white">
+      <article className="container px-4 py-6 max-w-3xl mx-auto">
           {/* Hero image */}
           <div className="relative aspect-[16/9] w-full mb-6 rounded-lg overflow-hidden">
             <Image
@@ -182,7 +195,7 @@ export default async function ArticlePage({
               <p className="text-sm text-muted-foreground">
                 {t('article.publishedOn', { date: formatDate(article.publishDate, locale) })}
               </p>
-              <ShareButtons url={articleUrl} title={article.title} />
+              <ShareButtons title={article.title} />
             </div>
           </header>
 
@@ -227,10 +240,7 @@ export default async function ArticlePage({
               </div>
             </div>
           )}
-        </article>
-      </main>
-
-      <Footer />
+      </article>
     </div>
   );
 }

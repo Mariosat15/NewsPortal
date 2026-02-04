@@ -1,9 +1,53 @@
+export interface RSSFeed {
+  url: string;
+  name: string;
+  category: string;
+  language: 'de' | 'en';
+  enabled: boolean;
+}
+
+export interface AIModelConfig {
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  topP: number;
+  frequencyPenalty: number;
+  presencePenalty: number;
+}
+
+export interface ArticleStyle {
+  type: 'news' | 'analysis' | 'opinion' | 'summary' | 'investigative';
+  tone: 'neutral' | 'engaging' | 'formal' | 'conversational';
+  depth: 'brief' | 'standard' | 'in-depth';
+  includeImages: boolean;
+  includeQuotes: boolean;
+  includeSources: boolean;
+}
+
 export interface AgentConfig {
   enabled: boolean;
   topics: string[];
   defaultLanguage: 'de' | 'en';
   maxArticlesPerRun: number;
   cronSchedule: string;
+  
+  // RSS Feeds
+  rssFeeds: RSSFeed[];
+  useRSSFeeds: boolean;
+  
+  // AI Model Settings
+  aiModel: AIModelConfig;
+  
+  // Article Generation Settings
+  articleStyles: ArticleStyle[];
+  defaultArticleStyle: ArticleStyle;
+  minWordCount: number;
+  maxWordCount: number;
+  
+  // Quality Settings
+  minQualityScore: number;
+  requireFactCheck: boolean;
+  requireSourceAttribution: boolean;
 }
 
 export interface GatheredTopic {

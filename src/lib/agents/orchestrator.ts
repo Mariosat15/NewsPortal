@@ -1,12 +1,32 @@
-import { AgentConfig, AgentRunLog, GatheredTopic, DraftArticle, EditedArticle, PublishedArticle } from './types';
+import { AgentConfig, AgentRunLog, GatheredTopic, DraftArticle, EditedArticle, PublishedArticle, AIModelConfig, ArticleStyle } from './types';
 import { gatherTopics } from './gatherer';
 import { createDrafts } from './drafter';
 import { editDrafts } from './editor';
 import { publishArticles, isDuplicate } from './publisher';
 import { getBrandConfig } from '@/lib/brand/config';
+import { getCollection } from '@/lib/db/mongodb';
+
+// Default configurations
+const defaultAIConfig: AIModelConfig = {
+  model: 'gpt-4o',
+  temperature: 0.7,
+  maxTokens: 4000,
+  topP: 0.9,
+  frequencyPenalty: 0.3,
+  presencePenalty: 0.3,
+};
+
+const defaultArticleStyle: ArticleStyle = {
+  type: 'news',
+  tone: 'engaging',
+  depth: 'standard',
+  includeImages: true,
+  includeQuotes: true,
+  includeSources: true,
+};
 
 // Main orchestrator that runs all agents in sequence
-export async function runAgentPipeline(brandId: string): Promise<AgentRunLog> {
+export async function runAgentPipeline(brandId: string, customSettings?: Partial<AgentConfig>): Promise<AgentRunLog> {
   const startTime = new Date();
   const log: AgentRunLog = {
     agentName: 'ContentPipeline',
@@ -23,7 +43,35 @@ export async function runAgentPipeline(brandId: string): Promise<AgentRunLog> {
   try {
     // Get brand config for agent settings
     const brandConfig = getBrandConfig(brandId);
-    const agentConfig: AgentConfig = brandConfig.agentConfig;
+    let agentConfig: AgentConfig = {
+      ...brandConfig.agentConfig,
+      rssFeeds: brandConfig.agentConfig.rssFeeds || [],
+      useRSSFeeds: brandConfig.agentConfig.useRSSFeeds ?? true,
+      aiModel: brandConfig.agentConfig.aiModel || defaultAIConfig,
+      articleStyles: brandConfig.agentConfig.articleStyles || [defaultArticleStyle],
+      defaultArticleStyle: defaultArticleStyle,
+      minWordCount: brandConfig.agentConfig.minWordCount || 500,
+      maxWordCount: brandConfig.agentConfig.maxWordCount || 1200,
+      minQualityScore: brandConfig.agentConfig.minQualityScore || 7,
+      requireFactCheck: true,
+      requireSourceAttribution: true,
+    };
+
+    // Try to load settings from database
+    try {
+      const settingsCollection = await getCollection(brandId, 'settings');
+      const savedConfig = await settingsCollection.findOne({ key: 'agentConfig' });
+      if (savedConfig?.value) {
+        agentConfig = { ...agentConfig, ...(savedConfig.value as Partial<AgentConfig>) };
+      }
+    } catch (e) {
+      console.log('Using default agent config');
+    }
+
+    // Apply custom settings if provided
+    if (customSettings) {
+      agentConfig = { ...agentConfig, ...customSettings };
+    }
 
     if (!agentConfig.enabled) {
       log.status = 'completed';
@@ -48,12 +96,19 @@ export async function runAgentPipeline(brandId: string): Promise<AgentRunLog> {
     log.metadata!.topicsGathered = gatheredTopics.length;
     console.log(`Gathered ${gatheredTopics.length} topics`);
 
-    // Step 2: Create drafts
+    // Step 2: Create drafts with AI config and article style
     console.log('Step 2: Creating drafts...');
+    const aiConfig = agentConfig.aiModel || defaultAIConfig;
+    const articleStyle = agentConfig.defaultArticleStyle || defaultArticleStyle;
+    
+    console.log(`Using AI model: ${aiConfig.model}, Style: ${articleStyle.type}/${articleStyle.tone}`);
+    
     const draftResult = await createDrafts(
       gatheredTopics,
       agentConfig.defaultLanguage,
-      agentConfig.maxArticlesPerRun
+      agentConfig.maxArticlesPerRun,
+      aiConfig,
+      articleStyle
     );
 
     if (!draftResult.success || !draftResult.data) {

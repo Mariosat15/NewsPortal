@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getArticleRepository } from '@/lib/db';
-import { getBrandIdSync } from '@/lib/brand';
+import { getBrandIdSync } from '@/lib/brand/server';
 
 // GET /api/articles - List published articles
 export async function GET(request: NextRequest) {

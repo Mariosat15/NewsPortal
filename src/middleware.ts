@@ -1,35 +1,13 @@
+import createMiddleware from 'next-intl/middleware';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getBrandIdFromDomain } from './lib/brand/config';
+import { routing } from './i18n/routing';
 
-// Supported locales
-const locales = ['de', 'en'];
-const defaultLocale = 'de';
+// Create the next-intl middleware
+const intlMiddleware = createMiddleware(routing);
 
-// Get locale from request
-function getLocale(request: NextRequest): string {
-  // Check for locale in cookie
-  const localeCookie = request.cookies.get('NEXT_LOCALE');
-  if (localeCookie && locales.includes(localeCookie.value)) {
-    return localeCookie.value;
-  }
-
-  // Check Accept-Language header
-  const acceptLanguage = request.headers.get('Accept-Language');
-  if (acceptLanguage) {
-    const preferredLocale = acceptLanguage
-      .split(',')
-      .map(lang => lang.split(';')[0].trim().split('-')[0])
-      .find(lang => locales.includes(lang));
-    if (preferredLocale) {
-      return preferredLocale;
-    }
-  }
-
-  return defaultLocale;
-}
-
-// Paths that should skip locale redirection
+// Paths that should skip locale handling
 const publicPaths = [
   '/api',
   '/_next',
@@ -40,51 +18,45 @@ const publicPaths = [
   '/robots.txt',
   '/sitemap.xml',
   '/admin',  // Admin panel doesn't need locale prefix
+  '/lp',     // Landing pages don't need locale prefix
 ];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hostname = request.headers.get('host') || 'localhost:3000';
 
-  // Skip public paths
+  console.log('[Middleware] Processing:', pathname);
+
+  // Skip public paths - let them pass through without locale handling
   if (publicPaths.some(path => pathname.startsWith(path))) {
-    return NextResponse.next();
+    console.log('[Middleware] Skipping locale for public path:', pathname);
+    const brandId = getBrandIdFromDomain(hostname);
+    const response = NextResponse.next();
+    response.headers.set('x-brand-id', brandId);
+    response.cookies.set('BRAND_ID', brandId, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 365,
+    });
+    return response;
   }
+
+  console.log('[Middleware] Applying locale middleware to:', pathname);
 
   // Get brand ID from domain
   const brandId = getBrandIdFromDomain(hostname);
 
-  // Check if pathname already has a locale
-  const pathnameHasLocale = locales.some(
-    locale => pathname.startsWith(`/${locale}/`) || pathname === `/${locale}`
-  );
-
-  // If no locale in pathname, redirect to localized version
-  if (!pathnameHasLocale) {
-    const locale = getLocale(request);
-    const newUrl = new URL(`/${locale}${pathname}`, request.url);
-    
-    // Preserve query parameters
-    newUrl.search = request.nextUrl.search;
-
-    const response = NextResponse.redirect(newUrl);
-    
-    // Set brand ID header for downstream use
-    response.headers.set('x-brand-id', brandId);
-    
-    return response;
-  }
-
-  // Add brand ID header to response
-  const response = NextResponse.next();
-  response.headers.set('x-brand-id', brandId);
+  // Run the next-intl middleware for locale handling
+  const response = intlMiddleware(request);
   
-  // Also set as cookie for client-side access
+  // Add brand ID to the response
+  response.headers.set('x-brand-id', brandId);
   response.cookies.set('BRAND_ID', brandId, {
     httpOnly: false,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 365, // 1 year
+    maxAge: 60 * 60 * 24 * 365,
   });
 
   return response;

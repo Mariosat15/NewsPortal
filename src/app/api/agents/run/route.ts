@@ -1,15 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { runAgentPipeline } from '@/lib/agents';
-import { getBrandIdSync } from '@/lib/brand';
+import { getBrandIdSync } from '@/lib/brand/server';
+
+// Verify admin authentication
+async function verifyAdmin(request: NextRequest): Promise<boolean> {
+  // Check cookie
+  const cookieStore = await cookies();
+  const adminToken = cookieStore.get('admin_token')?.value;
+  const validToken = process.env.ADMIN_SECRET || 'admin-secret';
+  
+  if (adminToken === validToken) return true;
+  
+  // Also check header for backward compatibility
+  const authHeader = request.headers.get('Authorization');
+  if (authHeader === `Bearer ${validToken}`) return true;
+  
+  return false;
+}
 
 // POST /api/agents/run - Trigger agent pipeline manually
 export async function POST(request: NextRequest) {
   try {
     // Verify admin authorization
-    const authHeader = request.headers.get('Authorization');
-    const adminSecret = process.env.ADMIN_SECRET || process.env.DIMOCO_CALLBACK_SECRET;
-    
-    if (!adminSecret || authHeader !== `Bearer ${adminSecret}`) {
+    if (!(await verifyAdmin(request))) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -18,9 +32,21 @@ export async function POST(request: NextRequest) {
 
     const brandId = getBrandIdSync();
     
+    // Parse settings from request body if provided
+    let customSettings;
+    try {
+      const body = await request.json();
+      if (body.settings) {
+        customSettings = body.settings;
+        console.log('Using custom settings from request');
+      }
+    } catch {
+      // No body or invalid JSON, use defaults
+    }
+    
     console.log(`Manually triggering agent pipeline for brand: ${brandId}`);
     
-    const log = await runAgentPipeline(brandId);
+    const log = await runAgentPipeline(brandId, customSettings);
 
     return NextResponse.json({
       success: true,

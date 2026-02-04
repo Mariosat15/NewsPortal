@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getBrandIdSync } from '@/lib/brand';
+import { getBrandIdSync } from '@/lib/brand/server';
 import { getUserRepository } from '@/lib/db';
 import { headers } from 'next/headers';
 

@@ -1,4 +1,4 @@
-// Brand configuration
+// Brand configuration (client-safe)
 export {
   type BrandConfig,
   defaultBrandConfig,
@@ -12,5 +12,6 @@ export {
 export { BrandContext, useBrand } from './context';
 export { BrandProvider } from './provider';
 
-// Server-side brand utilities
-export { getBrandId, getServerBrandConfig, getBrandIdSync } from './server';
+// NOTE: Server-side utilities (getBrandId, getBrandIdSync, getServerBrandConfig, 
+// getBrandConfigAsync, loadSettingsFromDb, clearSettingsCache) must be imported 
+// directly from '@/lib/brand/server' to avoid bundling MongoDB in client code.

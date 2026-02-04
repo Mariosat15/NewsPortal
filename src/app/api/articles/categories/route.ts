@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getArticleRepository } from '@/lib/db';
-import { getBrandIdSync } from '@/lib/brand';
+import { getBrandIdSync } from '@/lib/brand/server';
 
 // GET /api/articles/categories - Get categories with article counts
 export async function GET() {

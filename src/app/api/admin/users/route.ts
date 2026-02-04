@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getBrandIdSync } from '@/lib/brand';
+import { getBrandIdSync } from '@/lib/brand/server';
 import { getUserRepository } from '@/lib/db';
 
 // GET /api/admin/users - List users
@@ -15,8 +15,9 @@ export async function GET(request: NextRequest) {
     const minVisits = searchParams.get('minVisits') 
       ? parseInt(searchParams.get('minVisits')!, 10) 
       : undefined;
+    const authProvider = searchParams.get('authProvider') as 'email' | 'msisdn' | undefined;
 
-    const result = await repo.listUsers({ page, limit, search, minVisits });
+    const result = await repo.listUsers({ page, limit, search, minVisits, authProvider });
 
     return NextResponse.json({
       success: true,

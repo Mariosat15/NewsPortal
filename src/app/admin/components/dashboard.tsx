@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, 
   FileText, 
@@ -9,32 +9,102 @@ import {
   Settings, 
   Bot,
   Upload,
-  Download,
+  Layout,
+  Image,
+  Rocket,
   LogOut,
-  Menu
+  Menu,
+  BarChart3,
+  Megaphone,
+  Palette,
+  DollarSign,
+  Cog
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { DashboardOverview } from './dashboard-overview';
 import { ArticlesManager } from './articles-manager';
-import { UsersManager } from './users-manager';
+import { PeopleManager } from './people-manager';
+import { TransactionsManager } from './transactions-manager';
 import { BillingImport } from './billing-import';
 import { AgentConfig } from './agent-config';
+import { BrandingSettings } from './branding-settings';
+import { TemplateManager } from './template-manager';
+import { ImageSources } from './image-sources';
+import { LandingPagesManager } from './landing-pages-manager';
+import { TrackingAnalytics } from './tracking-analytics';
 
-type TabType = 'overview' | 'articles' | 'users' | 'billing' | 'agents' | 'settings';
+type TabType = 'overview' | 'articles' | 'users' | 'transactions' | 'billing' | 'agents' | 'landing-pages' | 'analytics' | 'templates' | 'images' | 'settings';
 
-const tabs: { id: TabType; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'articles', label: 'Articles', icon: FileText },
-  { id: 'users', label: 'Users', icon: Users },
-  { id: 'billing', label: 'Billing Import', icon: Upload },
-  { id: 'agents', label: 'AI Agents', icon: Bot },
-  { id: 'settings', label: 'Settings', icon: Settings },
+interface NavSection {
+  title: string;
+  icon: typeof LayoutDashboard;
+  items: { id: TabType; label: string; icon: typeof LayoutDashboard }[];
+}
+
+const navSections: NavSection[] = [
+  {
+    title: 'Overview',
+    icon: LayoutDashboard,
+    items: [
+      { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
+    ],
+  },
+  {
+    title: 'Content',
+    icon: FileText,
+    items: [
+      { id: 'articles', label: 'Articles', icon: FileText },
+      { id: 'templates', label: 'Templates', icon: Layout },
+      { id: 'images', label: 'Image Sources', icon: Image },
+    ],
+  },
+  {
+    title: 'Customers',
+    icon: Users,
+    items: [
+      { id: 'users', label: 'People', icon: Users },
+      { id: 'transactions', label: 'Transactions', icon: CreditCard },
+      { id: 'billing', label: 'Billing Import', icon: Upload },
+    ],
+  },
+  {
+    title: 'Marketing',
+    icon: Megaphone,
+    items: [
+      { id: 'landing-pages', label: 'Landing Pages', icon: Rocket },
+      { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+    ],
+  },
+  {
+    title: 'System',
+    icon: Cog,
+    items: [
+      { id: 'agents', label: 'AI Agents', icon: Bot },
+      { id: 'settings', label: 'Settings', icon: Settings },
+    ],
+  },
 ];
 
 export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [personSearch, setPersonSearch] = useState<string | null>(null);
+  const peopleManagerRef = useRef<{ searchPerson: (phone: string) => void } | null>(null);
+
+  // Listen for navigate-to-person events from other components
+  useEffect(() => {
+    const handleNavigateToPerson = (event: CustomEvent<string>) => {
+      const phone = event.detail;
+      setActiveTab('users');
+      setPersonSearch(phone);
+    };
+
+    window.addEventListener('navigate-to-person', handleNavigateToPerson as EventListener);
+    return () => {
+      window.removeEventListener('navigate-to-person', handleNavigateToPerson as EventListener);
+    };
+  }, []);
 
   const handleLogout = async () => {
     await fetch('/api/admin/auth', { method: 'DELETE' });
@@ -63,20 +133,40 @@ export function AdminDashboard() {
           </Button>
         </div>
 
-        <nav className="p-4 space-y-2">
-          {tabs.map((tab) => (
-            <Button
-              key={tab.id}
-              variant={activeTab === tab.id ? 'secondary' : 'ghost'}
-              className={cn(
-                'w-full justify-start',
-                !sidebarOpen && 'justify-center px-2'
+        <nav className="p-3 space-y-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 140px)' }}>
+          {navSections.map((section, sectionIndex) => (
+            <div key={section.title} className={cn(sectionIndex > 0 && 'mt-4')}>
+              {/* Section Header */}
+              {sidebarOpen && (
+                <div className="px-3 py-2">
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    {section.title}
+                  </h3>
+                </div>
               )}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <tab.icon className={cn('h-5 w-5', sidebarOpen && 'mr-2')} />
-              {sidebarOpen && tab.label}
-            </Button>
+              {!sidebarOpen && sectionIndex > 0 && (
+                <div className="border-t border-gray-100 my-2" />
+              )}
+              
+              {/* Section Items */}
+              <div className="space-y-1">
+                {section.items.map((item) => (
+                  <Button
+                    key={item.id}
+                    variant={activeTab === item.id ? 'secondary' : 'ghost'}
+                    className={cn(
+                      'w-full justify-start h-9',
+                      !sidebarOpen && 'justify-center px-2',
+                      activeTab === item.id && 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                    )}
+                    onClick={() => setActiveTab(item.id)}
+                  >
+                    <item.icon className={cn('h-4 w-4', sidebarOpen && 'mr-3')} />
+                    {sidebarOpen && <span className="text-sm">{item.label}</span>}
+                  </Button>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 
@@ -105,15 +195,15 @@ export function AdminDashboard() {
         <div className="max-w-7xl mx-auto">
           {activeTab === 'overview' && <DashboardOverview />}
           {activeTab === 'articles' && <ArticlesManager />}
-          {activeTab === 'users' && <UsersManager />}
+          {activeTab === 'users' && <PeopleManager initialSearch={personSearch} onSearchComplete={() => setPersonSearch(null)} />}
+          {activeTab === 'transactions' && <TransactionsManager />}
           {activeTab === 'billing' && <BillingImport />}
           {activeTab === 'agents' && <AgentConfig />}
-          {activeTab === 'settings' && (
-            <div>
-              <h1 className="text-2xl font-bold mb-6">Settings</h1>
-              <p className="text-muted-foreground">Brand settings and configuration coming soon.</p>
-            </div>
-          )}
+          {activeTab === 'landing-pages' && <LandingPagesManager />}
+          {activeTab === 'analytics' && <TrackingAnalytics />}
+          {activeTab === 'images' && <ImageSources />}
+          {activeTab === 'templates' && <TemplateManager />}
+          {activeTab === 'settings' && <BrandingSettings />}
         </div>
       </main>
     </div>

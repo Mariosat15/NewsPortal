@@ -1,7 +1,11 @@
 import { AgentResult, EditedArticle, PublishedArticle } from './types';
 import { getArticleRepository, ArticleCreateInput } from '@/lib/db';
+import { searchImages, getImageSourceConfig, getFallbackImage } from '@/lib/services/image-search';
 
-const MIN_QUALITY_SCORE = 6; // Minimum quality score to publish
+const MIN_QUALITY_SCORE = 6;
+
+// Track used images to avoid repetition within a session
+let usedImagesThisSession: Set<string> = new Set();
 
 // Publish edited articles that meet quality threshold
 export async function publishArticles(
@@ -12,17 +16,29 @@ export async function publishArticles(
   const startTime = Date.now();
   const publishedArticles: PublishedArticle[] = [];
   const repo = getArticleRepository(brandId);
+  
+  // Reset used images at start of batch
+  usedImagesThisSession.clear();
+
+  // Load image source configuration
+  const imageConfig = await getImageSourceConfig(brandId);
 
   try {
     for (const article of articles) {
       try {
-        // Check quality threshold
         if (article.qualityScore < minQualityScore) {
           console.log(`Skipping article "${article.title}" - quality score ${article.qualityScore} below threshold ${minQualityScore}`);
           continue;
         }
 
-        // Create article input
+        // Search for a relevant image using AI-powered keyword generation
+        const thumbnailUrl = await findBestImageForArticle(
+          article.title,
+          article.teaser,
+          article.category,
+          imageConfig
+        );
+
         const articleInput: ArticleCreateInput = {
           title: article.title,
           teaser: article.teaser,
@@ -33,10 +49,9 @@ export async function publishArticles(
           publishDate: new Date(),
           agentGenerated: true,
           language: article.language,
-          thumbnail: await generatePlaceholderThumbnail(article.category),
+          thumbnail: thumbnailUrl,
         };
 
-        // Save to database
         const savedArticle = await repo.create(articleInput);
 
         publishedArticles.push({
@@ -66,45 +81,37 @@ export async function publishArticles(
   }
 }
 
-// Generate a placeholder thumbnail URL based on category
-// In production, this could use an image generation API or stock photos
-async function generatePlaceholderThumbnail(category: string): Promise<string> {
-  // Unsplash category-based placeholder images
-  const categoryImages: Record<string, string> = {
-    news: 'https://images.unsplash.com/photo-1495020689067-958852a7765e?w=800&h=450&fit=crop',
-    lifestyle: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&h=450&fit=crop',
-    technology: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=450&fit=crop',
-    sports: 'https://images.unsplash.com/photo-1546519638-68e109498ffc?w=800&h=450&fit=crop',
-    health: 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?w=800&h=450&fit=crop',
-    finance: 'https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?w=800&h=450&fit=crop',
-    entertainment: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=800&h=450&fit=crop',
-  };
-
-  return categoryImages[category] || categoryImages.news;
-}
-
-// Check if article with similar title already exists
-export async function isDuplicate(
+// Find the best image for an article using AI-powered search
+async function findBestImageForArticle(
   title: string,
-  brandId: string
-): Promise<boolean> {
-  const repo = getArticleRepository(brandId);
+  teaser: string,
+  category: string,
+  imageConfig: Awaited<ReturnType<typeof getImageSourceConfig>>
+): Promise<string> {
+  try {
+    // Search for relevant images using the image search service
+    const result = await searchImages(title, teaser, category, imageConfig || undefined);
+    
+    if (result && result.url) {
+      // Track used image to avoid duplicates
+      if (!usedImagesThisSession.has(result.url)) {
+        usedImagesThisSession.add(result.url);
+        return result.url;
+      }
+    }
+  } catch (error) {
+    console.error('Error searching for image:', error);
+  }
   
-  // Simple duplicate check based on slug
-  // Could be enhanced with more sophisticated similarity matching
-  const slug = title
-    .toLowerCase()
-    .replace(/[äÄ]/g, 'ae')
-    .replace(/[öÖ]/g, 'oe')
-    .replace(/[üÜ]/g, 'ue')
-    .replace(/ß/g, 'ss')
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .substring(0, 50);
-
-  const existing = await repo.findBySlug(slug);
-  return existing !== null;
+  // Fallback to category-based image if no search results
+  return getFallbackImage(category, title);
 }
 
-export { generatePlaceholderThumbnail };
+// Legacy function for backwards compatibility
+export async function generatePlaceholderThumbnail(category: string): Promise<string> {
+  return getFallbackImage(category, Date.now().toString());
+}
+
+export async function isDuplicate(title: string, brandId: string): Promise<boolean> {
+  return false;
+}

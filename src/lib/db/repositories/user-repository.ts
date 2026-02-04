@@ -1,6 +1,6 @@
 import { Collection, Filter, ObjectId } from 'mongodb';
 import { getCollection } from '../mongodb';
-import { User, UserCreateInput, createUser, createVisit, normalizeMSISDN } from '../models/user';
+import { User, UserCreateInput, createUser, createVisit, normalizeMSISDN, createEmailUser, createMSISDNUser, EmailUserCreateInput, MSISDNUserCreateInput } from '../models/user';
 
 const COLLECTION_NAME = 'users';
 
@@ -15,8 +15,8 @@ export class UserRepository {
     return getCollection<User>(this.brandId, COLLECTION_NAME);
   }
 
-  // Create or update user
-  async upsert(input: UserCreateInput): Promise<User> {
+  // Create or update user by MSISDN (legacy method)
+  async upsertByMsisdn(input: MSISDNUserCreateInput): Promise<User> {
     const collection = await this.getCollection();
     const normalizedMsisdn = normalizeMSISDN(input.msisdn);
 
@@ -35,7 +35,7 @@ export class UserRepository {
       await collection.updateOne(
         { _id: existing._id },
         {
-          $set: { lastSeen: new Date() },
+          $set: { lastSeen: new Date(), updatedAt: new Date() },
           $push: { visits: { $each: [visit], $slice: -100 } }, // Keep last 100 visits
           $inc: { totalVisits: 1 },
         }
@@ -45,9 +45,73 @@ export class UserRepository {
     }
 
     // Create new user
-    const user = createUser(input);
+    const user = createMSISDNUser(input);
     const result = await collection.insertOne(user as User);
     return { ...user, _id: result.insertedId };
+  }
+
+  // Create or update user (handles both email and MSISDN)
+  async upsert(input: UserCreateInput): Promise<User> {
+    // If input has email and passwordHash, use email auth
+    if (input.email && input.passwordHash) {
+      return this.upsertByEmail({
+        email: input.email,
+        passwordHash: input.passwordHash,
+        name: input.name || '',
+        ip: input.ip,
+        userAgent: input.userAgent,
+      });
+    }
+    
+    // Otherwise, use MSISDN auth (must have msisdn)
+    if (input.msisdn) {
+      return this.upsertByMsisdn({
+        msisdn: input.msisdn,
+        ip: input.ip,
+        userAgent: input.userAgent,
+        referrer: input.referrer,
+        page: input.page,
+        sessionId: input.sessionId,
+      });
+    }
+
+    throw new Error('Either email+passwordHash or msisdn must be provided');
+  }
+
+  // Create or update user by email
+  async upsertByEmail(input: EmailUserCreateInput): Promise<User> {
+    const collection = await this.getCollection();
+    const email = input.email.toLowerCase();
+
+    const existing = await collection.findOne({ email });
+
+    if (existing) {
+      // User exists, update last seen
+      await collection.updateOne(
+        { _id: existing._id },
+        {
+          $set: { 
+            lastSeen: new Date(), 
+            updatedAt: new Date(),
+            // Update password if provided (for password reset)
+            ...(input.passwordHash && { passwordHash: input.passwordHash }),
+          },
+        }
+      );
+
+      return (await collection.findOne({ _id: existing._id }))!;
+    }
+
+    // Create new user
+    const user = createEmailUser(input);
+    const result = await collection.insertOne(user as User);
+    return { ...user, _id: result.insertedId };
+  }
+
+  // Find user by email
+  async findByEmail(email: string): Promise<User | null> {
+    const collection = await this.getCollection();
+    return collection.findOne({ email: email.toLowerCase() });
   }
 
   // Find user by MSISDN
@@ -90,8 +154,12 @@ export class UserRepository {
           firstSeen: new Date(),
           bookmarks: [],
           favorites: [],
+          emailVerified: false,
+          authProvider: 'msisdn' as const,
+          isActive: true,
+          createdAt: new Date(),
         },
-        $set: { lastSeen: new Date() },
+        $set: { lastSeen: new Date(), updatedAt: new Date() },
         $push: { visits: { $each: [visit], $slice: -50 } },
         $inc: { totalVisits: 1 },
       },
@@ -142,7 +210,27 @@ export class UserRepository {
   }
 
   // Add bookmark
-  async addBookmark(msisdn: string, articleId: string): Promise<void> {
+  async addBookmark(userId: string | ObjectId, articleId: string): Promise<void> {
+    const collection = await this.getCollection();
+    const objectId = typeof userId === 'string' ? new ObjectId(userId) : userId;
+    await collection.updateOne(
+      { _id: objectId },
+      { $addToSet: { bookmarks: articleId } }
+    );
+  }
+
+  // Remove bookmark
+  async removeBookmark(userId: string | ObjectId, articleId: string): Promise<void> {
+    const collection = await this.getCollection();
+    const objectId = typeof userId === 'string' ? new ObjectId(userId) : userId;
+    await collection.updateOne(
+      { _id: objectId },
+      { $pull: { bookmarks: articleId } }
+    );
+  }
+
+  // Add bookmark by MSISDN (legacy)
+  async addBookmarkByMsisdn(msisdn: string, articleId: string): Promise<void> {
     const collection = await this.getCollection();
     const normalizedMsisdn = normalizeMSISDN(msisdn);
     await collection.updateOne(
@@ -151,8 +239,8 @@ export class UserRepository {
     );
   }
 
-  // Remove bookmark
-  async removeBookmark(msisdn: string, articleId: string): Promise<void> {
+  // Remove bookmark by MSISDN (legacy)
+  async removeBookmarkByMsisdn(msisdn: string, articleId: string): Promise<void> {
     const collection = await this.getCollection();
     const normalizedMsisdn = normalizeMSISDN(msisdn);
     await collection.updateOne(
@@ -162,7 +250,17 @@ export class UserRepository {
   }
 
   // Add favorite
-  async addFavorite(msisdn: string, articleId: string): Promise<void> {
+  async addFavorite(userId: string | ObjectId, articleId: string): Promise<void> {
+    const collection = await this.getCollection();
+    const objectId = typeof userId === 'string' ? new ObjectId(userId) : userId;
+    await collection.updateOne(
+      { _id: objectId },
+      { $addToSet: { favorites: articleId } }
+    );
+  }
+
+  // Add favorite by MSISDN (legacy)
+  async addFavoriteByMsisdn(msisdn: string, articleId: string): Promise<void> {
     const collection = await this.getCollection();
     const normalizedMsisdn = normalizeMSISDN(msisdn);
     await collection.updateOne(
@@ -178,21 +276,29 @@ export class UserRepository {
     minVisits?: number;
     lastSeenAfter?: Date;
     search?: string;
+    authProvider?: 'email' | 'msisdn';
   } = {}): Promise<{ users: User[]; total: number; pages: number }> {
     const collection = await this.getCollection();
-    const { page = 1, limit = 20, minVisits, lastSeenAfter, search } = options;
+    const { page = 1, limit = 20, minVisits, lastSeenAfter, search, authProvider } = options;
     const skip = (page - 1) * limit;
 
     const filter: Filter<User> = {
-      msisdn: { $not: { $regex: /^session:/ } }, // Exclude anonymous sessions
+      // Include email users (no msisdn) and MSISDN users that aren't anonymous sessions
+      $or: [
+        { msisdn: { $exists: false } },
+        { msisdn: { $not: { $regex: /^session:/ } } }
+      ]
     };
 
     if (minVisits) filter.totalVisits = { $gte: minVisits };
     if (lastSeenAfter) filter.lastSeen = { $gte: lastSeenAfter };
+    if (authProvider) filter.authProvider = authProvider;
     if (search) {
       filter.$or = [
         { msisdn: { $regex: search, $options: 'i' } },
         { normalizedMsisdn: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { name: { $regex: search, $options: 'i' } },
       ];
     }
 
@@ -214,7 +320,10 @@ export class UserRepository {
     return collection
       .find({
         totalVisits: { $gte: minVisits },
-        msisdn: { $not: { $regex: /^session:/ } },
+        $or: [
+          { msisdn: { $exists: false } },
+          { msisdn: { $not: { $regex: /^session:/ } } }
+        ],
       })
       .sort({ totalVisits: -1 })
       .toArray();
@@ -229,6 +338,8 @@ export class UserRepository {
     const collection = await this.getCollection();
     const query: Filter<User> = {
       msisdn: { $not: { $regex: /^session:/ } },
+      authProvider: 'msisdn',
+      normalizedMsisdn: { $exists: true },
     };
 
     if (filter?.minVisits) query.totalVisits = { $gte: filter.minVisits };
@@ -239,7 +350,42 @@ export class UserRepository {
       .find(query, { projection: { normalizedMsisdn: 1 } })
       .toArray();
 
-    return users.map(u => u.normalizedMsisdn);
+    return users.filter(u => u.normalizedMsisdn).map(u => u.normalizedMsisdn!);
+  }
+
+  // Update user by ID (for admin operations)
+  async updateById(id: string | ObjectId, updates: {
+    name?: string;
+    isActive?: boolean;
+    emailVerified?: boolean;
+  }): Promise<User | null> {
+    const collection = await this.getCollection();
+    const objectId = typeof id === 'string' ? new ObjectId(id) : id;
+
+    const updateFields: Record<string, unknown> = {
+      updatedAt: new Date(),
+    };
+
+    if (updates.name !== undefined) updateFields.name = updates.name;
+    if (updates.isActive !== undefined) updateFields.isActive = updates.isActive;
+    if (updates.emailVerified !== undefined) updateFields.emailVerified = updates.emailVerified;
+
+    await collection.updateOne(
+      { _id: objectId },
+      { $set: updateFields }
+    );
+
+    return collection.findOne({ _id: objectId });
+  }
+
+  // Ban/suspend user
+  async banUser(id: string | ObjectId): Promise<User | null> {
+    return this.updateById(id, { isActive: false });
+  }
+
+  // Unban/reactivate user
+  async unbanUser(id: string | ObjectId): Promise<User | null> {
+    return this.updateById(id, { isActive: true });
   }
 }
 

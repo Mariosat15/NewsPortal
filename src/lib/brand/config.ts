@@ -37,6 +37,28 @@ export interface BrandConfig {
     cronSchedule: string;
     maxArticlesPerRun: number;
     defaultLanguage: 'de' | 'en';
+    // Extended settings (loaded from database when available)
+    rssFeeds?: { url: string; name: string; category: string; language: 'de' | 'en'; enabled: boolean }[];
+    useRSSFeeds?: boolean;
+    aiModel?: {
+      model: string;
+      temperature: number;
+      maxTokens: number;
+      topP: number;
+      frequencyPenalty: number;
+      presencePenalty: number;
+    };
+    articleStyles?: {
+      type: 'news' | 'analysis' | 'opinion' | 'summary' | 'investigative';
+      tone: 'neutral' | 'engaging' | 'formal' | 'conversational';
+      depth: 'brief' | 'standard' | 'in-depth';
+      includeImages: boolean;
+      includeQuotes: boolean;
+      includeSources: boolean;
+    }[];
+    minWordCount?: number;
+    maxWordCount?: number;
+    minQualityScore?: number;
   };
 }
 
@@ -108,10 +130,11 @@ export function getBrandConfigFromEnv(): BrandConfig {
 }
 
 // Domain to brand ID mapping (can be extended from database or config file)
+// Note: localhost uses BRAND_ID from env, production domains can be mapped here
 const domainToBrandMap: Record<string, string> = {
-  'localhost:3000': 'default',
-  'localhost': 'default',
-  // Add more domain mappings here or load from database
+  // Add production domain mappings here, e.g.:
+  // 'news.example.com': 'brand1',
+  // 'other-news.com': 'brand2',
 };
 
 // Get brand ID from domain
@@ -129,14 +152,12 @@ export function getBrandIdFromDomain(domain: string): string {
     return domainToBrandMap[domainWithoutPort];
   }
   
-  // Default fallback
-  return process.env.BRAND_ID || 'default';
+  // Always use BRAND_ID from env for localhost or when no mapping exists
+  return process.env.BRAND_ID || 'brand1';
 }
 
-// Get brand config (will eventually support loading from database)
+// Get brand config (sync version - uses env vars only, for client-side usage)
 export function getBrandConfig(brandId?: string): BrandConfig {
-  // For now, return config from environment
-  // In production, this could load from database based on brandId
   const config = getBrandConfigFromEnv();
   
   if (brandId && brandId !== config.id) {

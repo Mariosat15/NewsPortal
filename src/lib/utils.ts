@@ -52,15 +52,22 @@ export function isValidMSISDN(msisdn: string): boolean {
 }
 
 export function normalizeMSISDN(msisdn: string): string {
+  if (!msisdn) return '';
+  
   let cleaned = msisdn.replace(/\D/g, '');
-  // Convert German local format to international
-  if (cleaned.startsWith('0')) {
+  
+  // Convert German local format (0xxx) to international (49xxx)
+  if (cleaned.startsWith('0') && !cleaned.startsWith('00')) {
     cleaned = '49' + cleaned.substring(1);
   }
-  // Ensure it starts with country code
-  if (!cleaned.startsWith('49')) {
-    cleaned = '49' + cleaned;
+  
+  // Handle 00 prefix (international dialing)
+  if (cleaned.startsWith('00')) {
+    cleaned = cleaned.substring(2);
   }
+  
+  // DON'T force 49 prefix - allow international numbers
+  // Valid international numbers should already have country codes
   return cleaned;
 }
 

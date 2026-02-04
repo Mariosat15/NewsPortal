@@ -31,14 +31,17 @@ export interface BillingImportCreateInput {
   rawData?: Record<string, unknown>;
 }
 
-// Normalize MSISDN
+// Normalize MSISDN - supports international numbers
 function normalizeMSISDN(msisdn: string): string {
+  if (!msisdn) return '';
   let cleaned = msisdn.replace(/\D/g, '');
-  if (cleaned.startsWith('0')) {
+  // Convert German local format (0xxx) to international
+  if (cleaned.startsWith('0') && !cleaned.startsWith('00')) {
     cleaned = '49' + cleaned.substring(1);
   }
-  if (!cleaned.startsWith('49') && cleaned.length <= 12) {
-    cleaned = '49' + cleaned;
+  // Handle 00 prefix (international dialing)
+  if (cleaned.startsWith('00')) {
+    cleaned = cleaned.substring(2);
   }
   return cleaned;
 }

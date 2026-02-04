@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { Share2, Check, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { useBrand } from '@/lib/brand/context';
 import { cn } from '@/lib/utils';
 
 interface ShareButtonsProps {
-  url: string;
+  url?: string; // Optional - will use current URL if not provided
   title: string;
   className?: string;
 }
@@ -17,19 +17,28 @@ export function ShareButtons({ url, title, className }: ShareButtonsProps) {
   const t = useTranslations('sharing');
   const brand = useBrand();
   const [copied, setCopied] = useState(false);
+  const [currentUrl, setCurrentUrl] = useState(url || '');
+
+  // Get the actual URL from the browser (works with any domain)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setCurrentUrl(window.location.href);
+    }
+  }, []);
 
   if (!brand.socialSharing.enabled) {
     return null;
   }
 
-  const encodedUrl = encodeURIComponent(url);
+  const shareUrl = currentUrl || url || '';
+  const encodedUrl = encodeURIComponent(shareUrl);
   const encodedTitle = encodeURIComponent(title);
 
   const platforms = brand.socialSharing.platforms;
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {

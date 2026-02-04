@@ -20,6 +20,8 @@
     "categories": "Categories",
     "trending": "Trending",
     "bookmarks": "Bookmarks",
+    "profile": "Profile",
+    "settings": "Settings",
     "language": "Language"
   },
   "article": {
@@ -59,11 +61,35 @@
     "backToArticle": "Back to article"
   },
   "auth": {
+    "login": "Login",
+    "logout": "Logout",
+    "register": "Register",
+    "profile": "Profile",
+    "email": "Email",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "name": "Full Name",
+    "forgotPassword": "Forgot password?",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "createAccount": "Create Account",
+    "signIn": "Sign In",
+    "signOut": "Sign Out",
     "verifyPhone": "Verify phone number",
     "enterPhone": "Enter your phone number",
     "phoneNumber": "Phone number",
     "phonePlaceholder": "+49 123 456 7890",
-    "continue": "Continue"
+    "continue": "Continue",
+    "welcomeBack": "Welcome back",
+    "loginSubtitle": "Sign in to your account to continue",
+    "registerSubtitle": "Create an account to get started",
+    "orContinueWith": "Or continue with",
+    "passwordMinLength": "Password must be at least 8 characters",
+    "passwordsNoMatch": "Passwords do not match",
+    "invalidEmail": "Please enter a valid email address",
+    "loginSuccess": "Successfully logged in",
+    "registerSuccess": "Account created successfully",
+    "logoutSuccess": "Successfully logged out"
   },
   "categories": {
     "all": "All",
@@ -73,7 +99,10 @@
     "sports": "Sports",
     "health": "Health",
     "finance": "Finance",
-    "entertainment": "Entertainment"
+    "business": "Business",
+    "entertainment": "Entertainment",
+    "politics": "Politics",
+    "world": "World"
   },
   "footer": {
     "hilfe": "Help",

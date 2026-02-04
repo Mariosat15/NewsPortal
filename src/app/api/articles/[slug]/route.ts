@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getArticleRepository, getUnlockRepository } from '@/lib/db';
-import { getBrandIdSync } from '@/lib/brand';
+import { getBrandIdSync } from '@/lib/brand/server';
 import { cookies } from 'next/headers';
 
 // GET /api/articles/[slug] - Get a single article

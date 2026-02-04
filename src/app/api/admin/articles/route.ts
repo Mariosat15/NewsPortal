@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getBrandIdSync } from '@/lib/brand';
+import { getBrandIdSync } from '@/lib/brand/server';
 import { getArticleRepository, ArticleCreateInput } from '@/lib/db';
 
 // GET /api/admin/articles - List all articles (admin)

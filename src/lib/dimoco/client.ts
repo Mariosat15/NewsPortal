@@ -18,6 +18,8 @@ export interface PaymentInitRequest {
   description: string;
   returnUrl: string;
   brandId: string;
+  baseUrl?: string; // Dynamic base URL from request (for tunnels, different domains)
+  metadata?: Record<string, unknown>; // Device fingerprint and other tracking data
 }
 
 export interface PaymentInitResponse {
@@ -55,21 +57,29 @@ export async function initiatePayment(request: PaymentInitRequest): Promise<Paym
   const config = getDimocoConfig();
   const transactionId = generateTransactionId();
 
+  // Use dynamic base URL if provided, otherwise fall back to config/env
+  const baseUrl = request.baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
   // In a real implementation, this would call the DIMOCO API
   // For now, we'll create a mock payment URL that simulates the flow
   
-  // Build the payment URL with parameters
+  // Build the payment URL with parameters - all URLs are now dynamic
   const params = new URLSearchParams({
-    merchantId: config.merchantId,
-    serviceId: config.serviceId,
+    merchantId: config.merchantId || 'your-merchant-id',
+    serviceId: config.serviceId || 'your-service-id',
     transactionId,
     amount: request.amount.toString(),
     currency: request.currency,
     description: request.description,
-    successUrl: `${config.successUrl}?transactionId=${transactionId}&articleId=${request.articleId}`,
-    cancelUrl: `${config.cancelUrl}?transactionId=${transactionId}`,
-    callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/payment/dimoco/callback`,
+    successUrl: `${baseUrl}/payment/success?transactionId=${transactionId}&articleId=${request.articleId}`,
+    cancelUrl: `${baseUrl}/payment/cancel?transactionId=${transactionId}`,
+    callbackUrl: `${baseUrl}/api/payment/dimoco/callback`,
   });
+  
+  // Add device metadata if provided (will be passed through to callback)
+  if (request.metadata) {
+    params.set('metadata', encodeURIComponent(JSON.stringify(request.metadata)));
+  }
 
   // In production, this would be the actual DIMOCO payment page URL
   // For development/demo, we'll use a mock payment page
@@ -103,18 +113,28 @@ export function verifyCallbackSignature(data: PaymentCallbackData, receivedSigna
   return receivedSignature === expectedSignature;
 }
 
-// Parse amount from DIMOCO format (might be in different formats)
+// Parse amount from DIMOCO format
+// Amount is always expected to be in CENTS (smallest currency unit)
 export function parseAmount(amount: string | number): number {
   if (typeof amount === 'number') return amount;
   
-  // Remove currency symbols and convert to cents
+  // Remove currency symbols and whitespace
   const cleaned = amount.replace(/[^\d.,]/g, '');
-  const parsed = parseFloat(cleaned.replace(',', '.'));
   
-  // If less than 100, assume it's in euros and convert to cents
-  if (parsed < 100) {
+  // Handle European format (comma as decimal separator)
+  // e.g., "0,99" means 0.99 euros = 99 cents
+  // e.g., "99" means 99 cents
+  if (cleaned.includes(',') && !cleaned.includes('.')) {
+    // This is in euros with comma (e.g., "0,99" = 99 cents)
+    const parsed = parseFloat(cleaned.replace(',', '.'));
     return Math.round(parsed * 100);
   }
   
-  return Math.round(parsed);
+  // If it contains a decimal point and is less than 100, assume euros
+  if (cleaned.includes('.') && parseFloat(cleaned) < 100) {
+    return Math.round(parseFloat(cleaned) * 100);
+  }
+  
+  // Otherwise, assume it's already in cents
+  return Math.round(parseFloat(cleaned) || 0);
 }
