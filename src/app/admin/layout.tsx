@@ -1,9 +1,4 @@
-import { Inter } from 'next/font/google';
 import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
-import '../globals.css';
-
-const inter = Inter({ subsets: ['latin'] });
 
 // Simple admin auth check
 async function checkAdminAuth() {
@@ -23,16 +18,6 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const isAuthenticated = await checkAdminAuth();
-  
-  // Redirect to login if not authenticated
-  // The login page will handle auth
-  
-  return (
-    <html lang="en">
-      <body className={`${inter.className} antialiased`}>
-        {children}
-      </body>
-    </html>
-  );
+  // Auth check is handled by the page component
+  return <>{children}</>;
 }
