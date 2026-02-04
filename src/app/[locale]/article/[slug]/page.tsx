@@ -4,6 +4,7 @@ import { Paywall } from '@/components/article/paywall';
 import { ShareButtons } from '@/components/article/share-buttons';
 import { Badge } from '@/components/ui/badge';
 import { getArticleRepository, getUnlockRepository } from '@/lib/db';
+import { getCollection } from '@/lib/db/mongodb';
 import { getBrandId, getServerBrandConfig } from '@/lib/brand/server';
 import { formatDate } from '@/lib/utils';
 import { cookies } from 'next/headers';
@@ -118,7 +119,6 @@ export default async function ArticlePage({
     const unlockRepo = getUnlockRepository(brandId);
     
     // Check if pricing is enabled from settings
-    const { getCollection } = await import('@/lib/db/mongodb');
     const settingsCollection = await getCollection(brandId, 'settings');
     const pricingSetting = await settingsCollection.findOne({ key: 'pricing' });
     if (pricingSetting?.value && typeof pricingSetting.value === 'object') {
@@ -146,9 +146,42 @@ export default async function ArticlePage({
       // Check if unlocked (only if pricing is enabled)
       if (pricingEnabled) {
         const cookieStore = await cookies();
+        
+        // Check 1: MSISDN-based unlock (legacy/anonymous)
         const msisdn = cookieStore.get('user_msisdn')?.value;
         if (msisdn) {
           isUnlocked = await unlockRepo.hasUnlocked(msisdn, found._id!);
+        }
+        
+        // Check 2: User account-based unlock (logged-in users)
+        if (!isUnlocked) {
+          const userSessionCookie = cookieStore.get('user_session')?.value;
+          if (userSessionCookie) {
+            try {
+              const sessionData = JSON.parse(userSessionCookie);
+              const userId = sessionData.id;
+              const userEmail = sessionData.email;
+              
+              if (userId || userEmail) {
+                // Check unlocks collection for this user's purchases
+                const unlocksCollection = await getCollection(brandId, 'unlocks');
+                const userUnlock = await unlocksCollection.findOne({
+                  articleId: found._id,
+                  status: 'completed',
+                  $or: [
+                    { 'metadata.userId': userId },
+                    { 'metadata.userEmail': userEmail },
+                  ],
+                });
+                
+                if (userUnlock) {
+                  isUnlocked = true;
+                }
+              }
+            } catch (e) {
+              console.error('Error parsing user session:', e);
+            }
+          }
         }
       } else {
         // Pricing disabled - all articles are free
