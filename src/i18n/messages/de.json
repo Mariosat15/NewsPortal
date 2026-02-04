@@ -1,0 +1,112 @@
+{
+  "common": {
+    "loading": "Laden...",
+    "error": "Ein Fehler ist aufgetreten",
+    "retry": "Erneut versuchen",
+    "close": "Schließen",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "share": "Teilen",
+    "search": "Suchen",
+    "searchPlaceholder": "Artikel suchen...",
+    "noResults": "Keine Ergebnisse gefunden",
+    "showMore": "Mehr anzeigen",
+    "showLess": "Weniger anzeigen"
+  },
+  "nav": {
+    "home": "Startseite",
+    "categories": "Kategorien",
+    "trending": "Trending",
+    "bookmarks": "Lesezeichen",
+    "language": "Sprache"
+  },
+  "article": {
+    "readMore": "Weiterlesen",
+    "readingTime": "{minutes} Min. Lesezeit",
+    "publishedOn": "Veröffentlicht am {date}",
+    "category": "Kategorie",
+    "tags": "Tags",
+    "share": "Artikel teilen",
+    "bookmark": "Lesezeichen hinzufügen",
+    "bookmarked": "Gespeichert",
+    "removeBookmark": "Lesezeichen entfernen",
+    "addFavorite": "Zu Favoriten hinzufügen",
+    "removeFavorite": "Von Favoriten entfernen",
+    "relatedArticles": "Ähnliche Artikel",
+    "trending": "Trending",
+    "mostRead": "Meistgelesen",
+    "latestNews": "Neueste Artikel"
+  },
+  "paywall": {
+    "title": "Dieser Artikel ist kostenpflichtig",
+    "description": "Entsperren Sie diesen Artikel für nur {price}",
+    "unlockButton": "Artikel entsperren",
+    "unlockFor": "Für {price} entsperren",
+    "alreadyUnlocked": "Artikel bereits entsperrt",
+    "paymentSecure": "Sichere Bezahlung über Ihre Handyrechnung",
+    "oneTimePayment": "Einmalzahlung - kein Abo",
+    "instantAccess": "Sofortiger Zugang zum vollständigen Artikel"
+  },
+  "payment": {
+    "processing": "Zahlung wird verarbeitet...",
+    "success": "Zahlung erfolgreich!",
+    "successMessage": "Sie können den Artikel jetzt vollständig lesen.",
+    "failed": "Zahlung fehlgeschlagen",
+    "failedMessage": "Bitte versuchen Sie es erneut oder kontaktieren Sie den Support.",
+    "cancelled": "Zahlung abgebrochen",
+    "backToArticle": "Zurück zum Artikel"
+  },
+  "auth": {
+    "verifyPhone": "Handynummer bestätigen",
+    "enterPhone": "Geben Sie Ihre Handynummer ein",
+    "phoneNumber": "Handynummer",
+    "phonePlaceholder": "+49 123 456 7890",
+    "continue": "Weiter"
+  },
+  "categories": {
+    "all": "Alle",
+    "news": "Nachrichten",
+    "lifestyle": "Lifestyle",
+    "technology": "Technologie",
+    "sports": "Sport",
+    "health": "Gesundheit",
+    "finance": "Finanzen",
+    "entertainment": "Unterhaltung"
+  },
+  "footer": {
+    "hilfe": "Hilfe",
+    "kundenportal": "Kundenportal",
+    "widerrufsbelehrung": "Widerrufsbelehrung",
+    "impressum": "Impressum",
+    "kuendigung": "Kündigung",
+    "agb": "AGB",
+    "datenschutz": "Datenschutz",
+    "copyright": "© {year} {brandName}. Alle Rechte vorbehalten."
+  },
+  "sharing": {
+    "shareOn": "Teilen auf {platform}",
+    "whatsapp": "WhatsApp",
+    "facebook": "Facebook",
+    "twitter": "X (Twitter)",
+    "copyLink": "Link kopieren",
+    "linkCopied": "Link kopiert!"
+  },
+  "errors": {
+    "notFound": "Seite nicht gefunden",
+    "notFoundMessage": "Die angeforderte Seite existiert nicht.",
+    "serverError": "Serverfehler",
+    "serverErrorMessage": "Ein interner Fehler ist aufgetreten.",
+    "backToHome": "Zurück zur Startseite"
+  },
+  "legal": {
+    "hilfeTitle": "Hilfe & Support",
+    "kundenportalTitle": "Kundenportal",
+    "widerrufsbelehrungTitle": "Widerrufsbelehrung",
+    "impressumTitle": "Impressum",
+    "kuendigungTitle": "Kündigung",
+    "agbTitle": "Allgemeine Geschäftsbedingungen",
+    "datenschutzTitle": "Datenschutzerklärung"
+  }
+}

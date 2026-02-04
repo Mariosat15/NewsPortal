@@ -1,0 +1,112 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "retry": "Try again",
+    "close": "Close",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "share": "Share",
+    "search": "Search",
+    "searchPlaceholder": "Search articles...",
+    "noResults": "No results found",
+    "showMore": "Show more",
+    "showLess": "Show less"
+  },
+  "nav": {
+    "home": "Home",
+    "categories": "Categories",
+    "trending": "Trending",
+    "bookmarks": "Bookmarks",
+    "language": "Language"
+  },
+  "article": {
+    "readMore": "Read more",
+    "readingTime": "{minutes} min read",
+    "publishedOn": "Published on {date}",
+    "category": "Category",
+    "tags": "Tags",
+    "share": "Share article",
+    "bookmark": "Add bookmark",
+    "bookmarked": "Saved",
+    "removeBookmark": "Remove bookmark",
+    "addFavorite": "Add to favorites",
+    "removeFavorite": "Remove from favorites",
+    "relatedArticles": "Related articles",
+    "trending": "Trending",
+    "mostRead": "Most read",
+    "latestNews": "Latest articles"
+  },
+  "paywall": {
+    "title": "This article is premium",
+    "description": "Unlock this article for just {price}",
+    "unlockButton": "Unlock article",
+    "unlockFor": "Unlock for {price}",
+    "alreadyUnlocked": "Article already unlocked",
+    "paymentSecure": "Secure payment via your mobile bill",
+    "oneTimePayment": "One-time payment - no subscription",
+    "instantAccess": "Instant access to the full article"
+  },
+  "payment": {
+    "processing": "Processing payment...",
+    "success": "Payment successful!",
+    "successMessage": "You can now read the full article.",
+    "failed": "Payment failed",
+    "failedMessage": "Please try again or contact support.",
+    "cancelled": "Payment cancelled",
+    "backToArticle": "Back to article"
+  },
+  "auth": {
+    "verifyPhone": "Verify phone number",
+    "enterPhone": "Enter your phone number",
+    "phoneNumber": "Phone number",
+    "phonePlaceholder": "+49 123 456 7890",
+    "continue": "Continue"
+  },
+  "categories": {
+    "all": "All",
+    "news": "News",
+    "lifestyle": "Lifestyle",
+    "technology": "Technology",
+    "sports": "Sports",
+    "health": "Health",
+    "finance": "Finance",
+    "entertainment": "Entertainment"
+  },
+  "footer": {
+    "hilfe": "Help",
+    "kundenportal": "Customer Portal",
+    "widerrufsbelehrung": "Cancellation Policy",
+    "impressum": "Legal Notice",
+    "kuendigung": "Termination",
+    "agb": "Terms & Conditions",
+    "datenschutz": "Privacy Policy",
+    "copyright": "© {year} {brandName}. All rights reserved."
+  },
+  "sharing": {
+    "shareOn": "Share on {platform}",
+    "whatsapp": "WhatsApp",
+    "facebook": "Facebook",
+    "twitter": "X (Twitter)",
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied!"
+  },
+  "errors": {
+    "notFound": "Page not found",
+    "notFoundMessage": "The requested page does not exist.",
+    "serverError": "Server error",
+    "serverErrorMessage": "An internal error occurred.",
+    "backToHome": "Back to home"
+  },
+  "legal": {
+    "hilfeTitle": "Help & Support",
+    "kundenportalTitle": "Customer Portal",
+    "widerrufsbelehrungTitle": "Cancellation Policy",
+    "impressumTitle": "Legal Notice",
+    "kuendigungTitle": "Termination",
+    "agbTitle": "Terms & Conditions",
+    "datenschutzTitle": "Privacy Policy"
+  }
+}
