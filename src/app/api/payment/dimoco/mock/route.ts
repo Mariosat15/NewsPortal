@@ -11,10 +11,7 @@ export async function GET(request: NextRequest) {
   const cancelUrl = searchParams.get('cancelUrl');
   const callbackUrl = searchParams.get('callbackUrl');
   const metadata = searchParams.get('metadata'); // Device fingerprint data
-  
-  // Get articleId from successUrl
-  const successUrlObj = new URL(successUrl || 'http://localhost:3000');
-  const articleId = successUrlObj.searchParams.get('articleId');
+  const articleId = searchParams.get('articleId'); // Article ID passed directly
   
   // Parse callback URL to get the base for building the full callback
   const callbackBase = callbackUrl || '/api/payment/dimoco/callback';

@@ -79,6 +79,8 @@ export async function initiatePayment(request: PaymentInitRequest): Promise<Paym
     successUrl: successUrl,
     cancelUrl: `${baseUrl}/payment/cancel?transactionId=${transactionId}`,
     callbackUrl: `${baseUrl}/api/payment/dimoco/callback`,
+    // Pass articleId separately (not in successUrl) so mock payment can forward it
+    articleId: request.articleId,
   });
   
   // Add device metadata if provided (will be passed through to callback)

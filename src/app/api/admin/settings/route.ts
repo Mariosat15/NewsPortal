@@ -45,7 +45,7 @@ export async function GET() {
       id: process.env.BRAND_ID || 'brand1',
       name: process.env.BRAND_NAME || 'News Portal',
       domain: process.env.BRAND_DOMAIN || 'localhost:3000',
-      logoUrl: process.env.BRAND_LOGO_URL || '/images/logo.svg',
+      logoUrl: process.env.BRAND_LOGO_URL || '/images/logo.png',
       faviconUrl: process.env.BRAND_FAVICON_URL || '/favicon.svg',
       primaryColor: process.env.BRAND_PRIMARY_COLOR?.trim() || '#1a73e8',
       secondaryColor: process.env.BRAND_SECONDARY_COLOR?.trim() || '#4285f4',

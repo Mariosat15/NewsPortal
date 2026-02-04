@@ -67,7 +67,7 @@ export const defaultBrandConfig: BrandConfig = {
   id: 'default',
   name: 'News Portal',
   domain: 'localhost:3000',
-  logoUrl: '/images/logo.svg',
+  logoUrl: '/images/logo.png',
   primaryColor: '#1a73e8',
   secondaryColor: '#4285f4',
   impressum: {

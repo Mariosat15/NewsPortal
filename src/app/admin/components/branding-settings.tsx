@@ -101,7 +101,7 @@ const defaultSettings: BrandSettings = {
   id: 'brand1',
   name: 'News Portal',
   domain: 'localhost:3000',
-  logoUrl: '/images/logo.svg',
+  logoUrl: '/images/logo.png',
   faviconUrl: '/favicon.svg',
   primaryColor: '#1a73e8',
   secondaryColor: '#4285f4',
