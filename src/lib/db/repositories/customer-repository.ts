@@ -55,6 +55,11 @@ export class CustomerRepository {
       _id: normalizedMsisdn,
       msisdn: input.msisdn,
       tenantId: input.tenantId,
+      // User account link
+      userId: input.userId,
+      userEmail: input.userEmail,
+      userName: input.userName,
+      // Timestamps
       firstSeenAt: now,
       lastSeenAt: now,
       totalVisits: 1,
@@ -64,6 +69,7 @@ export class CustomerRepository {
       topSource: input.source,
       sessions: session ? [session] : [],
       totalBillingAmount: 0,
+      totalPurchases: 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -132,6 +138,17 @@ export class CustomerRepository {
       if (input.source) {
         (updateOps.$set as Record<string, unknown>).topSource = input.source;
       }
+      
+      // Update user account link if provided (and not already set)
+      if (input.userId && !existing.userId) {
+        (updateOps.$set as Record<string, unknown>).userId = input.userId;
+      }
+      if (input.userEmail && !existing.userEmail) {
+        (updateOps.$set as Record<string, unknown>).userEmail = input.userEmail;
+      }
+      if (input.userName && !existing.userName) {
+        (updateOps.$set as Record<string, unknown>).userName = input.userName;
+      }
 
       await collection.updateOne({ _id: normalizedMsisdn }, updateOps);
       return (await this.findByMsisdn(normalizedMsisdn))!;
@@ -154,7 +171,11 @@ export class CustomerRepository {
     if (input.topCampaign) updateFields.topCampaign = input.topCampaign;
     if (input.topSource) updateFields.topSource = input.topSource;
     if (input.totalBillingAmount !== undefined) updateFields.totalBillingAmount = input.totalBillingAmount;
+    if (input.totalPurchases !== undefined) updateFields.totalPurchases = input.totalPurchases;
     if (input.lastBillingDate) updateFields.lastBillingDate = input.lastBillingDate;
+    if (input.userId) updateFields.userId = input.userId;
+    if (input.userEmail) updateFields.userEmail = input.userEmail;
+    if (input.userName) updateFields.userName = input.userName;
     if (input.notes !== undefined) updateFields.notes = input.notes;
     if (input.tags) updateFields.tags = input.tags;
 
@@ -167,18 +188,28 @@ export class CustomerRepository {
     return result;
   }
 
-  async addBillingAmount(normalizedMsisdn: string, amount: number): Promise<Customer | null> {
+  async addBillingAmount(normalizedMsisdn: string, amount: number, userInfo?: { userId?: string; userEmail?: string }): Promise<Customer | null> {
     const collection = await this.getCollection();
+    
+    const updateOps: Record<string, unknown> = {
+      $inc: { totalBillingAmount: amount, totalPurchases: 1 },
+      $set: { 
+        lastBillingDate: new Date(),
+        updatedAt: new Date(),
+      },
+    };
+    
+    // Also update user link if provided
+    if (userInfo?.userId) {
+      (updateOps.$set as Record<string, unknown>).userId = userInfo.userId;
+    }
+    if (userInfo?.userEmail) {
+      (updateOps.$set as Record<string, unknown>).userEmail = userInfo.userEmail;
+    }
     
     const result = await collection.findOneAndUpdate(
       { _id: normalizedMsisdn },
-      {
-        $inc: { totalBillingAmount: amount },
-        $set: { 
-          lastBillingDate: new Date(),
-          updatedAt: new Date(),
-        },
-      },
+      updateOps,
       { returnDocument: 'after' }
     );
 

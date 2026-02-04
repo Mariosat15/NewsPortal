@@ -175,13 +175,18 @@ export async function POST(request: NextRequest) {
           rawRowJson: body,
         });
 
-        // Update customer billing total
+        // Update customer billing total and link to user account if logged in
         await customerRepo.upsert({
           msisdn: callbackData.msisdn,
           normalizedMsisdn: e164Msisdn,
           tenantId: brandId,
+          userId: userId,
+          userEmail: userEmail,
         });
-        await customerRepo.addBillingAmount(e164Msisdn, callbackData.amount || 99);
+        await customerRepo.addBillingAmount(e164Msisdn, callbackData.amount || 99, {
+          userId: userId,
+          userEmail: userEmail,
+        });
 
         // Link MSISDN to any recent landing page sessions from same IP/device
         try {
