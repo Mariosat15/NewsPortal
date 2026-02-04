@@ -109,15 +109,20 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
       console.log('Parsed customers:', customers.length);
       console.log('Parsed transactions:', transactions.length);
 
-      // Create a map to merge by phone number
+      // Create a map to merge by phone number, email, or user ID
       const peopleMap = new Map<string, Person>();
+      
+      // Helper maps for quick lookup
+      const userIdMap = new Map<string, string>(); // userId -> peopleMap key
+      const emailMap = new Map<string, string>(); // email -> peopleMap key
+      const phoneMap = new Map<string, string>(); // normalizedPhone -> peopleMap key
 
-      // Process users
+      // Process users first
       users.forEach((user: { _id: string; email?: string; name?: string; msisdn?: string; authType?: string; createdAt?: string; lastActiveAt?: string; visitCount?: number }) => {
-        const key = user.msisdn || user.email || user._id;
+        const key = user.email || user.msisdn || user._id;
         const normalizedPhone = user.msisdn?.replace(/\D/g, '') || '';
         
-        peopleMap.set(key, {
+        const person: Person = {
           id: key,
           type: 'user',
           userId: user._id,
@@ -133,65 +138,112 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
           lastSeen: user.lastActiveAt || user.createdAt || new Date().toISOString(),
           status: 'active',
           transactions: [],
-        });
+        };
+        
+        peopleMap.set(key, person);
+        
+        // Build lookup maps
+        if (user._id) userIdMap.set(user._id, key);
+        if (user.email) emailMap.set(user.email.toLowerCase(), key);
+        if (normalizedPhone) phoneMap.set(normalizedPhone, key);
       });
 
       // Process customers and merge with existing users
-      customers.forEach((customer: { msisdn: string; normalizedMsisdn?: string; totalBilling?: number; visitCount?: number; firstSeen?: string; lastSeen?: string }) => {
+      customers.forEach((customer: { msisdn: string; normalizedMsisdn?: string; totalBillingAmount?: number; totalBilling?: number; totalPurchases?: number; visitCount?: number; firstSeen?: string; lastSeen?: string; userId?: string; userEmail?: string }) => {
         const normalizedPhone = customer.normalizedMsisdn || customer.msisdn?.replace(/\D/g, '') || '';
+        const totalBilling = customer.totalBillingAmount || customer.totalBilling || 0;
         
-        // Check if this customer matches an existing user
+        // Check if this customer matches an existing user by phone, userId, or email
         let existingKey: string | null = null;
-        peopleMap.forEach((person, key) => {
-          if (person.normalizedMsisdn && person.normalizedMsisdn === normalizedPhone) {
-            existingKey = key;
-          }
-        });
+        
+        // Match by userId first (most reliable)
+        if (customer.userId && userIdMap.has(customer.userId)) {
+          existingKey = userIdMap.get(customer.userId)!;
+        }
+        // Then by email
+        else if (customer.userEmail && emailMap.has(customer.userEmail.toLowerCase())) {
+          existingKey = emailMap.get(customer.userEmail.toLowerCase())!;
+        }
+        // Then by phone number
+        else if (normalizedPhone && phoneMap.has(normalizedPhone)) {
+          existingKey = phoneMap.get(normalizedPhone)!;
+        }
 
         if (existingKey) {
           // Merge with existing user
           const existing = peopleMap.get(existingKey)!;
           existing.type = 'both';
-          existing.totalSpent = customer.totalBilling || 0;
+          // totalBilling is in cents, convert to euros
+          existing.totalSpent = totalBilling / 100;
+          existing.transactionCount = customer.totalPurchases || existing.transactionCount;
           existing.visitCount = Math.max(existing.visitCount, customer.visitCount || 0);
+          // Add phone if not already present
+          if (!existing.msisdn && customer.msisdn) {
+            existing.msisdn = customer.msisdn;
+            existing.normalizedMsisdn = normalizedPhone;
+          }
           if (customer.firstSeen && new Date(customer.firstSeen) < new Date(existing.firstSeen)) {
             existing.firstSeen = customer.firstSeen;
           }
           if (customer.lastSeen && new Date(customer.lastSeen) > new Date(existing.lastSeen)) {
             existing.lastSeen = customer.lastSeen;
           }
+          // Update lookup maps
+          if (normalizedPhone) phoneMap.set(normalizedPhone, existingKey);
         } else {
           // New customer-only entry
-          peopleMap.set(normalizedPhone || customer.msisdn, {
-            id: normalizedPhone || customer.msisdn,
+          const key = normalizedPhone || customer.msisdn;
+          peopleMap.set(key, {
+            id: key,
             type: 'customer',
+            userId: customer.userId,
+            email: customer.userEmail,
             msisdn: customer.msisdn,
             normalizedMsisdn: normalizedPhone,
-            totalSpent: customer.totalBilling || 0,
-            transactionCount: 0,
+            // totalBilling is in cents, convert to euros
+            totalSpent: totalBilling / 100,
+            transactionCount: customer.totalPurchases || 0,
             visitCount: customer.visitCount || 1,
             firstSeen: customer.firstSeen || new Date().toISOString(),
             lastSeen: customer.lastSeen || new Date().toISOString(),
             status: 'active',
             transactions: [],
           });
+          // Update lookup maps
+          if (normalizedPhone) phoneMap.set(normalizedPhone, key);
+          if (customer.userId) userIdMap.set(customer.userId, key);
+          if (customer.userEmail) emailMap.set(customer.userEmail.toLowerCase(), key);
         }
       });
 
-      // Add transactions to people
-      transactions.forEach((tx: Transaction & { normalizedMsisdn?: string; msisdn?: string }) => {
+      // Add transactions to people - match by phone, userId, or email from metadata
+      transactions.forEach((tx: Transaction & { normalizedMsisdn?: string; msisdn?: string; metadata?: { userId?: string; userEmail?: string } }) => {
         const normalizedPhone = tx.normalizedMsisdn || tx.msisdn?.replace(/\D/g, '') || '';
+        const txUserId = tx.metadata?.userId;
+        const txUserEmail = tx.metadata?.userEmail;
         
-        // Find matching person
-        peopleMap.forEach((person) => {
-          if (person.normalizedMsisdn && person.normalizedMsisdn === normalizedPhone) {
+        // Find matching person by userId, email, or phone
+        let targetKey: string | null = null;
+        
+        if (txUserId && userIdMap.has(txUserId)) {
+          targetKey = userIdMap.get(txUserId)!;
+        } else if (txUserEmail && emailMap.has(txUserEmail.toLowerCase())) {
+          targetKey = emailMap.get(txUserEmail.toLowerCase())!;
+        } else if (normalizedPhone && phoneMap.has(normalizedPhone)) {
+          targetKey = phoneMap.get(normalizedPhone)!;
+        }
+        
+        if (targetKey) {
+          const person = peopleMap.get(targetKey);
+          if (person) {
             person.transactions.push(tx);
-            person.transactionCount++;
-            if (tx.status === 'completed') {
-              person.totalSpent += tx.amount / 100;
+            // Don't increment transactionCount here if already set from customer
+            if (person.transactionCount === 0) {
+              person.transactionCount++;
             }
+            // Note: totalSpent already comes from customer.totalBilling
           }
-        });
+        }
       });
 
       // Convert to array and sort by last seen
