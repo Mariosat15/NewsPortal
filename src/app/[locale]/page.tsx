@@ -49,7 +49,7 @@ const sampleArticles: ArticlePreview[] = [
     slug: 'example-article-4',
     title: 'Sport-Highlights: Die besten Momente der Woche',
     teaser: 'Von Bundesliga bis Champions League - alle wichtigen Sportereignisse im Überblick.',
-    thumbnail: 'https://images.unsplash.com/photo-1461896836934-gy7b5d2e91e1?w=800&h=450&fit=crop',
+    thumbnail: 'https://images.unsplash.com/photo-1461896836934-28e4e59a8a13?w=800&h=450&fit=crop',
     category: 'sports',
     publishDate: new Date(Date.now() - 259200000).toISOString(),
     language: 'de',

@@ -58,7 +58,7 @@ export default async function LocaleLayout({
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
         <meta name="theme-color" content={brandConfig.primaryColor} />
-        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <style dangerouslySetInnerHTML={{
           __html: `
             :root {

@@ -74,7 +74,7 @@ async function generatePlaceholderThumbnail(category: string): Promise<string> {
     news: 'https://images.unsplash.com/photo-1495020689067-958852a7765e?w=800&h=450&fit=crop',
     lifestyle: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&h=450&fit=crop',
     technology: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=450&fit=crop',
-    sports: 'https://images.unsplash.com/photo-1461896836934-gy7b5d2e91e1?w=800&h=450&fit=crop',
+    sports: 'https://images.unsplash.com/photo-1461896836934-28e4e59a8a13?w=800&h=450&fit=crop',
     health: 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?w=800&h=450&fit=crop',
     finance: 'https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?w=800&h=450&fit=crop',
     entertainment: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=800&h=450&fit=crop',
