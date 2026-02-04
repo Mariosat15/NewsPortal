@@ -3,7 +3,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { getServerBrandConfig } from '@/lib/brand/server';
-import { BrandContext } from '@/lib/brand/context';
+import { BrandProvider } from '@/lib/brand/provider';
 import "../globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -70,9 +70,9 @@ export default async function LocaleLayout({
       </head>
       <body className={`${inter.className} antialiased min-h-screen bg-background`}>
         <NextIntlClientProvider messages={messages}>
-          <BrandContext.Provider value={brandConfig}>
+          <BrandProvider config={brandConfig}>
             {children}
-          </BrandContext.Provider>
+          </BrandProvider>
         </NextIntlClientProvider>
       </body>
     </html>

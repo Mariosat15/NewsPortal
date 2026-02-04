@@ -9,7 +9,8 @@ export {
 } from './config';
 
 // Client-side brand context
-export { BrandContext, BrandProvider, useBrand } from './context';
+export { BrandContext, useBrand } from './context';
+export { BrandProvider } from './provider';
 
 // Server-side brand utilities
 export { getBrandId, getServerBrandConfig, getBrandIdSync } from './server';

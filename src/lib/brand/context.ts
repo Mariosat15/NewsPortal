@@ -15,6 +15,3 @@ export function useBrand(): BrandConfig {
   }
   return context;
 }
-
-// Export provider component
-export { BrandContext as BrandProvider };
