@@ -117,41 +117,90 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
       const emailMap = new Map<string, string>(); // email -> peopleMap key
       const phoneMap = new Map<string, string>(); // normalizedPhone -> peopleMap key
 
-      // Process users first
+      // Process users first - merge users with same phone number
       users.forEach((user: { _id: string; email?: string; name?: string; msisdn?: string; authType?: string; createdAt?: string; lastActiveAt?: string; visitCount?: number }) => {
-        const key = user.email || user.msisdn || user._id;
         const normalizedPhone = user.msisdn?.replace(/\D/g, '') || '';
         
-        const person: Person = {
-          id: key,
-          type: 'user',
-          userId: user._id,
-          email: user.email,
-          name: user.name,
-          msisdn: user.msisdn,
-          normalizedMsisdn: normalizedPhone,
-          authType: user.authType || (user.email ? 'email' : 'phone'),
-          totalSpent: 0,
-          transactionCount: 0,
-          visitCount: user.visitCount || 1,
-          firstSeen: user.createdAt || new Date().toISOString(),
-          lastSeen: user.lastActiveAt || user.createdAt || new Date().toISOString(),
-          status: 'active',
-          transactions: [],
-        };
+        // Check if a user with the same phone already exists
+        let existingKey: string | null = null;
+        if (normalizedPhone && phoneMap.has(normalizedPhone)) {
+          existingKey = phoneMap.get(normalizedPhone)!;
+        }
         
-        peopleMap.set(key, person);
-        
-        // Build lookup maps
-        if (user._id) userIdMap.set(user._id, key);
-        if (user.email) emailMap.set(user.email.toLowerCase(), key);
-        if (normalizedPhone) phoneMap.set(normalizedPhone, key);
+        if (existingKey) {
+          // Merge with existing user (same phone, different registration method)
+          const existing = peopleMap.get(existingKey)!;
+          console.log('[People] Merging user by phone:', user.email || user.msisdn, 'into', existingKey);
+          
+          // Prefer email registration data over phone registration
+          if (user.email && !existing.email) {
+            existing.email = user.email;
+            existing.id = user.email; // Update primary key to email
+            existing.authType = 'email';
+          }
+          if (user.name && !existing.name) {
+            existing.name = user.name;
+          }
+          // Keep the older firstSeen
+          if (user.createdAt && new Date(user.createdAt) < new Date(existing.firstSeen)) {
+            existing.firstSeen = user.createdAt;
+          }
+          // Keep the newer lastSeen
+          if (user.lastActiveAt && new Date(user.lastActiveAt) > new Date(existing.lastSeen)) {
+            existing.lastSeen = user.lastActiveAt;
+          }
+          existing.visitCount = Math.max(existing.visitCount, user.visitCount || 1);
+          
+          // Update lookup maps with new data
+          if (user._id) userIdMap.set(user._id, existingKey);
+          if (user.email) emailMap.set(user.email.toLowerCase(), existingKey);
+        } else {
+          // New user entry
+          const key = user.email || user.msisdn || user._id;
+          
+          const person: Person = {
+            id: key,
+            type: 'user',
+            userId: user._id,
+            email: user.email,
+            name: user.name,
+            msisdn: user.msisdn,
+            normalizedMsisdn: normalizedPhone,
+            authType: user.authType || (user.email ? 'email' : 'phone'),
+            totalSpent: 0,
+            transactionCount: 0,
+            visitCount: user.visitCount || 1,
+            firstSeen: user.createdAt || new Date().toISOString(),
+            lastSeen: user.lastActiveAt || user.createdAt || new Date().toISOString(),
+            status: 'active',
+            transactions: [],
+          };
+          
+          peopleMap.set(key, person);
+          
+          // Build lookup maps
+          if (user._id) userIdMap.set(user._id, key);
+          if (user.email) emailMap.set(user.email.toLowerCase(), key);
+          if (normalizedPhone) phoneMap.set(normalizedPhone, key);
+        }
       });
 
       // Process customers and merge with existing users
-      customers.forEach((customer: { msisdn: string; normalizedMsisdn?: string; totalBillingAmount?: number; totalBilling?: number; totalPurchases?: number; visitCount?: number; firstSeen?: string; lastSeen?: string; userId?: string; userEmail?: string }) => {
+      customers.forEach((customer: { msisdn: string; normalizedMsisdn?: string; totalBillingAmount?: number; totalBilling?: number; totalPurchases?: number; visitCount?: number; firstSeen?: string; lastSeen?: string; firstSeenAt?: string; lastSeenAt?: string; userId?: string; userEmail?: string }) => {
         const normalizedPhone = customer.normalizedMsisdn || customer.msisdn?.replace(/\D/g, '') || '';
-        const totalBilling = customer.totalBillingAmount || customer.totalBilling || 0;
+        // totalBillingAmount is stored in cents
+        const totalBillingCents = customer.totalBillingAmount || customer.totalBilling || 0;
+        const firstSeen = customer.firstSeen || customer.firstSeenAt;
+        const lastSeen = customer.lastSeen || customer.lastSeenAt;
+        
+        console.log('[People] Customer:', customer.msisdn, {
+          totalBillingAmount: customer.totalBillingAmount,
+          totalBilling: customer.totalBilling,
+          totalBillingCents,
+          inEuros: totalBillingCents / 100,
+          userId: customer.userId,
+          userEmail: customer.userEmail,
+        });
         
         // Check if this customer matches an existing user by phone, userId, or email
         let existingKey: string | null = null;
@@ -173,8 +222,8 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
           // Merge with existing user
           const existing = peopleMap.get(existingKey)!;
           existing.type = 'both';
-          // totalBilling is in cents, convert to euros
-          existing.totalSpent = totalBilling / 100;
+          // totalBillingCents is in cents, convert to euros
+          existing.totalSpent = totalBillingCents / 100;
           existing.transactionCount = customer.totalPurchases || existing.transactionCount;
           existing.visitCount = Math.max(existing.visitCount, customer.visitCount || 0);
           // Add phone if not already present
@@ -182,11 +231,11 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
             existing.msisdn = customer.msisdn;
             existing.normalizedMsisdn = normalizedPhone;
           }
-          if (customer.firstSeen && new Date(customer.firstSeen) < new Date(existing.firstSeen)) {
-            existing.firstSeen = customer.firstSeen;
+          if (firstSeen && new Date(firstSeen) < new Date(existing.firstSeen)) {
+            existing.firstSeen = firstSeen;
           }
-          if (customer.lastSeen && new Date(customer.lastSeen) > new Date(existing.lastSeen)) {
-            existing.lastSeen = customer.lastSeen;
+          if (lastSeen && new Date(lastSeen) > new Date(existing.lastSeen)) {
+            existing.lastSeen = lastSeen;
           }
           // Update lookup maps
           if (normalizedPhone) phoneMap.set(normalizedPhone, existingKey);
@@ -200,12 +249,12 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
             email: customer.userEmail,
             msisdn: customer.msisdn,
             normalizedMsisdn: normalizedPhone,
-            // totalBilling is in cents, convert to euros
-            totalSpent: totalBilling / 100,
+            // totalBillingCents is in cents, convert to euros
+            totalSpent: totalBillingCents / 100,
             transactionCount: customer.totalPurchases || 0,
             visitCount: customer.visitCount || 1,
-            firstSeen: customer.firstSeen || new Date().toISOString(),
-            lastSeen: customer.lastSeen || new Date().toISOString(),
+            firstSeen: firstSeen || new Date().toISOString(),
+            lastSeen: lastSeen || new Date().toISOString(),
             status: 'active',
             transactions: [],
           });

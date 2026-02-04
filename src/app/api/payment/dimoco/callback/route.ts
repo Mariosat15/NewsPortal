@@ -29,11 +29,16 @@ export async function GET(request: NextRequest) {
   console.log('[Payment Callback GET] Received params:', Object.fromEntries(searchParams.entries()));
 
   // DIMOCO returns various parameters - map them to our format
+  // amountCents = cents from mock, amount = euros from real DIMOCO
+  const amountCents = searchParams.get('amountCents');
+  const amountEuros = searchParams.get('amount');
+  
   const body = {
     transactionId: searchParams.get('tid') || searchParams.get('transactionId'),
     status: mapDimocoStatus(searchParams.get('status') || searchParams.get('result')),
     msisdn: searchParams.get('msisdn') || searchParams.get('MSISDN'),
-    amount: searchParams.get('amount'),
+    // amountCents is already in cents (from mock), amount needs conversion (from real DIMOCO)
+    amountCents: amountCents ? parseInt(amountCents, 10) : (amountEuros ? parseAmount(amountEuros) : undefined),
     articleId: searchParams.get('custom1') || searchParams.get('articleId'),
     brandId: searchParams.get('custom2'),
     metadata: searchParams.get('custom3') || searchParams.get('metadata'),
@@ -102,11 +107,25 @@ function mapDimocoStatus(status: string | null): 'success' | 'failed' | 'cancell
 
 // Process callback data
 async function processCallback(body: Record<string, unknown>) {
+  // Handle amount - prefer amountCents (already in cents) over amount (needs parsing)
+  let amountInCents: number | undefined;
+  if (body.amountCents !== undefined) {
+    amountInCents = typeof body.amountCents === 'number' ? body.amountCents : parseInt(body.amountCents as string, 10);
+  } else if (body.amount) {
+    amountInCents = parseAmount(body.amount as string);
+  }
+  
+  console.log('[Payment Callback] Amount processing:', { 
+    rawAmountCents: body.amountCents, 
+    rawAmount: body.amount, 
+    parsedCents: amountInCents 
+  });
+  
   const callbackData: PaymentCallbackData = {
     transactionId: (body.transactionId || body.tid) as string,
     status: body.status as 'success' | 'failed' | 'cancelled',
     msisdn: body.msisdn as string,
-    amount: body.amount ? parseAmount(body.amount as string) : undefined,
+    amount: amountInCents,
     currency: (body.currency as string) || 'EUR',
     timestamp: body.timestamp as string,
     signature: body.signature as string,

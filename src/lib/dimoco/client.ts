@@ -333,27 +333,51 @@ export function verifyCallbackSignature(data: PaymentCallbackData, receivedSigna
 }
 
 /**
- * Parse amount from DIMOCO format
+ * Parse amount from DIMOCO format (always in EUR, e.g., "0.99" or "0,99")
+ * Returns amount in cents
  */
 export function parseAmount(amount: string | number): number {
-  if (typeof amount === 'number') return Math.round(amount * 100);
+  // If already a small number (looks like euros), convert to cents
+  if (typeof amount === 'number') {
+    // If < 100, assume euros and convert to cents
+    // If >= 100, assume already in cents
+    return amount < 100 ? Math.round(amount * 100) : Math.round(amount);
+  }
   
   const cleaned = amount.replace(/[^\d.,]/g, '');
   
-  // Handle European format (comma as decimal)
+  // Handle European format (comma as decimal separator)
+  // e.g., "0,99" → 0.99 → 99 cents
   if (cleaned.includes(',') && !cleaned.includes('.')) {
     const parsed = parseFloat(cleaned.replace(',', '.'));
+    // DIMOCO sends euros, so multiply by 100 to get cents
     return Math.round(parsed * 100);
   }
   
-  // Standard decimal format
+  // Standard decimal format (e.g., "0.99")
   const parsed = parseFloat(cleaned);
-  if (parsed < 100) {
-    // Assume euros, convert to cents
+  
+  // If it has a decimal point and is less than 100, it's likely euros
+  // e.g., "0.99" → 99 cents
+  if (cleaned.includes('.') && parsed < 100) {
     return Math.round(parsed * 100);
   }
   
-  return Math.round(parsed);
+  // If it's a whole number >= 100, it's likely already cents
+  // e.g., "99" could be 99 cents, but "9900" is definitely cents
+  // For safety, if no decimal and value looks like cents, keep as is
+  if (!cleaned.includes('.') && !cleaned.includes(',')) {
+    // Small whole numbers (< 10) are ambiguous, assume euros
+    // e.g., "1" → 100 cents (1 EUR)
+    if (parsed < 10) {
+      return Math.round(parsed * 100);
+    }
+    // Larger whole numbers, assume cents
+    // e.g., "99" → 99 cents, "150" → 150 cents
+    return Math.round(parsed);
+  }
+  
+  return Math.round(parsed * 100);
 }
 
 // ===========================================

@@ -149,7 +149,7 @@ export async function GET(request: NextRequest) {
     </div>
     
     <h1>Zahlung bestätigen</h1>
-    <div class="amount">${((parseInt(amount || '99', 10)) / 100).toFixed(2)} EUR</div>
+    <div class="amount">${(parseFloat(amount || '99') / 100).toFixed(2)} EUR</div>
     <div class="description">${decodeURIComponent(description || 'Artikel freischalten')}</div>
     
     <form id="paymentForm">
@@ -189,11 +189,13 @@ export async function GET(request: NextRequest) {
       
       // Build callback URL - use the dynamic callback base passed from initiate
       // Note: metadata is already URL-encoded, so we build the URL manually to avoid double-encoding
+      // Amount is sent in cents (same as stored) to avoid conversion issues
+      const amountCents = '${amount || '99'}';
       const baseParams = new URLSearchParams({
         transactionId: '${transactionId}',
         status: 'success',
         msisdn: phone.replace(/[^0-9+]/g, ''),
-        amount: '${amount}',
+        amountCents: amountCents,
         articleId: '${articleId}',
         returnUrl: '${successUrl}'
       }).toString();
