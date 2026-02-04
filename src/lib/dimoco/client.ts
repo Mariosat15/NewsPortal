@@ -63,6 +63,10 @@ export async function initiatePayment(request: PaymentInitRequest): Promise<Paym
   // In a real implementation, this would call the DIMOCO API
   // For now, we'll create a mock payment URL that simulates the flow
   
+  // Use the original returnUrl (article page) so user goes back to article after payment
+  // Fallback to article page if no returnUrl provided
+  const successUrl = request.returnUrl || `${baseUrl}/de/article/${request.articleSlug}`;
+  
   // Build the payment URL with parameters - all URLs are now dynamic
   const params = new URLSearchParams({
     merchantId: config.merchantId || 'your-merchant-id',
@@ -71,7 +75,8 @@ export async function initiatePayment(request: PaymentInitRequest): Promise<Paym
     amount: request.amount.toString(),
     currency: request.currency,
     description: request.description,
-    successUrl: `${baseUrl}/payment/success?transactionId=${transactionId}&articleId=${request.articleId}`,
+    // Pass original article URL as success URL so user returns to article
+    successUrl: successUrl,
     cancelUrl: `${baseUrl}/payment/cancel?transactionId=${transactionId}`,
     callbackUrl: `${baseUrl}/api/payment/dimoco/callback`,
   });

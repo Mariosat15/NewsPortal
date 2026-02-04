@@ -16,19 +16,32 @@ export async function GET() {
     }
 
     const sessionData = JSON.parse(userCookie);
+    const userId = sessionData.id;
+    const userEmail = sessionData.email;
+    
+    if (!userId) {
+      return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
+    }
+
     const brandId = await getBrandId();
     
-    // Get user's unlocks
+    // Get user's unlocks - filter by userId in metadata or by user's linked MSISDN
     const unlocksCollection = await getCollection<Unlock>(brandId, 'unlocks');
     const articleRepo = getArticleRepository(brandId);
 
-    // For now, we'll get unlocks by email since MSISDN-based unlocks 
-    // might be from a different auth flow
-    // In a real system, you'd link the user account to their MSISDN
+    // Find unlocks that belong to this user
+    // 1. By userId stored in metadata
+    // 2. Or by user's linked MSISDN (if they have one)
     const unlocks = await unlocksCollection
-      .find({ status: 'completed' })
+      .find({ 
+        status: 'completed',
+        $or: [
+          { 'metadata.userId': userId },
+          { 'metadata.userEmail': userEmail },
+        ]
+      })
       .sort({ unlockedAt: -1 })
-      .limit(50)
+      .limit(100)
       .toArray();
 
     // Enrich with article data
@@ -62,6 +75,7 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
+      purchases, // Direct array for easier access
       data: {
         purchases,
         summary: {

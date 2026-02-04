@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { 
   FileText, Users, CreditCard, TrendingUp, Activity, BarChart3, 
   ArrowUpRight, ArrowDownRight, Target, DollarSign, UserPlus, ShoppingCart,
-  Repeat, Eye, Zap
+  Repeat, Eye, Zap, RefreshCw, Calendar
 } from 'lucide-react';
 import {
   LineChart,
@@ -38,6 +39,7 @@ interface Stats {
   returningCustomers: number;
   conversionRate: string;
   avgRevenuePerUser: string;
+  daysFilter?: number;
   topArticles?: { title: string; views: number; unlocks: number; slug: string }[];
   viewsByCategory?: { category: string; views: number; unlocks: number; articles: number; color: string }[];
   revenueByDay?: { date: string; revenue: number; unlocks: number }[];
@@ -59,6 +61,14 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: '#6b7280',
 };
 
+const DATE_RANGES = [
+  { label: '7 Days', value: 7 },
+  { label: '30 Days', value: 30 },
+  { label: '60 Days', value: 60 },
+  { label: '120 Days', value: 120 },
+  { label: '1 Year', value: 365 },
+];
+
 export function DashboardOverview() {
   const [stats, setStats] = useState<Stats>({
     totalArticles: 0,
@@ -73,23 +83,30 @@ export function DashboardOverview() {
     avgRevenuePerUser: '0',
   });
   const [loading, setLoading] = useState(true);
+  const [daysFilter, setDaysFilter] = useState(7);
+
+  const fetchStats = useCallback(async (days: number) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/admin/stats?days=${days}`);
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    async function fetchStats() {
-      try {
-        const response = await fetch('/api/admin/stats');
-        if (response.ok) {
-          const data = await response.json();
-          setStats(data.data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch stats:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchStats();
-  }, []);
+    fetchStats(daysFilter);
+  }, [daysFilter, fetchStats]);
+
+  const handleRefresh = () => {
+    fetchStats(daysFilter);
+  };
 
   const formatCurrency = (value: number) => `€${value.toFixed(2)}`;
   const formatChange = (change: number) => {
@@ -109,14 +126,42 @@ export function DashboardOverview() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <Badge variant="outline" className="text-xs">
-          Last updated: {new Date().toLocaleTimeString()}
-        </Badge>
+      {/* Header with filters */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground text-sm">Overview of your news portal performance</p>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {/* Date Range Filter */}
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+            {DATE_RANGES.map((range) => (
+              <Button
+                key={range.value}
+                variant={daysFilter === range.value ? 'default' : 'ghost'}
+                size="sm"
+                className="h-8 px-3 text-xs"
+                onClick={() => setDaysFilter(range.value)}
+              >
+                {range.label}
+              </Button>
+            ))}
+          </div>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={loading}
+            className="h-8"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
       </div>
 
-      {/* Main Stats Cards - 2 rows */}
+      {/* Main Stats Cards */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card className="border-l-4 border-l-blue-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -131,12 +176,12 @@ export function DashboardOverview() {
 
         <Card className="border-l-4 border-l-green-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+            <CardTitle className="text-sm font-medium">Customers</CardTitle>
             <Users className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{loading ? '...' : stats.totalUsers}</div>
-            <p className="text-xs text-muted-foreground">{stats.recentUsers} new this week</p>
+            <div className="text-2xl font-bold">{loading ? '...' : stats.totalCustomers}</div>
+            <p className="text-xs text-muted-foreground">{stats.returningCustomers} returning</p>
           </CardContent>
         </Card>
 
@@ -149,7 +194,7 @@ export function DashboardOverview() {
             <div className="text-2xl font-bold">{loading ? '...' : formatCurrency(stats.totalRevenue / 100)}</div>
             <div className="flex items-center gap-2">
               {stats.weekOverWeek && formatChange(stats.weekOverWeek.revenue.change)}
-              <span className="text-xs text-muted-foreground">vs last week</span>
+              <span className="text-xs text-muted-foreground">vs prev period</span>
             </div>
           </CardContent>
         </Card>
@@ -163,7 +208,7 @@ export function DashboardOverview() {
             <div className="text-2xl font-bold">{loading ? '...' : stats.totalUnlocks}</div>
             <div className="flex items-center gap-2">
               {stats.weekOverWeek && formatChange(stats.weekOverWeek.unlocks.change)}
-              <span className="text-xs text-muted-foreground">vs last week</span>
+              <span className="text-xs text-muted-foreground">vs prev period</span>
             </div>
           </CardContent>
         </Card>
@@ -173,11 +218,12 @@ export function DashboardOverview() {
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Customers</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Total Users</CardTitle>
             <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold">{stats.totalCustomers || 0}</div>
+            <div className="text-xl font-bold">{stats.totalUsers || 0}</div>
+            <p className="text-xs text-muted-foreground">{stats.recentUsers} new this week</p>
           </CardContent>
         </Card>
 
@@ -188,6 +234,9 @@ export function DashboardOverview() {
           </CardHeader>
           <CardContent>
             <div className="text-xl font-bold">{stats.returningCustomers || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.totalCustomers > 0 ? Math.round((stats.returningCustomers / stats.totalCustomers) * 100) : 0}% retention
+            </p>
           </CardContent>
         </Card>
 
@@ -198,28 +247,38 @@ export function DashboardOverview() {
           </CardHeader>
           <CardContent>
             <div className="text-xl font-bold">{stats.conversionRate}%</div>
+            <p className="text-xs text-muted-foreground">views to purchase</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Avg. Revenue/User</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Avg. Rev/Customer</CardTitle>
             <Zap className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-xl font-bold">€{stats.avgRevenuePerUser}</div>
+            <p className="text-xs text-muted-foreground">lifetime value</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Revenue & Unlocks Chart - FIXED */}
+      {/* Revenue & Unlocks Chart */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Activity className="h-5 w-5" />
-            Revenue & Unlocks (Last 7 Days)
-          </CardTitle>
-          <CardDescription>Daily revenue in euros and article unlocks</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5" />
+                Revenue & Unlocks
+              </CardTitle>
+              <CardDescription>Last {daysFilter} days - daily revenue and article unlocks</CardDescription>
+            </div>
+            <Badge variant="outline" className="flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              {daysFilter} days
+            </Badge>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="h-[300px]">
@@ -233,8 +292,12 @@ export function DashboardOverview() {
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis 
                     dataKey="date" 
-                    tick={{ fontSize: 12 }}
+                    tick={{ fontSize: 11 }}
                     tickLine={false}
+                    interval={daysFilter > 30 ? Math.floor(daysFilter / 10) : 0}
+                    angle={daysFilter > 30 ? -45 : 0}
+                    textAnchor={daysFilter > 30 ? 'end' : 'middle'}
+                    height={daysFilter > 30 ? 60 : 30}
                   />
                   <YAxis 
                     yAxisId="left"
@@ -276,7 +339,7 @@ export function DashboardOverview() {
                     dataKey="unlocks"
                     stroke="#22c55e"
                     strokeWidth={3}
-                    dot={{ fill: '#22c55e', r: 4 }}
+                    dot={{ fill: '#22c55e', r: daysFilter > 30 ? 0 : 4 }}
                     name="Unlocks"
                   />
                 </ComposedChart>
@@ -293,7 +356,7 @@ export function DashboardOverview() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <UserPlus className="h-5 w-5" />
-              User Growth (14 Days)
+              User Growth
             </CardTitle>
             <CardDescription>New user registrations and total users</CardDescription>
           </CardHeader>
@@ -307,7 +370,7 @@ export function DashboardOverview() {
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={stats.userGrowth || []}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} interval={Math.floor((stats.userGrowth?.length || 1) / 7)} />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip 
                       contentStyle={{ 
@@ -436,18 +499,24 @@ export function DashboardOverview() {
             <div className="space-y-3">
               {(stats.conversionFunnel || []).map((stage, index) => {
                 const maxValue = stats.conversionFunnel?.[0]?.value || 1;
-                const percentage = Math.round((stage.value / maxValue) * 100);
+                const percentage = maxValue > 0 ? Math.round((stage.value / maxValue) * 100) : 0;
                 return (
                   <div key={stage.stage} className="space-y-1">
                     <div className="flex justify-between text-sm">
                       <span className="font-medium">{stage.stage}</span>
-                      <span className="text-muted-foreground">{stage.value.toLocaleString()} ({percentage}%)</span>
+                      <span className="text-muted-foreground">
+                        {stage.value.toLocaleString()} 
+                        {index > 0 && stats.conversionFunnel?.[index - 1]?.value ? 
+                          ` (${Math.round((stage.value / stats.conversionFunnel[index - 1].value) * 100)}% of prev)` : 
+                          ''
+                        }
+                      </span>
                     </div>
                     <div className="h-8 bg-muted rounded-lg overflow-hidden">
                       <div 
                         className="h-full transition-all duration-500 flex items-center justify-end pr-2"
                         style={{ 
-                          width: `${percentage}%`, 
+                          width: `${Math.max(percentage, 2)}%`, 
                           backgroundColor: stage.color,
                         }}
                       >

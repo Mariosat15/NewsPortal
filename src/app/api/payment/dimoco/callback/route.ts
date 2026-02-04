@@ -84,7 +84,11 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Create unlock record with device fingerprint data
+      // Get user ID and email from metadata if present (for logged-in users)
+      const userId = deviceMetadata.userId as string | undefined;
+      const userEmail = deviceMetadata.userEmail as string | undefined;
+
+      // Create unlock record with device fingerprint data and user link
       const unlock = await unlockRepo.create({
         msisdn: callbackData.msisdn,
         articleId,
@@ -94,6 +98,9 @@ export async function POST(request: NextRequest) {
         status: 'completed',
         paymentProvider: 'dimoco',
         metadata: {
+          // User account link (if logged in)
+          userId: userId,
+          userEmail: userEmail,
           // Device fingerprint data
           browser: deviceMetadata.browser,
           browserVersion: deviceMetadata.browserVersion,
@@ -110,6 +117,30 @@ export async function POST(request: NextRequest) {
           originalPayload: body,
         },
       });
+
+      // If user is logged in, also link purchase to their account
+      if (userId) {
+        try {
+          const { getCollection } = await import('@/lib/db/mongodb');
+          const sessionsCollection = await getCollection(brandId, 'sessions');
+          
+          // Find user's session and add purchase
+          await sessionsCollection.updateOne(
+            { userId: userId },
+            { 
+              $addToSet: { 
+                purchasedArticles: articleId 
+              },
+              $set: { 
+                lastPurchaseAt: new Date() 
+              }
+            }
+          );
+          console.log(`[Payment Callback] Linked purchase to user ${userId}`);
+        } catch (userLinkError) {
+          console.error('[Payment Callback] Error linking to user account:', userLinkError);
+        }
+      }
 
       // Update article unlock count
       await articleRepo.incrementUnlockCount(articleId);
