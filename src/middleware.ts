@@ -36,8 +36,10 @@ const publicPaths = [
   '/images',
   '/fonts',
   '/favicon.ico',
+  '/favicon.svg',
   '/robots.txt',
   '/sitemap.xml',
+  '/admin',  // Admin panel doesn't need locale prefix
 ];
 
 export function middleware(request: NextRequest) {
