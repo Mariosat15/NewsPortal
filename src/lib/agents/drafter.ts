@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { AgentResult, DraftArticle, GatheredTopic, ArticleStyle, AIModelConfig } from './types';
+import { AgentResult, DraftArticle, GatheredTopic, ArticleStyle, AIModelConfig, ArticleType } from './types';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -17,13 +17,46 @@ const defaultAIConfig: AIModelConfig = {
 
 // Default article style
 const defaultArticleStyle: ArticleStyle = {
-  type: 'news',
+  types: ['news'],
   tone: 'engaging',
   depth: 'standard',
   includeImages: true,
   includeQuotes: true,
   includeSources: true,
 };
+
+// Select a random type from the configured types
+function selectArticleType(style: ArticleStyle, category: string): ArticleType {
+  // Get types from style, falling back to deprecated 'type' field or default
+  const types = style.types || (style.type ? [style.type] : ['news']);
+  
+  // If multiple types, select randomly based on category preference
+  if (types.length === 1) return types[0];
+  
+  // Some categories prefer certain types
+  const categoryPreferences: Record<string, ArticleType[]> = {
+    'recipes': ['recipe', 'guide', 'listicle'],
+    'health': ['guide', 'news', 'listicle'],
+    'finance': ['analysis', 'news', 'guide'],
+    'technology': ['news', 'review', 'guide'],
+    'lifestyle': ['guide', 'listicle', 'review'],
+    'entertainment': ['news', 'review', 'profile'],
+    'relationships': ['guide', 'analysis', 'listicle'],
+    'travel': ['guide', 'listicle', 'review'],
+  };
+  
+  // Filter types to those that match category preferences (if any)
+  const preferred = categoryPreferences[category.toLowerCase()];
+  if (preferred) {
+    const matching = types.filter(t => preferred.includes(t));
+    if (matching.length > 0) {
+      return matching[Math.floor(Math.random() * matching.length)];
+    }
+  }
+  
+  // Otherwise, random selection
+  return types[Math.floor(Math.random() * types.length)];
+}
 
 // Curated Unsplash images by category
 const categoryImages: Record<string, string[]> = {
@@ -96,7 +129,7 @@ export async function createDrafts(
   }
 }
 
-// Create a professional news article from a gathered topic
+// Create a professional article from a gathered topic
 async function createDraftFromTopic(
   topic: GatheredTopic,
   language: 'de' | 'en',
@@ -110,40 +143,47 @@ async function createDraftFromTopic(
   const images = categoryImages[topic.category] || categoryImages.news;
   const randomImages = images.sort(() => Math.random() - 0.5).slice(0, 3);
 
+  // Select the article type based on style and category
+  const selectedType = selectArticleType(articleStyle, topic.category);
+  console.log(`[Drafter] Creating ${selectedType} article for category: ${topic.category}`);
+  
+  // Create a modified style with the selected type for prompts
+  const effectiveStyle: ArticleStyle = { ...articleStyle, types: [selectedType] };
+
   // Build dynamic system prompt based on article style
-  const styleInstructions = getStyleInstructions(articleStyle, language);
-  const formatInstructions = getFormatInstructions(articleStyle, language, randomImages);
+  const styleInstructions = getStyleInstructions(effectiveStyle, selectedType, language);
+  const formatInstructions = getFormatInstructions(effectiveStyle, selectedType, language, randomImages);
 
   const systemPrompt = language === 'de'
-    ? `Du bist ein preisgekrönter Journalist bei einer führenden internationalen Nachrichtenagentur.
-       Du schreibst ${getArticleTypeLabel(articleStyle.type, 'de')} in einem ${getToneLabel(articleStyle.tone, 'de')} Stil.
+    ? `Du bist ein erfahrener Content-Ersteller bei einer führenden Medienplattform.
+       Du schreibst ${getArticleTypeLabel(selectedType, 'de')} in einem ${getToneLabel(articleStyle.tone, 'de')} Stil.
        
-       DEIN JOURNALISTISCHER STANDARD:
+       DEIN PROFESSIONELLER STANDARD:
        ${styleInstructions}
        
        QUALITÄTSKRITERIEN:
        - Faktentreue und Genauigkeit haben höchste Priorität
-       - Klare Struktur: Wichtigstes zuerst (Nachrichtenpyramide)
+       - Klare Struktur und gute Lesbarkeit
        - Lebendige, aber präzise Sprache
        - Kontext und Hintergrundinformationen liefern
-       - Verschiedene Perspektiven berücksichtigen
+       - Mehrwert für den Leser bieten
        - Aktualität und Relevanz betonen`
-    : `You are an award-winning journalist at a leading international news agency.
-       You write ${getArticleTypeLabel(articleStyle.type, 'en')} in a ${getToneLabel(articleStyle.tone, 'en')} style.
+    : `You are an experienced content creator at a leading media platform.
+       You write ${getArticleTypeLabel(selectedType, 'en')} in a ${getToneLabel(articleStyle.tone, 'en')} style.
        
-       YOUR JOURNALISTIC STANDARDS:
+       YOUR PROFESSIONAL STANDARDS:
        ${styleInstructions}
        
        QUALITY CRITERIA:
        - Factual accuracy is the highest priority
-       - Clear structure: most important first (inverted pyramid)
+       - Clear structure and good readability
        - Vivid but precise language
        - Provide context and background information
-       - Consider different perspectives
+       - Provide value to the reader
        - Emphasize timeliness and relevance`;
 
   const userPrompt = language === 'de'
-    ? `AUFGABE: Schreibe einen professionellen ${getArticleTypeLabel(articleStyle.type, 'de')} basierend auf folgenden Quellen.
+    ? `AUFGABE: Schreibe ${getArticleTypeLabel(selectedType, 'de')} basierend auf folgenden Quellen.
 
 KATEGORIE: ${topic.category}
 QUELLINFORMATIONEN:
@@ -165,7 +205,7 @@ Antworte NUR als JSON (ohne Markdown-Codeblöcke):
   "content": "Vollständiger HTML-formatierter Artikel",
   "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
 }`
-    : `TASK: Write a professional ${getArticleTypeLabel(articleStyle.type, 'en')} based on the following sources.
+    : `TASK: Write ${getArticleTypeLabel(selectedType, 'en')} based on the following sources.
 
 CATEGORY: ${topic.category}
 SOURCE INFORMATION:
@@ -229,8 +269,8 @@ Respond ONLY as JSON (no markdown code blocks):
 }
 
 // Get style-specific instructions
-function getStyleInstructions(style: ArticleStyle, language: 'de' | 'en'): string {
-  const instructions: Record<ArticleStyle['type'], { de: string; en: string }> = {
+function getStyleInstructions(style: ArticleStyle, articleType: ArticleType, language: 'de' | 'en'): string {
+  const instructions: Record<ArticleType, { de: string; en: string }> = {
     news: {
       de: `- Objektive, faktenbasierte Berichterstattung
 - Wer, Was, Wann, Wo, Warum, Wie beantworten
@@ -280,14 +320,74 @@ function getStyleInstructions(style: ArticleStyle, language: 'de' | 'en'): strin
 - Documents and data as evidence
 - Reveal connections and patterns
 - Explain consequences and significance`
+    },
+    guide: {
+      de: `- Praktische Schritt-für-Schritt Anleitung
+- Klare, nummerierte Schritte
+- Tipps und Warnungen hervorheben
+- Benötigte Materialien/Werkzeuge auflisten
+- Erfolgskriterien definieren`,
+      en: `- Practical step-by-step instructions
+- Clear, numbered steps
+- Highlight tips and warnings
+- List required materials/tools
+- Define success criteria`
+    },
+    recipe: {
+      de: `- Zutatenliste mit genauen Mengen
+- Klare Schritt-für-Schritt Kochanleitung
+- Zubereitungs- und Kochzeit angeben
+- Portionen/Personen angeben
+- Tipps für Variationen und Alternativen`,
+      en: `- Ingredient list with exact quantities
+- Clear step-by-step cooking instructions
+- Specify prep and cooking time
+- Indicate servings/portions
+- Tips for variations and alternatives`
+    },
+    review: {
+      de: `- Ehrliche Bewertung mit Pro und Contra
+- Konkrete Erfahrungen und Beispiele
+- Vergleich mit Alternativen
+- Klare Empfehlung oder Fazit
+- Bewertung auf Skala (z.B. 1-10)`,
+      en: `- Honest evaluation with pros and cons
+- Concrete experiences and examples
+- Comparison with alternatives
+- Clear recommendation or conclusion
+- Rating on scale (e.g., 1-10)`
+    },
+    listicle: {
+      de: `- Klare nummerierte Liste
+- Jeder Punkt mit kurzer Erklärung
+- Von wichtigsten zu weniger wichtigen
+- Einleitung und Fazit
+- Leicht scannbar für Leser`,
+      en: `- Clear numbered list
+- Each point with brief explanation
+- From most to least important
+- Introduction and conclusion
+- Easy to scan for readers`
+    },
+    profile: {
+      de: `- Interessante Hintergrundinformationen
+- Wichtige Meilensteine und Erfolge
+- Persönliche Zitate und Einblicke
+- Aktuelle Aktivitäten und Projekte
+- Ausgewogene Darstellung`,
+      en: `- Interesting background information
+- Key milestones and achievements
+- Personal quotes and insights
+- Current activities and projects
+- Balanced portrayal`
     }
   };
   
-  return instructions[style.type][language];
+  return instructions[articleType][language];
 }
 
-// Get format instructions
-function getFormatInstructions(style: ArticleStyle, language: 'de' | 'en', images: string[]): string {
+// Get format instructions based on article type
+function getFormatInstructions(style: ArticleStyle, articleType: ArticleType, language: 'de' | 'en', images: string[]): string {
   const wordCount = style.depth === 'brief' ? '300-500' : style.depth === 'standard' ? '500-800' : '800-1500';
   
   const imageInstructions = style.includeImages 
@@ -306,7 +406,7 @@ Bildformat: <figure class="article-image"><img src="URL" alt="Beschreibung" /><f
 Image format: <figure class="article-image"><img src="URL" alt="Description" /><figcaption>Caption</figcaption></figure>`
     : '';
 
-  const quoteInstructions = style.includeQuotes
+  const quoteInstructions = style.includeQuotes && !['recipe', 'guide', 'listicle'].includes(articleType)
     ? language === 'de'
       ? '\n- Füge mindestens 1-2 Zitate ein (<blockquote>)'
       : '\n- Include at least 1-2 quotes (<blockquote>)'
@@ -318,39 +418,168 @@ Image format: <figure class="article-image"><img src="URL" alt="Description" /><
       : '\n- Process source citations in the text'
     : '';
 
-  return language === 'de'
-    ? `FORMATIERUNG (${wordCount} Wörter):
-- Mindestens 4-5 Abschnitte mit <h2> Überschriften
-- Kurze Absätze (2-3 Sätze) in <p> Tags
-- Wichtige Begriffe mit <strong> hervorheben
-- Listen mit <ul><li> wo sinnvoll${quoteInstructions}${sourceInstructions}${imageInstructions}
-
-STRUKTUR:
+  // Type-specific structure
+  const structureTemplates: Record<ArticleType, { de: string; en: string }> = {
+    news: {
+      de: `STRUKTUR:
 1. Einleitung - Das Wichtigste zusammenfassen
 2. Hauptteil - Details und Kontext
 3. Vertiefung - Analyse und Hintergründe
-4. Ausblick/Fazit - Bedeutung und Perspektiven`
-    : `FORMATTING (${wordCount} words):
-- At least 4-5 sections with <h2> headings
-- Short paragraphs (2-3 sentences) in <p> tags
-- Highlight important terms with <strong>
-- Use <ul><li> for lists where appropriate${quoteInstructions}${sourceInstructions}${imageInstructions}
-
-STRUCTURE:
+4. Ausblick/Fazit - Bedeutung und Perspektiven`,
+      en: `STRUCTURE:
 1. Introduction - Summarize the essentials
 2. Main part - Details and context
 3. Deep dive - Analysis and background
-4. Outlook/Conclusion - Significance and perspectives`;
+4. Outlook/Conclusion - Significance and perspectives`
+    },
+    analysis: {
+      de: `STRUKTUR:
+1. These - Hauptaussage präsentieren
+2. Kontext - Hintergrundinformationen
+3. Analyse - Daten und Fakten analysieren
+4. Perspektiven - Verschiedene Sichtweisen
+5. Fazit - Schlussfolgerungen`,
+      en: `STRUCTURE:
+1. Thesis - Present main argument
+2. Context - Background information
+3. Analysis - Analyze data and facts
+4. Perspectives - Different viewpoints
+5. Conclusion - Draw conclusions`
+    },
+    opinion: {
+      de: `STRUKTUR:
+1. Standpunkt - Position klar machen
+2. Argumente - Belege und Beispiele
+3. Gegenargumente - Ansprechen und entkräften
+4. Fazit - Abschließende Empfehlung`,
+      en: `STRUCTURE:
+1. Position - Make stance clear
+2. Arguments - Evidence and examples
+3. Counterarguments - Address and refute
+4. Conclusion - Final recommendation`
+    },
+    summary: {
+      de: `STRUKTUR:
+1. Überblick - Worum geht es
+2. Kernpunkte - 5-7 wichtigste Fakten als Liste
+3. Fazit - Was bedeutet das`,
+      en: `STRUCTURE:
+1. Overview - What it's about
+2. Key points - 5-7 most important facts as list
+3. Conclusion - What it means`
+    },
+    investigative: {
+      de: `STRUKTUR:
+1. Enthüllung - Was wurde aufgedeckt
+2. Recherche - Wie wurde es entdeckt
+3. Belege - Dokumente und Quellen
+4. Bedeutung - Konsequenzen und Ausblick`,
+      en: `STRUCTURE:
+1. Revelation - What was uncovered
+2. Investigation - How it was discovered
+3. Evidence - Documents and sources
+4. Significance - Consequences and outlook`
+    },
+    guide: {
+      de: `STRUKTUR:
+1. Einleitung - Was wird erreicht
+2. Voraussetzungen - Was wird benötigt
+3. Schritte - Nummerierte Anleitung (Schritt 1, Schritt 2, etc.)
+4. Tipps - Zusätzliche Hinweise
+5. Fazit - Erfolgskriterien`,
+      en: `STRUCTURE:
+1. Introduction - What will be achieved
+2. Requirements - What is needed
+3. Steps - Numbered instructions (Step 1, Step 2, etc.)
+4. Tips - Additional advice
+5. Conclusion - Success criteria`
+    },
+    recipe: {
+      de: `STRUKTUR:
+1. Einleitung - Kurze Beschreibung des Gerichts
+2. Info-Box - Zeit, Portionen, Schwierigkeit
+3. Zutaten - Liste mit Mengenangaben
+4. Zubereitung - Nummerierte Schritte
+5. Tipps - Variationen und Serviervorschläge`,
+      en: `STRUCTURE:
+1. Introduction - Brief description of the dish
+2. Info box - Time, servings, difficulty
+3. Ingredients - List with quantities
+4. Instructions - Numbered steps
+5. Tips - Variations and serving suggestions`
+    },
+    review: {
+      de: `STRUKTUR:
+1. Überblick - Was wird bewertet
+2. Vorteile - Positive Aspekte
+3. Nachteile - Negative Aspekte
+4. Vergleich - Alternativen
+5. Fazit - Bewertung und Empfehlung`,
+      en: `STRUCTURE:
+1. Overview - What is being reviewed
+2. Pros - Positive aspects
+3. Cons - Negative aspects
+4. Comparison - Alternatives
+5. Conclusion - Rating and recommendation`
+    },
+    listicle: {
+      de: `STRUKTUR:
+1. Einleitung - Warum diese Liste
+2. Punkte 1-10 - Nummerierte Einträge mit Erklärung
+3. Fazit - Zusammenfassung`,
+      en: `STRUCTURE:
+1. Introduction - Why this list
+2. Points 1-10 - Numbered entries with explanation
+3. Conclusion - Summary`
+    },
+    profile: {
+      de: `STRUKTUR:
+1. Einleitung - Wer ist die Person/Organisation
+2. Hintergrund - Geschichte und Werdegang
+3. Erfolge - Wichtige Meilensteine
+4. Aktuelles - Gegenwärtige Aktivitäten
+5. Ausblick - Zukunftspläne`,
+      en: `STRUCTURE:
+1. Introduction - Who is the person/organization
+2. Background - History and journey
+3. Achievements - Key milestones
+4. Current - Present activities
+5. Outlook - Future plans`
+    }
+  };
+
+  const structure = structureTemplates[articleType] || structureTemplates.news;
+
+  return language === 'de'
+    ? `FORMATIERUNG (${wordCount} Wörter):
+- Abschnitte mit <h2> Überschriften
+- Kurze Absätze (2-3 Sätze) in <p> Tags
+- Wichtige Begriffe mit <strong> hervorheben
+- Listen mit <ul><li> oder <ol><li> wo sinnvoll${quoteInstructions}${sourceInstructions}${imageInstructions}
+
+${structure.de}`
+    : `FORMATTING (${wordCount} words):
+- Sections with <h2> headings
+- Short paragraphs (2-3 sentences) in <p> tags
+- Highlight important terms with <strong>
+- Use <ul><li> or <ol><li> for lists where appropriate${quoteInstructions}${sourceInstructions}${imageInstructions}
+
+${structure.en}`;
 }
 
 // Get article type label
-function getArticleTypeLabel(type: ArticleStyle['type'], language: 'de' | 'en'): string {
-  const labels: Record<ArticleStyle['type'], { de: string; en: string }> = {
-    news: { de: 'Nachrichtenartikel', en: 'news articles' },
-    analysis: { de: 'Analysen', en: 'analysis pieces' },
-    opinion: { de: 'Meinungsbeiträge', en: 'opinion pieces' },
-    summary: { de: 'Zusammenfassungen', en: 'summary articles' },
-    investigative: { de: 'investigative Berichte', en: 'investigative reports' },
+function getArticleTypeLabel(type: ArticleType, language: 'de' | 'en'): string {
+  const labels: Record<ArticleType, { de: string; en: string }> = {
+    news: { de: 'einen Nachrichtenartikel', en: 'a news article' },
+    analysis: { de: 'eine Analyse', en: 'an analysis piece' },
+    opinion: { de: 'einen Meinungsbeitrag', en: 'an opinion piece' },
+    summary: { de: 'eine Zusammenfassung', en: 'a summary article' },
+    investigative: { de: 'einen investigativen Bericht', en: 'an investigative report' },
+    guide: { de: 'eine Schritt-für-Schritt Anleitung', en: 'a step-by-step guide' },
+    recipe: { de: 'ein Rezept', en: 'a recipe' },
+    review: { de: 'eine Bewertung/Review', en: 'a review' },
+    listicle: { de: 'eine Top-Liste', en: 'a listicle' },
+    profile: { de: 'ein Profil/Portrait', en: 'a profile piece' },
   };
   return labels[type][language];
 }

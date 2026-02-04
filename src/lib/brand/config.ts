@@ -48,17 +48,18 @@ export interface BrandConfig {
       frequencyPenalty: number;
       presencePenalty: number;
     };
-    articleStyles?: {
-      type: 'news' | 'analysis' | 'opinion' | 'summary' | 'investigative';
+    articleStyle?: {
+      types: ('news' | 'analysis' | 'opinion' | 'summary' | 'investigative' | 'guide' | 'recipe' | 'review' | 'listicle' | 'profile')[];
       tone: 'neutral' | 'engaging' | 'formal' | 'conversational';
       depth: 'brief' | 'standard' | 'in-depth';
       includeImages: boolean;
       includeQuotes: boolean;
       includeSources: boolean;
-    }[];
+    };
     minWordCount?: number;
     maxWordCount?: number;
     minQualityScore?: number;
+    distributeEvenly?: boolean;
   };
 }
 

@@ -12,6 +12,27 @@ const defaultRSSFeeds: RSSFeed[] = [
   { url: 'https://www.heise.de/rss/heise-top-atom.xml', name: 'Heise', category: 'technology', language: 'de', enabled: true },
 ];
 
+// Calculate articles per category for even distribution
+function calculateDistribution(maxArticles: number, categories: string[], distributeEvenly: boolean): Map<string, number> {
+  const distribution = new Map<string, number>();
+  
+  if (!distributeEvenly || categories.length === 0) {
+    // If not distributing evenly, give equal chance to all
+    categories.forEach(cat => distribution.set(cat, Math.ceil(maxArticles / categories.length)));
+    return distribution;
+  }
+  
+  const baseCount = Math.floor(maxArticles / categories.length);
+  const remainder = maxArticles % categories.length;
+  
+  categories.forEach((cat, index) => {
+    // First 'remainder' categories get one extra article
+    distribution.set(cat, baseCount + (index < remainder ? 1 : 0));
+  });
+  
+  return distribution;
+}
+
 // Gather topics from RSS feeds and web sources
 export async function gatherTopics(config: AgentConfig): Promise<AgentResult<GatheredTopic[]>> {
   const startTime = Date.now();
@@ -20,8 +41,21 @@ export async function gatherTopics(config: AgentConfig): Promise<AgentResult<Gat
   try {
     const useRSS = config.useRSSFeeds !== false;
     const rssFeeds = config.rssFeeds?.filter(f => f.enabled) || defaultRSSFeeds;
+    const distributeEvenly = config.distributeEvenly !== false;
+    
+    // Calculate how many articles per category
+    const categoryDistribution = calculateDistribution(
+      config.maxArticlesPerRun || 5,
+      config.topics,
+      distributeEvenly
+    );
     
     console.log(`Gathering topics - RSS enabled: ${useRSS}, Feeds: ${rssFeeds.length}`);
+    console.log(`Distribution: ${JSON.stringify(Object.fromEntries(categoryDistribution))}`);
+
+    // Track gathered counts per category
+    const gatheredCounts = new Map<string, number>();
+    config.topics.forEach(t => gatheredCounts.set(t, 0));
 
     // Step 1: Fetch from RSS feeds if enabled
     if (useRSS && rssFeeds.length > 0) {
@@ -29,6 +63,11 @@ export async function gatherTopics(config: AgentConfig): Promise<AgentResult<Gat
         try {
           // Filter feeds by configured topics
           if (!config.topics.includes(feed.category)) continue;
+          
+          // Check if we need more for this category
+          const targetCount = categoryDistribution.get(feed.category) || 1;
+          const currentCount = gatheredCounts.get(feed.category) || 0;
+          if (currentCount >= targetCount) continue;
           
           const items = await fetchRSSFeed(feed);
           if (items.length > 0) {
@@ -39,6 +78,7 @@ export async function gatherTopics(config: AgentConfig): Promise<AgentResult<Gat
               sources: items.slice(0, 5), // Limit items per feed
               gatheredAt: new Date(),
             });
+            gatheredCounts.set(feed.category, currentCount + 1);
           }
         } catch (error) {
           console.error(`Error fetching RSS feed ${feed.name}:`, error);
@@ -46,29 +86,37 @@ export async function gatherTopics(config: AgentConfig): Promise<AgentResult<Gat
       }
     }
 
-    // Step 2: Generate additional trending topics with AI
+    // Step 2: Generate additional trending topics with AI for each category
     for (const topic of config.topics) {
-      // Skip if we already have enough sources for this topic from RSS
-      const existingForTopic = gatheredTopics.filter(t => t.category === topic);
-      if (existingForTopic.length >= 2) continue;
-
-      try {
-        const aiTopics = await generateTrendingTopics(topic, config.defaultLanguage);
-        if (aiTopics.length > 0) {
-          gatheredTopics.push({
-            id: `ai-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-            topic,
-            category: topic,
-            sources: aiTopics,
-            gatheredAt: new Date(),
-          });
+      const targetCount = categoryDistribution.get(topic) || 1;
+      const currentCount = gatheredCounts.get(topic) || 0;
+      
+      // Generate enough topics to meet the target
+      while ((gatheredCounts.get(topic) || 0) < targetCount) {
+        try {
+          const aiTopics = await generateTrendingTopics(topic, config.defaultLanguage);
+          if (aiTopics.length > 0) {
+            gatheredTopics.push({
+              id: `ai-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+              topic,
+              category: topic,
+              sources: aiTopics,
+              gatheredAt: new Date(),
+            });
+            gatheredCounts.set(topic, (gatheredCounts.get(topic) || 0) + 1);
+          } else {
+            // If AI returns nothing, break to avoid infinite loop
+            break;
+          }
+        } catch (error) {
+          console.error(`Error generating AI topics for ${topic}:`, error);
+          break;
         }
-      } catch (error) {
-        console.error(`Error generating AI topics for ${topic}:`, error);
       }
     }
 
     console.log(`Gathered ${gatheredTopics.length} topic groups with ${gatheredTopics.reduce((sum, t) => sum + t.sources.length, 0)} total sources`);
+    console.log(`Final counts: ${JSON.stringify(Object.fromEntries(gatheredCounts))}`);
 
     return {
       success: true,

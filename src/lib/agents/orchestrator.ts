@@ -17,7 +17,7 @@ const defaultAIConfig: AIModelConfig = {
 };
 
 const defaultArticleStyle: ArticleStyle = {
-  type: 'news',
+  types: ['news'],
   tone: 'engaging',
   depth: 'standard',
   includeImages: true,
@@ -44,17 +44,19 @@ export async function runAgentPipeline(brandId: string, customSettings?: Partial
     // Get brand config for agent settings
     const brandConfig = getBrandConfig(brandId);
     let agentConfig: AgentConfig = {
-      ...brandConfig.agentConfig,
+      enabled: brandConfig.agentConfig.enabled,
+      topics: brandConfig.agentConfig.topics,
+      defaultLanguage: brandConfig.agentConfig.defaultLanguage,
+      maxArticlesPerRun: brandConfig.agentConfig.maxArticlesPerRun,
+      cronSchedule: brandConfig.agentConfig.cronSchedule,
       rssFeeds: brandConfig.agentConfig.rssFeeds || [],
       useRSSFeeds: brandConfig.agentConfig.useRSSFeeds ?? true,
       aiModel: brandConfig.agentConfig.aiModel || defaultAIConfig,
-      articleStyles: brandConfig.agentConfig.articleStyles || [defaultArticleStyle],
-      defaultArticleStyle: defaultArticleStyle,
+      articleStyle: defaultArticleStyle,
       minWordCount: brandConfig.agentConfig.minWordCount || 500,
       maxWordCount: brandConfig.agentConfig.maxWordCount || 1200,
       minQualityScore: brandConfig.agentConfig.minQualityScore || 7,
-      requireFactCheck: true,
-      requireSourceAttribution: true,
+      distributeEvenly: brandConfig.agentConfig.distributeEvenly ?? true,
     };
 
     // Try to load settings from database
@@ -99,9 +101,9 @@ export async function runAgentPipeline(brandId: string, customSettings?: Partial
     // Step 2: Create drafts with AI config and article style
     console.log('Step 2: Creating drafts...');
     const aiConfig = agentConfig.aiModel || defaultAIConfig;
-    const articleStyle = agentConfig.defaultArticleStyle || defaultArticleStyle;
+    const articleStyle = agentConfig.articleStyle || agentConfig.defaultArticleStyle || defaultArticleStyle;
     
-    console.log(`Using AI model: ${aiConfig.model}, Style: ${articleStyle.type}/${articleStyle.tone}`);
+    console.log(`Using AI model: ${aiConfig.model}, Types: ${articleStyle.types?.join(', ') || 'news'}, Tone: ${articleStyle.tone}`);
     
     const draftResult = await createDrafts(
       gatheredTopics,

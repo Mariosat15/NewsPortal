@@ -30,12 +30,24 @@ interface AIModelConfig {
 }
 
 interface ArticleStyle {
-  type: 'news' | 'analysis' | 'opinion' | 'summary' | 'investigative';
+  types: string[]; // Multiple types now supported
   tone: 'neutral' | 'engaging' | 'formal' | 'conversational';
   depth: 'brief' | 'standard' | 'in-depth';
   includeImages: boolean;
   includeQuotes: boolean;
   includeSources: boolean;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  color: string;
+  icon: string;
+  enabled: boolean;
+  contentTypes: string[];
+  order: number;
 }
 
 interface AgentSettings {
@@ -57,6 +69,9 @@ interface AgentSettings {
   minWordCount: number;
   maxWordCount: number;
   minQualityScore: number;
+  
+  // Distribution settings
+  distributeEvenly: boolean; // Distribute articles evenly across categories
 }
 
 const defaultRSSFeeds: RSSFeed[] = [
@@ -80,7 +95,7 @@ const defaultAIModel: AIModelConfig = {
 };
 
 const defaultArticleStyle: ArticleStyle = {
-  type: 'news',
+  types: ['news'], // Multiple types supported
   tone: 'engaging',
   depth: 'standard',
   includeImages: true,
@@ -101,6 +116,7 @@ const defaultSettings: AgentSettings = {
   minWordCount: 500,
   maxWordCount: 1200,
   minQualityScore: 7,
+  distributeEvenly: true,
 };
 
 const AI_MODELS = [
@@ -116,6 +132,11 @@ const ARTICLE_TYPES = [
   { value: 'opinion', label: 'Opinion/Editorial', icon: MessageSquare, description: 'Opinion pieces with clear stance' },
   { value: 'summary', label: 'Summary/Digest', icon: BookOpen, description: 'Quick summaries of multiple sources' },
   { value: 'investigative', label: 'Investigative', icon: Zap, description: 'Deep-dive investigative pieces' },
+  { value: 'guide', label: 'How-To Guide', icon: BookOpen, description: 'Step-by-step tutorials and guides' },
+  { value: 'recipe', label: 'Recipe', icon: FileText, description: 'Food recipes with ingredients and steps' },
+  { value: 'review', label: 'Review', icon: MessageSquare, description: 'Product, service, or media reviews' },
+  { value: 'listicle', label: 'Listicle', icon: FileText, description: 'Top 10, best of, ranked lists' },
+  { value: 'profile', label: 'Profile/Interview', icon: Globe, description: 'Person or company profiles' },
 ];
 
 const TONES = [
@@ -133,6 +154,7 @@ const DEPTHS = [
 
 export function AgentConfig() {
   const [settings, setSettings] = useState<AgentSettings>(defaultSettings);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [activeTab, setActiveTab] = useState<'run' | 'rss' | 'ai' | 'style' | 'topics'>('run');
   const [newTopic, setNewTopic] = useState('');
   const [newFeed, setNewFeed] = useState<Partial<RSSFeed>>({ url: '', name: '', category: 'news', language: 'de', enabled: true });
@@ -153,19 +175,48 @@ export function AgentConfig() {
       if (response.ok) {
         const data = await response.json();
         if (data.settings?.agentConfig) {
+          // Handle backward compatibility: if articleStyle.type exists, convert to types array
+          const articleStyle = data.settings.agentConfig.articleStyle || {};
+          if (articleStyle.type && !articleStyle.types) {
+            articleStyle.types = [articleStyle.type];
+          }
+          
           setSettings({
             ...defaultSettings,
             ...data.settings.agentConfig,
             rssFeeds: data.settings.agentConfig.rssFeeds || defaultRSSFeeds,
             aiModel: { ...defaultAIModel, ...(data.settings.agentConfig.aiModel || {}) },
-            articleStyle: { ...defaultArticleStyle, ...(data.settings.agentConfig.articleStyle || {}) },
+            articleStyle: { ...defaultArticleStyle, ...articleStyle },
           });
+        }
+        
+        // Load categories
+        if (data.settings?.categories && data.settings.categories.length > 0) {
+          setCategories(data.settings.categories);
+          // Sync topics with enabled categories
+          const enabledCategorySlugs = data.settings.categories
+            .filter((c: Category) => c.enabled)
+            .map((c: Category) => c.slug);
+          if (enabledCategorySlugs.length > 0 && !data.settings.agentConfig?.topics) {
+            setSettings(prev => ({ ...prev, topics: enabledCategorySlugs }));
+          }
         }
       }
     } catch (err) {
       console.error('Failed to load settings:', err);
     }
   }
+  
+  // Get enabled categories for topics
+  const enabledCategories = categories.filter(c => c.enabled);
+  
+  // Calculate articles per category
+  const articlesPerCategory = settings.distributeEvenly && enabledCategories.length > 0
+    ? Math.floor(settings.maxArticlesPerRun / enabledCategories.length)
+    : 0;
+  const remainderArticles = settings.distributeEvenly && enabledCategories.length > 0
+    ? settings.maxArticlesPerRun % enabledCategories.length
+    : 0;
 
   const handleAddTopic = () => {
     if (newTopic.trim() && !settings.topics.includes(newTopic.trim().toLowerCase())) {
@@ -347,7 +398,8 @@ export function AgentConfig() {
                   <li>• RSS Feeds: {settings.rssFeeds.filter(f => f.enabled).length} enabled</li>
                   <li>• AI Model: {settings.aiModel.model}</li>
                   <li>• Articles per run: {settings.maxArticlesPerRun}</li>
-                  <li>• Style: {settings.articleStyle.type} / {settings.articleStyle.tone}</li>
+                  <li>• Types: {settings.articleStyle.types?.join(', ') || 'news'}</li>
+                  <li>• Tone: {settings.articleStyle.tone}</li>
                 </ul>
               </div>
 
@@ -671,32 +723,53 @@ export function AgentConfig() {
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>Article Type</CardTitle>
-              <CardDescription>What kind of articles to generate</CardDescription>
+              <CardTitle>Article Types</CardTitle>
+              <CardDescription>Select multiple content types to generate (articles will mix these types)</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {ARTICLE_TYPES.map((type) => (
-                <div
-                  key={type.value}
-                  onClick={() => setSettings({
-                    ...settings,
-                    articleStyle: { ...settings.articleStyle, type: type.value as ArticleStyle['type'] }
-                  })}
-                  className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                    settings.articleStyle.type === type.value
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <type.icon className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">{type.label}</p>
-                      <p className="text-sm text-muted-foreground">{type.description}</p>
+              <p className="text-sm text-muted-foreground mb-2">
+                Selected: {settings.articleStyle.types?.length || 0} type{(settings.articleStyle.types?.length || 0) !== 1 ? 's' : ''}
+              </p>
+              {ARTICLE_TYPES.map((type) => {
+                const isSelected = settings.articleStyle.types?.includes(type.value);
+                return (
+                  <div
+                    key={type.value}
+                    onClick={() => {
+                      const currentTypes = settings.articleStyle.types || ['news'];
+                      const newTypes = isSelected
+                        ? currentTypes.filter(t => t !== type.value)
+                        : [...currentTypes, type.value];
+                      // Ensure at least one type is selected
+                      if (newTypes.length > 0) {
+                        setSettings({
+                          ...settings,
+                          articleStyle: { ...settings.articleStyle, types: newTypes }
+                        });
+                      }
+                    }}
+                    className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                      isSelected
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}}
+                        className="rounded"
+                      />
+                      <type.icon className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">{type.label}</p>
+                        <p className="text-sm text-muted-foreground">{type.description}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
 
@@ -796,111 +869,232 @@ export function AgentConfig() {
 
       {/* Topics Tab */}
       {activeTab === 'topics' && (
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-6">
+          {/* Article Distribution */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Globe className="h-5 w-5" />
-                Content Topics
+                Content Categories & Distribution
               </CardTitle>
-              <CardDescription>Categories for article generation</CardDescription>
+              <CardDescription>
+                Select which categories to generate articles for. Articles will be distributed across enabled categories.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                {settings.topics.map((topic) => (
-                  <Badge key={topic} variant="secondary" className="pl-3 pr-1 py-1.5 text-sm">
-                    {topic}
-                    <button
-                      onClick={() => handleRemoveTopic(topic)}
-                      className="ml-2 hover:bg-gray-300 rounded-full p-0.5"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
+              {/* Distribution toggle */}
+              <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
+                <div>
+                  <p className="font-medium">Distribute Evenly</p>
+                  <p className="text-sm text-muted-foreground">
+                    Spread {settings.maxArticlesPerRun} articles evenly across {settings.topics.length} enabled categories
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.distributeEvenly}
+                    onChange={(e) => setSettings({ ...settings, distributeEvenly: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
               </div>
 
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Add new topic..."
-                  value={newTopic}
-                  onChange={(e) => setNewTopic(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddTopic()}
-                />
-                <Button onClick={handleAddTopic} size="icon">
-                  <Plus className="h-4 w-4" />
-                </Button>
+              {/* Categories with article counts */}
+              {enabledCategories.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="font-medium text-sm">Enabled Categories ({enabledCategories.length})</p>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {enabledCategories.map((category, index) => {
+                      const isSelected = settings.topics.includes(category.slug);
+                      const articleCount = isSelected && settings.distributeEvenly
+                        ? articlesPerCategory + (index < remainderArticles ? 1 : 0)
+                        : 0;
+                      
+                      return (
+                        <div
+                          key={category.id}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSettings({ ...settings, topics: settings.topics.filter(t => t !== category.slug) });
+                            } else {
+                              setSettings({ ...settings, topics: [...settings.topics, category.slug] });
+                            }
+                          }}
+                          className={`p-3 border rounded-lg cursor-pointer transition-all ${
+                            isSelected 
+                              ? 'border-blue-500 bg-blue-50' 
+                              : 'hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {}}
+                                className="rounded"
+                              />
+                              <span className="font-medium">{category.name}</span>
+                            </div>
+                            {isSelected && settings.distributeEvenly && (
+                              <Badge variant="secondary" className="ml-2">
+                                {articleCount} article{articleCount !== 1 ? 's' : ''}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1 pl-6">
+                            {category.contentTypes?.slice(0, 2).join(', ')}
+                            {category.contentTypes?.length > 2 ? '...' : ''}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200 text-yellow-700">
+                  <p className="font-medium">No categories configured</p>
+                  <p className="text-sm">Go to <strong>Content → Categories</strong> to add and enable categories.</p>
+                </div>
+              )}
+
+              {/* Manual topic input (fallback) */}
+              <div className="border-t pt-4">
+                <p className="font-medium text-sm mb-2">Custom Topics (optional)</p>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {settings.topics.filter(t => !enabledCategories.some(c => c.slug === t)).map((topic) => (
+                    <Badge key={topic} variant="outline" className="pl-3 pr-1 py-1.5 text-sm">
+                      {topic}
+                      <button
+                        onClick={() => handleRemoveTopic(topic)}
+                        className="ml-2 hover:bg-gray-300 rounded-full p-0.5"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Add custom topic..."
+                    value={newTopic}
+                    onChange={(e) => setNewTopic(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddTopic()}
+                  />
+                  <Button onClick={handleAddTopic} size="icon">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Generation Settings</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Max Articles per Run</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={settings.maxArticlesPerRun}
-                  onChange={(e) => setSettings({
-                    ...settings,
-                    maxArticlesPerRun: parseInt(e.target.value) || 5,
-                  })}
-                />
-              </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Generation Settings</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Max Articles per Run</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={settings.maxArticlesPerRun}
+                    onChange={(e) => setSettings({
+                      ...settings,
+                      maxArticlesPerRun: parseInt(e.target.value) || 5,
+                    })}
+                  />
+                  {settings.distributeEvenly && settings.topics.length > 0 && (
+                    <p className="text-xs text-blue-600">
+                      ≈ {articlesPerCategory} article{articlesPerCategory !== 1 ? 's' : ''} per category
+                      {remainderArticles > 0 ? ` (+${remainderArticles} extra for first categories)` : ''}
+                    </p>
+                  )}
+                </div>
 
-              <div className="space-y-2">
-                <Label>Minimum Quality Score (1-10)</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={settings.minQualityScore}
-                  onChange={(e) => setSettings({
-                    ...settings,
-                    minQualityScore: parseInt(e.target.value) || 7,
-                  })}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Articles below this score won't be published
-                </p>
-              </div>
+                <div className="space-y-2">
+                  <Label>Minimum Quality Score (1-10)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={settings.minQualityScore}
+                    onChange={(e) => setSettings({
+                      ...settings,
+                      minQualityScore: parseInt(e.target.value) || 7,
+                    })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Articles below this score won't be published
+                  </p>
+                </div>
 
-              <div className="space-y-2">
-                <Label>Default Language</Label>
-                <select
-                  className="w-full p-2 border rounded-md"
-                  value={settings.defaultLanguage}
-                  onChange={(e) => setSettings({
-                    ...settings,
-                    defaultLanguage: e.target.value as 'de' | 'en',
-                  })}
-                >
-                  <option value="de">German (Deutsch)</option>
-                  <option value="en">English</option>
-                </select>
-              </div>
+                <div className="space-y-2">
+                  <Label>Default Language</Label>
+                  <select
+                    className="w-full p-2 border rounded-md"
+                    value={settings.defaultLanguage}
+                    onChange={(e) => setSettings({
+                      ...settings,
+                      defaultLanguage: e.target.value as 'de' | 'en',
+                    })}
+                  >
+                    <option value="de">German (Deutsch)</option>
+                    <option value="en">English</option>
+                  </select>
+                </div>
 
-              <div className="space-y-2">
-                <Label>Cron Schedule</Label>
-                <Input
-                  value={settings.cronSchedule}
-                  onChange={(e) => setSettings({
-                    ...settings,
-                    cronSchedule: e.target.value,
-                  })}
-                  placeholder="0 */6 * * *"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Default: Every 6 hours (0 */6 * * *)
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+                <div className="space-y-2">
+                  <Label>Cron Schedule</Label>
+                  <Input
+                    value={settings.cronSchedule}
+                    onChange={(e) => setSettings({
+                      ...settings,
+                      cronSchedule: e.target.value,
+                    })}
+                    placeholder="0 */6 * * *"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Default: Every 6 hours (0 */6 * * *)
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Summary Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Generation Preview</CardTitle>
+                <CardDescription>What will be generated on next run</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <p className="text-2xl font-bold">{settings.maxArticlesPerRun}</p>
+                    <p className="text-sm text-muted-foreground">Total articles</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <p className="text-2xl font-bold">{settings.topics.length}</p>
+                    <p className="text-sm text-muted-foreground">Active categories</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <p className="text-2xl font-bold">{settings.articleStyle.types?.length || 1}</p>
+                    <p className="text-sm text-muted-foreground">Content types</p>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    <p className="font-medium">Types: {settings.articleStyle.types?.join(', ') || 'news'}</p>
+                    <p>Tone: {settings.articleStyle.tone}</p>
+                    <p>Depth: {settings.articleStyle.depth}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
     </div>

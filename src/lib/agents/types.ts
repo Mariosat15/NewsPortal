@@ -15,8 +15,11 @@ export interface AIModelConfig {
   presencePenalty: number;
 }
 
+export type ArticleType = 'news' | 'analysis' | 'opinion' | 'summary' | 'investigative' | 'guide' | 'recipe' | 'review' | 'listicle' | 'profile';
+
 export interface ArticleStyle {
-  type: 'news' | 'analysis' | 'opinion' | 'summary' | 'investigative';
+  type?: ArticleType; // Deprecated - use types
+  types: ArticleType[]; // Multiple types supported
   tone: 'neutral' | 'engaging' | 'formal' | 'conversational';
   depth: 'brief' | 'standard' | 'in-depth';
   includeImages: boolean;
@@ -39,15 +42,19 @@ export interface AgentConfig {
   aiModel: AIModelConfig;
   
   // Article Generation Settings
-  articleStyles: ArticleStyle[];
-  defaultArticleStyle: ArticleStyle;
+  articleStyle: ArticleStyle;
+  articleStyles?: ArticleStyle[];
+  defaultArticleStyle?: ArticleStyle;
   minWordCount: number;
   maxWordCount: number;
   
   // Quality Settings
   minQualityScore: number;
-  requireFactCheck: boolean;
-  requireSourceAttribution: boolean;
+  requireFactCheck?: boolean;
+  requireSourceAttribution?: boolean;
+  
+  // Distribution Settings
+  distributeEvenly: boolean;
 }
 
 export interface GatheredTopic {

@@ -33,8 +33,10 @@ import { TemplateManager } from './template-manager';
 import { ImageSources } from './image-sources';
 import { LandingPagesManager } from './landing-pages-manager';
 import { TrackingAnalytics } from './tracking-analytics';
+import { CategoriesManager } from './categories-manager';
+import { FolderOpen } from 'lucide-react';
 
-type TabType = 'overview' | 'articles' | 'users' | 'transactions' | 'billing' | 'agents' | 'landing-pages' | 'analytics' | 'templates' | 'images' | 'settings';
+type TabType = 'overview' | 'articles' | 'categories' | 'users' | 'transactions' | 'billing' | 'agents' | 'landing-pages' | 'analytics' | 'templates' | 'images' | 'settings';
 
 interface NavSection {
   title: string;
@@ -55,6 +57,7 @@ const navSections: NavSection[] = [
     icon: FileText,
     items: [
       { id: 'articles', label: 'Articles', icon: FileText },
+      { id: 'categories', label: 'Categories', icon: FolderOpen },
       { id: 'templates', label: 'Templates', icon: Layout },
       { id: 'images', label: 'Image Sources', icon: Image },
     ],
@@ -195,6 +198,7 @@ export function AdminDashboard() {
         <div className="max-w-7xl mx-auto">
           {activeTab === 'overview' && <DashboardOverview />}
           {activeTab === 'articles' && <ArticlesManager />}
+          {activeTab === 'categories' && <CategoriesManager />}
           {activeTab === 'users' && <PeopleManager initialSearch={personSearch} onSearchComplete={() => setPersonSearch(null)} />}
           {activeTab === 'transactions' && <TransactionsManager />}
           {activeTab === 'billing' && <BillingImport />}
