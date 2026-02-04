@@ -59,7 +59,8 @@ cp .env.example .env.local
 ```bash
 npm run dev
 ```
-
+Main site: http://localhost:3000
+Admin panel: http://localhost:3000/admin
 6. Open [http://localhost:3000](http://localhost:3000)
 
 ## Admin Panel
