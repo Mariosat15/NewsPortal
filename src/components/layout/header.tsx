@@ -164,18 +164,24 @@ export function Header() {
           {/* Center - Logo */}
           <Link href={`/${locale}`} className="flex items-center">
             {brand.logoUrl ? (
-              <Image
+              <img
                 src={brand.logoUrl}
                 alt={brand.name}
-                width={140}
-                height={40}
-                className="h-9 w-auto"
+                className="h-9 w-auto max-w-[180px] object-contain"
+                onError={(e) => {
+                  // If logo fails to load, hide it and show text instead
+                  (e.target as HTMLImageElement).style.display = 'none';
+                  const textEl = (e.target as HTMLImageElement).nextElementSibling;
+                  if (textEl) (textEl as HTMLElement).style.display = 'block';
+                }}
               />
-            ) : (
-              <span className="text-xl font-black tracking-tight text-gray-900">
-                {brand.name}
-              </span>
-            )}
+            ) : null}
+            <span 
+              className="text-xl font-black tracking-tight text-gray-900"
+              style={{ display: brand.logoUrl ? 'none' : 'block' }}
+            >
+              {brand.name}
+            </span>
           </Link>
 
           {/* Right - Actions */}

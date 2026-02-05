@@ -9,8 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Play, Settings, Clock, Plus, X, Rss, Brain, FileText, 
   Sliders, Save, Loader2, AlertCircle, CheckCircle, Trash2,
-  Globe, Zap, BookOpen, MessageSquare
+  Globe, Zap, BookOpen, MessageSquare, Timer
 } from 'lucide-react';
+import { SchedulePicker } from './schedule-picker';
 
 interface RSSFeed {
   url: string;
@@ -448,6 +449,50 @@ export function AgentConfig() {
                   Last run: {new Date(lastRun).toLocaleString()}
                 </p>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Timer className="h-5 w-5" />
+                Automatic Scheduling
+              </CardTitle>
+              <CardDescription>
+                Set up automated article generation
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                <p className="font-medium text-amber-800 mb-2">Current Schedule</p>
+                <p className="text-sm text-amber-700 mb-2">
+                  Configure in the <strong>Topics</strong> tab above
+                </p>
+                <p className="text-xs text-amber-600">
+                  Cron: {settings.cronSchedule}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <p className="font-medium text-sm">External Cron Setup</p>
+                <p className="text-sm text-muted-foreground">
+                  To enable automatic scheduled runs, configure an external cron service to call this endpoint:
+                </p>
+                <div className="p-3 bg-gray-100 rounded-lg font-mono text-xs break-all">
+                  GET /api/agents/schedule?check=true&secret=YOUR_ADMIN_SECRET
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Set up your server cron or a service like Vercel Cron Jobs to call this endpoint every minute. 
+                  The system will check the schedule and only run when needed.
+                </p>
+                
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-sm font-medium text-blue-800">Example crontab entry:</p>
+                  <code className="text-xs text-blue-700 block mt-1">
+                    * * * * * curl -s "https://yoursite.com/api/agents/schedule?check=true&secret=YOUR_SECRET"
+                  </code>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -1059,18 +1104,17 @@ export function AgentConfig() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Cron Schedule</Label>
-                  <Input
+                  <Label className="flex items-center gap-2">
+                    <Timer className="h-4 w-4" />
+                    Schedule
+                  </Label>
+                  <SchedulePicker
                     value={settings.cronSchedule}
-                    onChange={(e) => setSettings({
+                    onChange={(newSchedule) => setSettings({
                       ...settings,
-                      cronSchedule: e.target.value,
+                      cronSchedule: newSchedule,
                     })}
-                    placeholder="0 */6 * * *"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Default: Every 6 hours (0 */6 * * *)
-                  </p>
                 </div>
               </CardContent>
             </Card>
