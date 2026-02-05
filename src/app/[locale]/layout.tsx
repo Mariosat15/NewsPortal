@@ -52,6 +52,7 @@ export default async function LocaleLayout({
 
   // Get brand config
   const brandConfig = await getServerBrandConfig();
+  console.log('[Layout] Brand logoUrl:', brandConfig.logoUrl);
 
   // Get messages for the locale
   const messages = await getMessages();

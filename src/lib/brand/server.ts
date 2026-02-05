@@ -2,12 +2,12 @@ import { cookies, headers } from 'next/headers';
 import { getBrandConfig, getBrandConfigFromEnv, getBrandIdFromDomain, type BrandConfig } from './config';
 import { getCollection } from '@/lib/db/mongodb';
 
-// Cache for database settings (TTL: 5 minutes)
+// Cache for database settings (TTL: 30 seconds for faster updates)
 let settingsCache: { data: Partial<BrandConfig> | null; timestamp: number } = {
   data: null,
   timestamp: 0,
 };
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 30 * 1000; // 30 seconds
 
 // Load settings from database (server-only)
 export async function loadSettingsFromDb(brandId: string): Promise<Partial<BrandConfig>> {
@@ -53,6 +53,10 @@ export async function getBrandConfigAsync(brandId?: string): Promise<BrandConfig
   
   try {
     const dbSettings = await loadSettingsFromDb(effectiveBrandId);
+    
+    // Debug: log what we got from database
+    console.log('[Brand] DB logoUrl:', dbSettings.logoUrl);
+    console.log('[Brand] ENV logoUrl:', envConfig.logoUrl);
     
     // Deep merge database settings with env config
     const mergedConfig: BrandConfig = {

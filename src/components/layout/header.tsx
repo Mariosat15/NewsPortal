@@ -71,6 +71,29 @@ export function Header() {
   const [searchQuery, setSearchQuery] = useState('');
   const [navItems, setNavItems] = useState<NavItem[]>(defaultNavItems);
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
+  const [freshLogoUrl, setFreshLogoUrl] = useState<string | null>(null);
+
+  // Fetch fresh brand info (logo might have been updated)
+  useEffect(() => {
+    async function loadBrandInfo() {
+      try {
+        const response = await fetch('/api/brand');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.brand?.logoUrl) {
+            setFreshLogoUrl(data.brand.logoUrl);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load brand info:', error);
+      }
+    }
+    
+    loadBrandInfo();
+  }, []);
+
+  // Use fresh logo if available, otherwise fall back to context
+  const logoUrl = freshLogoUrl || brand.logoUrl;
 
   // Fetch enabled categories from API
   useEffect(() => {
@@ -163,9 +186,9 @@ export function Header() {
 
           {/* Center - Logo */}
           <Link href={`/${locale}`} className="flex items-center">
-            {brand.logoUrl ? (
+            {logoUrl ? (
               <img
-                src={brand.logoUrl}
+                src={logoUrl}
                 alt={brand.name}
                 className="h-12 w-auto max-w-[220px] object-contain"
                 onError={(e) => {
@@ -178,7 +201,7 @@ export function Header() {
             ) : null}
             <span 
               className="text-xl font-black tracking-tight text-gray-900"
-              style={{ display: brand.logoUrl ? 'none' : 'block' }}
+              style={{ display: logoUrl ? 'none' : 'block' }}
             >
               {brand.name}
             </span>
