@@ -631,34 +631,71 @@ export function AgentConfig() {
       // First save settings
       await handleSaveSettings(true);
       
+      // Start the pipeline (returns immediately, runs async on server)
       const response = await fetch('/api/agents/run', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ settings }),
       });
 
       const data = await response.json();
 
-      if (data.success) {
-        setRunResult({
-          success: true,
-          message: `Successfully published ${data.data?.itemsSuccessful || 0} articles`,
-        });
-        setLastRun(new Date().toISOString());
-      } else {
-        setRunResult({
-          success: false,
-          message: data.error || 'Failed to run agents',
-        });
+      if (!data.success && !data.running) {
+        setRunResult({ success: false, message: data.error || 'Failed to start pipeline' });
+        setRunning(false);
+        return;
       }
+
+      // Pipeline started - poll for completion
+      setRunResult({ success: true, message: 'Pipeline running... Check progress below.' });
+      
+      // Poll every 3 seconds until complete
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await fetch('/api/agents/run');
+          const statusData = await statusRes.json();
+          
+          if (!statusData.running && statusData.lastResult) {
+            // Pipeline finished
+            clearInterval(pollInterval);
+            setRunning(false);
+            
+            if (statusData.lastResult.success) {
+              const articles = statusData.lastResult.data?.itemsSuccessful || 0;
+              setRunResult({
+                success: true,
+                message: `Successfully published ${articles} articles!`,
+              });
+              setLastRun(new Date().toISOString());
+            } else {
+              setRunResult({
+                success: false,
+                message: statusData.lastResult.error || 'Pipeline failed',
+              });
+            }
+          }
+        } catch (pollError) {
+          console.error('Poll error:', pollError);
+        }
+      }, 3000);
+      
+      // Safety timeout - stop polling after 10 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        if (running) {
+          setRunning(false);
+          setRunResult({
+            success: true,
+            message: 'Pipeline still running in background. Check articles later.',
+          });
+        }
+      }, 600000);
+      
     } catch (error) {
       setRunResult({
         success: false,
-        message: 'Network error: ' + (error instanceof Error ? error.message : 'Unknown'),
+        message: 'Error: ' + (error instanceof Error ? error.message : 'Unknown'),
       });
-    } finally {
       setRunning(false);
     }
   };
