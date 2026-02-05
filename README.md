@@ -24,6 +24,10 @@ A mobile-first German news portal with DIMOCO mobile payment integration, AI-gen
 
 ## Getting Started
 
+  cd installer
+   npm install
+   npm run dev
+
 ### Prerequisites
 
 - Node.js 18+
