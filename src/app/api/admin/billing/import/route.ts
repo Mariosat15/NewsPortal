@@ -37,8 +37,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Detect delimiter (comma or semicolon - European Excel often uses semicolon)
+    const firstLine = lines[0];
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const semicolonCount = (firstLine.match(/;/g) || []).length;
+    const delimiter = semicolonCount > commaCount ? ';' : ',';
+    console.log(`[Billing Import] Detected delimiter: "${delimiter}" (commas: ${commaCount}, semicolons: ${semicolonCount})`);
+
     // Parse header
-    const header = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_'));
+    const header = firstLine.split(delimiter).map(h => h.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_'));
+    console.log(`[Billing Import] Detected columns: ${header.join(', ')}`);
     
     // Create column mapping (flexible matching)
     const findColumn = (patterns: string[]): number => {
@@ -106,18 +114,25 @@ export async function POST(request: NextRequest) {
       rejected: 0,
       duplicates: 0,
       errors: [] as { row: number; error: string }[],
+      debug: {
+        delimiter,
+        columns: header,
+        sampleRow: lines[1] ? lines[1].substring(0, 100) : null,
+      },
     };
 
     // Parse rows
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) {
+        console.log(`[Billing Import] Row ${i + 1}: Empty line, skipping`);
         continue;
       }
+      console.log(`[Billing Import] Processing row ${i + 1}: ${line.substring(0, 80)}...`);
 
       try {
         // Parse CSV row (handle quoted values)
-        const values = parseCSVLine(line);
+        const values = parseCSVLine(line, delimiter);
 
         // Extract values
         const rawMsisdn = values[columnIndices.msisdn] || '';
@@ -133,7 +148,10 @@ export async function POST(request: NextRequest) {
         const rawArticleSlug = columnIndices.articleSlug !== -1 ? values[columnIndices.articleSlug] : '';
 
         // Validate MSISDN
+        console.log(`[Billing Import] Row ${i + 1} parsed values: msisdn="${rawMsisdn}", amount="${rawAmount}", status="${rawStatus}"`);
+        
         if (!rawMsisdn) {
+          console.log(`[Billing Import] Row ${i + 1}: Missing MSISDN`);
           results.errors.push({ row: i + 1, error: 'Missing MSISDN' });
           results.rejected++;
           continue;
@@ -141,10 +159,12 @@ export async function POST(request: NextRequest) {
 
         const normalizedMsisdn = normalizePhoneNumber(rawMsisdn);
         if (!isValidPhoneNumber(normalizedMsisdn)) {
+          console.log(`[Billing Import] Row ${i + 1}: Invalid phone "${rawMsisdn}" -> "${normalizedMsisdn}"`);
           results.errors.push({ row: i + 1, error: `Invalid phone number: ${rawMsisdn}` });
           results.rejected++;
           continue;
         }
+        console.log(`[Billing Import] Row ${i + 1}: Phone validated: ${rawMsisdn} -> ${normalizedMsisdn}`);
 
         // Parse amount (handle comma as decimal separator)
         const amountStr = rawAmount.replace(',', '.').replace(/[^0-9.]/g, '');
@@ -319,12 +339,18 @@ export async function POST(request: NextRequest) {
       processingCompletedAt: new Date(),
     });
 
+    console.log(`[Billing Import] Complete: total=${results.total}, accepted=${results.accepted}, rejected=${results.rejected}, duplicates=${results.duplicates}`);
+
     return NextResponse.json({
       success: true,
       batchId: batchId.toString(),
       data: {
-        ...results,
+        total: results.total,
+        accepted: results.accepted,
+        rejected: results.rejected,
+        duplicates: results.duplicates,
         errors: results.errors.slice(0, 20), // Limit returned errors
+        debug: results.debug, // Include debug info in response
       },
     });
   } catch (error) {
@@ -337,7 +363,7 @@ export async function POST(request: NextRequest) {
 }
 
 // Helper function to parse CSV line handling quoted values
-function parseCSVLine(line: string): string[] {
+function parseCSVLine(line: string, delimiter: string = ','): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -353,7 +379,7 @@ function parseCSVLine(line: string): string[] {
       } else {
         inQuotes = !inQuotes;
       }
-    } else if (char === ',' && !inQuotes) {
+    } else if (char === delimiter && !inQuotes) {
       result.push(current.trim());
       current = '';
     } else {

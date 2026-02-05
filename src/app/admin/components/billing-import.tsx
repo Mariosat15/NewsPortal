@@ -15,6 +15,11 @@ interface ImportResult {
   rejected?: number;
   duplicates?: number;
   errors: Array<string | { row: number; error: string }>;
+  debug?: {
+    delimiter: string;
+    columns: string[];
+    sampleRow: string | null;
+  };
 }
 
 export function BillingImport() {
@@ -140,6 +145,20 @@ export function BillingImport() {
                           <li>...and {result.errors.length - 10} more</li>
                         )}
                       </ul>
+                    </details>
+                  )}
+                  {result.debug && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-gray-500">
+                        Debug info
+                      </summary>
+                      <div className="mt-1 text-xs text-gray-600 bg-gray-100 p-2 rounded">
+                        <p>Delimiter: &quot;{result.debug.delimiter}&quot;</p>
+                        <p>Columns: {result.debug.columns?.join(', ')}</p>
+                        {result.debug.sampleRow && (
+                          <p className="truncate">Sample: {result.debug.sampleRow}</p>
+                        )}
+                      </div>
                     </details>
                   )}
                 </div>
