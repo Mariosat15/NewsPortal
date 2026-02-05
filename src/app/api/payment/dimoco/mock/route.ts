@@ -18,29 +18,21 @@ export async function GET(request: NextRequest) {
   
   // Get MSISDN from cookie (detected by middleware or previous payment)
   // In PRODUCTION: Carrier provides this automatically via header enrichment
-  // In MOCK: We use stored MSISDN or generate a test one based on IP
+  // In MOCK: We use the DIMOCO sandbox test MSISDN (same as real sandbox)
   const storedMsisdn = request.cookies.get('user_msisdn')?.value;
-  const sessionId = request.cookies.get('news_session')?.value || transactionId;
   
-  // Generate a consistent test MSISDN based on session/IP if not stored
-  // This simulates carrier detection - same session = same MSISDN
-  const ipAddress = request.headers.get('x-forwarded-for')?.split(',')[0] || 
-                    request.headers.get('x-real-ip') || 
-                    '127.0.0.1';
+  // DIMOCO Sandbox Test MSISDN - this is the same MSISDN that real DIMOCO sandbox returns
+  // Using a consistent test MSISDN prevents creating ghost/fake users
+  const SANDBOX_TEST_MSISDN = '436763602302';
   
-  // Create a consistent MSISDN from IP (simulates carrier detection)
-  const ipHash = ipAddress.split('.').reduce((acc, octet) => acc + parseInt(octet, 10), 0);
-  const generatedMsisdn = `+49170${(1000000 + (ipHash * 1234) % 9000000).toString()}`;
+  // Use stored MSISDN if available, otherwise use sandbox test MSISDN
+  const detectedMsisdn = storedMsisdn || SANDBOX_TEST_MSISDN;
+  const msisdnSource = storedMsisdn ? 'stored' : 'sandbox';
   
-  // Use stored MSISDN if available, otherwise use generated one
-  const detectedMsisdn = storedMsisdn || generatedMsisdn;
-  const msisdnSource = storedMsisdn ? 'stored' : 'generated';
-  
-  console.log('[Payment Mock] MSISDN detection:', { 
+  console.log('[Payment Mock] MSISDN:', { 
     storedMsisdn: storedMsisdn ? storedMsisdn.substring(0, 6) + '****' : null,
-    generatedMsisdn,
+    using: detectedMsisdn,
     source: msisdnSource,
-    ipAddress 
   });
   
   // Parse metadata for display/logging
@@ -186,7 +178,7 @@ export async function GET(request: NextRequest) {
                value="${detectedMsisdn}" 
                style="background: #f0f0f0; cursor: not-allowed;">
         <div style="font-size: 11px; color: #888; margin-top: 4px;">
-          📱 ${msisdnSource === 'stored' ? 'Von Ihrem Gerät erkannt' : 'Von Mobilfunknetz erkannt'} - 
+          📱 ${msisdnSource === 'stored' ? 'Von Ihrem Gerät erkannt' : 'Sandbox Test-Nummer'} - 
           <span style="color: #28a745;">Kann nicht geändert werden</span>
         </div>
       </div>

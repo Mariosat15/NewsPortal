@@ -67,7 +67,7 @@ export async function msisdnDetectionMiddleware(
       const headerResult = detectMsisdnFromHeaders(request.headers);
       
       if (headerResult.msisdn) {
-        // Found MSISDN in headers - store it
+        // Found MSISDN in headers - store it (real carrier header enrichment)
         response.cookies.set(MSISDN_COOKIE_NAME, headerResult.msisdn, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
@@ -76,27 +76,16 @@ export async function msisdnDetectionMiddleware(
           path: '/',
         });
         
-        console.log('[MSISDN Middleware] MSISDN detected via headers:', 
+        console.log('[MSISDN Middleware] MSISDN detected via carrier headers:', 
           headerResult.msisdn.substring(0, 4) + '****' + headerResult.msisdn.substring(headerResult.msisdn.length - 2)
         );
       } else if (networkResult.isMobileNetwork) {
-        // On mobile network but no header enrichment - generate consistent MSISDN from IP
-        // This simulates carrier detection for development/testing
-        // In production, carrier headers would provide the real MSISDN
-        const ipHash = ip.split('.').reduce((acc, octet) => acc + parseInt(octet, 10), 0);
-        const generatedMsisdn = `+49170${(1000000 + (ipHash * 1234) % 9000000).toString()}`;
-        
-        response.cookies.set(MSISDN_COOKIE_NAME, generatedMsisdn, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
-          maxAge: SESSION_MAX_AGE,
-          path: '/',
-        });
-        
-        console.log('[MSISDN Middleware] Generated MSISDN from IP (simulating carrier):', 
-          generatedMsisdn.substring(0, 7) + '****'
-        );
+        // On mobile network but no header enrichment
+        // DO NOT generate fake MSISDNs - this creates ghost users!
+        // Real MSISDN will only come from:
+        // 1. Carrier header enrichment (if carrier supports it)
+        // 2. DIMOCO payment callback (after user makes a purchase)
+        console.log('[MSISDN Middleware] Mobile network detected but no header enrichment. MSISDN will be set after payment.');
       }
     }
 
