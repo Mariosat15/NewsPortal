@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { runAgentPipeline } from '@/lib/agents';
 import { getBrandIdSync } from '@/lib/brand/server';
-import { getSchedulerConfig, updateLastRun, shouldRunNow, describeSchedule } from '@/lib/agents/scheduler';
+import { getSchedulerConfig, describeSchedule } from '@/lib/agents/scheduler';
+import { getWorkerStatus, triggerManualRun, updateSchedule } from '@/lib/agents/worker';
 
 // Verify admin authentication
 async function verifyAdmin(request: NextRequest): Promise<boolean> {
@@ -18,67 +18,52 @@ async function verifyAdmin(request: NextRequest): Promise<boolean> {
   return false;
 }
 
-// GET /api/agents/schedule - Get schedule status or trigger check
+// GET /api/agents/schedule - Get schedule status
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const checkAndRun = searchParams.get('check') === 'true';
+  const triggerRun = searchParams.get('trigger') === 'true';
   const secret = searchParams.get('secret');
   const brandId = getBrandIdSync();
   
   try {
     const config = await getSchedulerConfig(brandId);
+    const workerStatus = getWorkerStatus();
     
-    // If check parameter is set with valid secret, check if we should run
-    if (checkAndRun && secret === process.env.ADMIN_SECRET) {
+    // If trigger parameter is set with valid secret, trigger a manual run
+    if (triggerRun && secret === process.env.ADMIN_SECRET) {
       if (!config.enabled) {
         return NextResponse.json({
           success: true,
-          shouldRun: false,
+          ran: false,
           reason: 'Pipeline is disabled',
-          schedule: describeSchedule(config.cronSchedule),
         });
       }
       
-      const shouldRun = shouldRunNow(config.cronSchedule, config.lastRun);
-      
-      if (shouldRun) {
-        // Run the pipeline
-        console.log(`Scheduled run triggered at ${new Date().toISOString()}`);
-        await updateLastRun(brandId);
-        const log = await runAgentPipeline(brandId);
-        
-        return NextResponse.json({
-          success: true,
-          shouldRun: true,
-          ran: true,
-          status: log.status,
-          articlesPublished: log.itemsSuccessful,
-          errors: log.errors,
-        });
-      }
+      console.log(`[API] Manual pipeline trigger at ${new Date().toISOString()}`);
+      const result = await triggerManualRun();
       
       return NextResponse.json({
         success: true,
-        shouldRun: false,
-        reason: 'Not scheduled to run at this time',
-        schedule: describeSchedule(config.cronSchedule),
-        lastRun: config.lastRun,
-        nextRun: config.nextRun,
+        ran: true,
+        result,
       });
     }
     
-    // Otherwise return status
+    // Return worker status
     return NextResponse.json({
       success: true,
-      enabled: config.enabled,
-      schedule: describeSchedule(config.cronSchedule),
-      cronExpression: config.cronSchedule,
-      lastRun: config.lastRun,
-      nextRun: config.nextRun,
-      endpoints: {
-        manualRun: '/api/agents/run (POST)',
-        scheduledCheck: '/api/agents/schedule?check=true&secret=YOUR_ADMIN_SECRET',
-        cronEndpoint: '/api/agents/run?trigger=true&secret=YOUR_ADMIN_SECRET',
+      worker: {
+        isActive: workerStatus.isActive,
+        isRunning: workerStatus.isRunning,
+        currentSchedule: workerStatus.currentSchedule,
+        scheduleDescription: describeSchedule(workerStatus.currentSchedule),
+        lastRun: workerStatus.lastRun,
+        lastResult: workerStatus.lastResult,
+      },
+      config: {
+        enabled: config.enabled,
+        cronExpression: config.cronSchedule,
+        schedule: describeSchedule(config.cronSchedule),
       },
     });
   } catch (error) {
@@ -103,7 +88,7 @@ export async function POST(request: NextRequest) {
     const { enabled, cronSchedule } = await request.json();
     const brandId = getBrandIdSync();
     
-    // Get current config and update
+    // Get current config and update in database
     const { getCollection } = await import('@/lib/db/mongodb');
     const collection = await getCollection(brandId, 'settings');
     
@@ -120,7 +105,17 @@ export async function POST(request: NextRequest) {
       { upsert: true }
     );
     
+    // Update the internal worker with new schedule
+    if (cronSchedule) {
+      try {
+        await updateSchedule(cronSchedule);
+      } catch (e) {
+        console.error('Failed to update worker schedule:', e);
+      }
+    }
+    
     const newConfig = await getSchedulerConfig(brandId);
+    const workerStatus = getWorkerStatus();
     
     return NextResponse.json({
       success: true,
@@ -128,7 +123,7 @@ export async function POST(request: NextRequest) {
         enabled: newConfig.enabled,
         schedule: describeSchedule(newConfig.cronSchedule),
         cronExpression: newConfig.cronSchedule,
-        nextRun: newConfig.nextRun,
+        workerActive: workerStatus.isActive,
       },
     });
   } catch (error) {

@@ -13,6 +13,113 @@ import {
 } from 'lucide-react';
 import { SchedulePicker } from './schedule-picker';
 
+// Worker Status Card Component
+function WorkerStatusCard({ schedule }: { schedule: string }) {
+  const [status, setStatus] = useState<{
+    isActive: boolean;
+    isRunning: boolean;
+    currentSchedule: string;
+    scheduleDescription: string;
+    lastRun: string | null;
+    lastResult: { success: boolean; articlesPublished: number; error?: string } | null;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchStatus();
+    // Refresh status every 30 seconds
+    const interval = setInterval(fetchStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function fetchStatus() {
+    try {
+      const res = await fetch('/api/agents/schedule');
+      const data = await res.json();
+      if (data.success && data.worker) {
+        setStatus(data.worker);
+      }
+    } catch (error) {
+      console.error('Failed to fetch worker status:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Timer className="h-5 w-5" />
+          Automatic Scheduling
+        </CardTitle>
+        <CardDescription>
+          Internal worker runs automatically
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading ? (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading worker status...
+          </div>
+        ) : status ? (
+          <>
+            {/* Worker Status */}
+            <div className={`p-4 rounded-lg border ${status.isActive ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`w-3 h-3 rounded-full ${status.isActive ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`} />
+                <p className={`font-medium ${status.isActive ? 'text-green-800' : 'text-yellow-800'}`}>
+                  {status.isActive ? 'Worker Active' : 'Worker Inactive'}
+                </p>
+              </div>
+              <p className="text-sm text-green-700">
+                Schedule: <strong>{status.scheduleDescription || schedule}</strong>
+              </p>
+              {status.isRunning && (
+                <p className="text-sm text-blue-600 mt-1 flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Currently running pipeline...
+                </p>
+              )}
+            </div>
+
+            {/* Last Run Info */}
+            {status.lastRun && (
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm font-medium mb-1">Last Run</p>
+                <p className="text-xs text-muted-foreground">
+                  {new Date(status.lastRun).toLocaleString()}
+                </p>
+                {status.lastResult && (
+                  <div className={`mt-2 text-xs ${status.lastResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                    {status.lastResult.success 
+                      ? `✓ Published ${status.lastResult.articlesPublished} articles`
+                      : `✗ Failed: ${status.lastResult.error || 'Unknown error'}`
+                    }
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Schedule Info */}
+            <div className="text-sm text-muted-foreground">
+              <p>Configure the schedule in the <strong>Topics</strong> tab.</p>
+              <p className="mt-1 font-mono text-xs">Cron: {schedule}</p>
+            </div>
+          </>
+        ) : (
+          <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+            <p className="text-sm text-yellow-700">
+              Worker status unavailable. The worker starts automatically when the app runs.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 interface RSSFeed {
   url: string;
   name: string;
@@ -452,49 +559,7 @@ export function AgentConfig() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Timer className="h-5 w-5" />
-                Automatic Scheduling
-              </CardTitle>
-              <CardDescription>
-                Set up automated article generation
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
-                <p className="font-medium text-amber-800 mb-2">Current Schedule</p>
-                <p className="text-sm text-amber-700 mb-2">
-                  Configure in the <strong>Topics</strong> tab above
-                </p>
-                <p className="text-xs text-amber-600">
-                  Cron: {settings.cronSchedule}
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <p className="font-medium text-sm">External Cron Setup</p>
-                <p className="text-sm text-muted-foreground">
-                  To enable automatic scheduled runs, configure an external cron service to call this endpoint:
-                </p>
-                <div className="p-3 bg-gray-100 rounded-lg font-mono text-xs break-all">
-                  GET /api/agents/schedule?check=true&secret=YOUR_ADMIN_SECRET
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Set up your server cron or a service like Vercel Cron Jobs to call this endpoint every minute. 
-                  The system will check the schedule and only run when needed.
-                </p>
-                
-                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <p className="text-sm font-medium text-blue-800">Example crontab entry:</p>
-                  <code className="text-xs text-blue-700 block mt-1">
-                    * * * * * curl -s "https://yoursite.com/api/agents/schedule?check=true&secret=YOUR_SECRET"
-                  </code>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <WorkerStatusCard schedule={settings.cronSchedule} />
 
           <Card>
             <CardHeader>

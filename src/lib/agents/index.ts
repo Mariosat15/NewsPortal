@@ -10,7 +10,7 @@ export { publishArticles, isDuplicate, generatePlaceholderThumbnail } from './pu
 // Orchestrator
 export { runAgentPipeline, runAllBrandPipelines } from './orchestrator';
 
-// Scheduler
+// Scheduler utilities
 export { 
   getSchedulerConfig, 
   shouldRunNow, 
@@ -19,3 +19,11 @@ export {
   cronToInterval,
   getNextRunTime
 } from './scheduler';
+
+// Internal Worker
+export { 
+  initializeWorker,
+  getWorkerStatus,
+  triggerManualRun,
+  updateSchedule,
+} from './worker';
