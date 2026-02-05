@@ -173,12 +173,11 @@ export function TemplateFooter({ template, categories, locale, brandName }: Temp
             className="mx-auto px-4 py-4"
             style={{ maxWidth: template.spacing.containerMax }}
           >
-            <p 
-              className="text-center text-xs max-w-3xl mx-auto"
-              style={{ color: colors.textMuted, opacity: 0.7 }}
-            >
-              {disclaimer.content[locale as 'de' | 'en']}
-            </p>
+            <div 
+              className="text-center text-xs max-w-3xl mx-auto prose prose-sm"
+              style={{ color: colors.textMuted }}
+              dangerouslySetInnerHTML={{ __html: disclaimer.content[locale as 'de' | 'en'] }}
+            />
           </div>
         </div>
       )}

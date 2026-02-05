@@ -142,12 +142,13 @@ export function Footer() {
       </div>
 
       {/* Risk Disclaimer */}
-      {disclaimer?.isActive && disclaimer.content[locale] && (
+      {disclaimer?.isActive && disclaimer.content?.[locale] && (
         <div className="border-t border-gray-800">
           <div className="container mx-auto px-4 py-4">
-            <p className="text-center text-xs text-gray-500 max-w-3xl mx-auto">
-              {disclaimer.content[locale]}
-            </p>
+            <div 
+              className="text-center text-xs text-gray-500 max-w-3xl mx-auto"
+              dangerouslySetInnerHTML={{ __html: disclaimer.content[locale] }}
+            />
           </div>
         </div>
       )}
