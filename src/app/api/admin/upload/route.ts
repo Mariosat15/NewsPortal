@@ -23,11 +23,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate file type
-    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml', 'image/x-icon'];
+    // Validate file type based on upload type
+    const logoAllowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+    const generalAllowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml', 'image/x-icon'];
+    
+    const allowedTypes = type === 'logo' ? logoAllowedTypes : generalAllowedTypes;
+    
     if (!allowedTypes.includes(file.type)) {
+      const allowedMsg = type === 'logo' ? 'PNG, JPG' : 'PNG, JPG, GIF, WebP, SVG, ICO';
       return NextResponse.json(
-        { success: false, error: `Invalid file type: ${file.type}. Allowed: PNG, JPG, GIF, WebP, SVG, ICO` },
+        { success: false, error: `Invalid file type: ${file.type}. Allowed: ${allowedMsg}` },
         { status: 400 }
       );
     }

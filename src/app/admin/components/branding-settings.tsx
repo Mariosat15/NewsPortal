@@ -420,6 +420,7 @@ export function BrandingSettings() {
               {/* Logo Upload */}
               <div className="space-y-3">
                 <Label>Logo</Label>
+                <p className="text-xs text-muted-foreground">PNG or JPEG only, max 5MB</p>
                 <div className="flex gap-3 items-start">
                   <div className="flex-1">
                     <Input 
@@ -432,11 +433,27 @@ export function BrandingSettings() {
                   <label className="cursor-pointer">
                     <input
                       type="file"
-                      accept="image/*"
+                      accept=".png,.jpg,.jpeg,image/png,image/jpeg"
                       className="hidden"
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
+                        
+                        // Client-side validation
+                        const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+                        if (!allowedTypes.includes(file.type)) {
+                          alert('Invalid file type. Only PNG and JPEG images are allowed.');
+                          e.target.value = '';
+                          return;
+                        }
+                        
+                        const maxSize = 5 * 1024 * 1024; // 5MB
+                        if (file.size > maxSize) {
+                          alert('File too large. Maximum size is 5MB.');
+                          e.target.value = '';
+                          return;
+                        }
+                        
                         const formData = new FormData();
                         formData.append('file', file);
                         formData.append('type', 'logo');
