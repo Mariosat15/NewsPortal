@@ -1,7 +1,6 @@
-'use server';
-
 /**
  * Video Fetcher - Uses Bright Data to search and fetch videos from YouTube/TikTok
+ * This is a server-side only module
  */
 
 interface VideoResult {
