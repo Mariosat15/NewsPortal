@@ -5,28 +5,55 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Default RSS feeds for German news - updated frequently with fresh content
+// Default RSS feeds - comprehensive coverage across categories and languages
 const defaultRSSFeeds: RSSFeed[] = [
-  // News - Major German sources with frequent updates
+  // News - German sources
   { url: 'https://www.tagesschau.de/xml/rss2/', name: 'Tagesschau', category: 'news', language: 'de', enabled: true },
   { url: 'https://rss.sueddeutsche.de/rss/Topthemen', name: 'Süddeutsche', category: 'news', language: 'de', enabled: true },
   { url: 'https://www.zeit.de/news/index', name: 'Zeit Online', category: 'news', language: 'de', enabled: true },
+  // News - English sources
+  { url: 'https://feeds.bbci.co.uk/news/rss.xml', name: 'BBC News', category: 'news', language: 'en', enabled: true },
+  { url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', name: 'NY Times World', category: 'news', language: 'en', enabled: true },
   
-  // Technology
+  // Technology - German
   { url: 'https://www.heise.de/rss/heise-top-atom.xml', name: 'Heise', category: 'technology', language: 'de', enabled: true },
   { url: 'https://www.golem.de/rss.php?feed=RSS2.0', name: 'Golem', category: 'technology', language: 'de', enabled: true },
+  // Technology - English
+  { url: 'https://feeds.arstechnica.com/arstechnica/index', name: 'Ars Technica', category: 'technology', language: 'en', enabled: true },
+  { url: 'https://www.theverge.com/rss/index.xml', name: 'The Verge', category: 'technology', language: 'en', enabled: true },
   
-  // Finance
+  // Finance - German
   { url: 'https://www.finanzen.net/rss/analysen', name: 'Finanzen.net', category: 'finance', language: 'de', enabled: true },
+  // Finance - English
+  { url: 'https://feeds.finance.yahoo.com/rss/2.0/headline', name: 'Yahoo Finance', category: 'finance', language: 'en', enabled: true },
   
-  // Sports
+  // Sports - German
   { url: 'https://rss.kicker.de/live/bundesliga', name: 'Kicker', category: 'sports', language: 'de', enabled: true },
+  // Sports - English
+  { url: 'https://www.espn.com/espn/rss/news', name: 'ESPN', category: 'sports', language: 'en', enabled: true },
   
-  // Health
+  // Health - German
   { url: 'https://www.aerzteblatt.de/rss/news.rss', name: 'Ärzteblatt', category: 'health', language: 'de', enabled: true },
+  // Health - English
+  { url: 'https://www.medicalnewstoday.com/rss/all', name: 'Medical News Today', category: 'health', language: 'en', enabled: true },
   
-  // Entertainment
+  // Entertainment - German
   { url: 'https://www.moviepilot.de/api/rss/news', name: 'Moviepilot', category: 'entertainment', language: 'de', enabled: true },
+  // Entertainment - English
+  { url: 'https://variety.com/feed/', name: 'Variety', category: 'entertainment', language: 'en', enabled: true },
+  
+  // Lifestyle
+  { url: 'https://www.gq-magazin.de/feed', name: 'GQ Germany', category: 'lifestyle', language: 'de', enabled: true },
+  
+  // Recipes/Food
+  { url: 'https://www.chefkoch.de/rss/rezept-des-tages.rss', name: 'Chefkoch', category: 'recipes', language: 'de', enabled: true },
+  { url: 'https://www.seriouseats.com/rss', name: 'Serious Eats', category: 'recipes', language: 'en', enabled: true },
+  
+  // Travel
+  { url: 'https://www.lonelyplanet.com/blog/feed', name: 'Lonely Planet', category: 'travel', language: 'en', enabled: true },
+  
+  // Relationships/Lifestyle
+  { url: 'https://www.psychologytoday.com/intl/front/feed', name: 'Psychology Today', category: 'relationships', language: 'en', enabled: true },
 ];
 
 // Track rotation state in memory (persisted to DB for reliability)
@@ -97,8 +124,22 @@ export async function gatherTopics(config: AgentConfig): Promise<AgentResult<Gat
 
   try {
     const useRSS = config.useRSSFeeds !== false;
-    const rssFeeds = config.rssFeeds?.filter(f => f.enabled) || defaultRSSFeeds;
     const distributeEvenly = config.distributeEvenly !== false;
+    
+    // Merge user RSS feeds with defaults - user feeds take priority
+    // Also include default feeds for categories that don't have user feeds
+    const userFeeds = config.rssFeeds?.filter(f => f.enabled) || [];
+    const userFeedCategories = new Set(userFeeds.map(f => f.category));
+    
+    // Get default feeds for categories not covered by user feeds
+    const additionalDefaultFeeds = defaultRSSFeeds.filter(
+      f => f.enabled && !userFeedCategories.has(f.category) && config.topics.includes(f.category)
+    );
+    
+    // Combine user feeds (priority) + default feeds for missing categories
+    const rssFeeds = [...userFeeds, ...additionalDefaultFeeds];
+    
+    console.log(`[Gatherer] User feeds: ${userFeeds.length}, Default feeds added: ${additionalDefaultFeeds.length}`);
     
     // Get current rotation offset for fair category distribution
     const rotationOffset = await getRotationOffset(brandId);

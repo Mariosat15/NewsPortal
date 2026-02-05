@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Play, Settings, Clock, Plus, X, Rss, Brain, FileText, 
   Sliders, Save, Loader2, AlertCircle, CheckCircle, Trash2,
-  Globe, Zap, BookOpen, MessageSquare, Timer
+  Globe, Zap, BookOpen, MessageSquare, Timer, Square
 } from 'lucide-react';
 import { SchedulePicker } from './schedule-picker';
 
@@ -168,6 +168,7 @@ function WorkerStatusCard({ schedule }: { schedule: string }) {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [activating, setActivating] = useState(false);
+  const [stopping, setStopping] = useState(false);
 
   useEffect(() => {
     fetchStatus();
@@ -205,6 +206,21 @@ function WorkerStatusCard({ schedule }: { schedule: string }) {
     }
   }
 
+  async function stopWorkerHandler() {
+    setStopping(true);
+    try {
+      const res = await fetch('/api/agents/schedule?stop=true');
+      await res.json();
+      // Wait a bit and refresh status
+      await new Promise(r => setTimeout(r, 1000));
+      await fetchStatus();
+    } catch (error) {
+      console.error('Failed to stop worker:', error);
+    } finally {
+      setStopping(false);
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -233,12 +249,20 @@ function WorkerStatusCard({ schedule }: { schedule: string }) {
                     {status.isActive ? 'Worker Active' : 'Worker Inactive'}
                   </p>
                 </div>
-                {!status.isActive && (
+                {!status.isActive ? (
                   <Button size="sm" onClick={activateWorker} disabled={activating}>
                     {activating ? (
                       <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Starting...</>
                     ) : (
                       <><Play className="h-3 w-3 mr-1" /> Activate</>
+                    )}
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="destructive" onClick={stopWorkerHandler} disabled={stopping || status.isRunning}>
+                    {stopping ? (
+                      <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Stopping...</>
+                    ) : (
+                      <><Square className="h-3 w-3 mr-1" /> Stop</>
                     )}
                   </Button>
                 )}

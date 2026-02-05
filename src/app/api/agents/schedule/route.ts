@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getSchedulerConfig, describeSchedule } from '@/lib/agents/scheduler';
-import { getWorkerStatus, triggerManualRun, updateSchedule, ensureWorkerRunning } from '@/lib/agents/worker';
+import { getWorkerStatus, triggerManualRun, updateSchedule, ensureWorkerRunning, stopWorker } from '@/lib/agents/worker';
 
 // Verify admin authentication
 async function verifyAdmin(request: NextRequest): Promise<boolean> {
@@ -22,7 +22,8 @@ async function verifyAdmin(request: NextRequest): Promise<boolean> {
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const triggerRun = searchParams.get('trigger') === 'true';
-  const startWorker = searchParams.get('start') === 'true';
+  const startWorkerParam = searchParams.get('start') === 'true';
+  const stopWorkerParam = searchParams.get('stop') === 'true';
   const secret = searchParams.get('secret');
   const brandId = getBrandIdSync();
   
@@ -30,8 +31,23 @@ export async function GET(request: NextRequest) {
     const config = await getSchedulerConfig(brandId);
     let workerStatus = getWorkerStatus();
     
+    // If stop parameter is set, stop the worker
+    if (stopWorkerParam) {
+      stopWorker();
+      console.log('[API] Worker stop requested');
+      workerStatus = getWorkerStatus();
+      return NextResponse.json({
+        success: true,
+        stopped: true,
+        worker: {
+          isActive: workerStatus.isActive,
+          isRunning: workerStatus.isRunning,
+        },
+      });
+    }
+    
     // If start parameter is set, ensure worker is running
-    if (startWorker) {
+    if (startWorkerParam) {
       const result = await ensureWorkerRunning();
       console.log('[API] Worker start requested:', result);
       workerStatus = getWorkerStatus();

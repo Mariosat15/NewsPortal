@@ -198,16 +198,36 @@ async function createDraftFromTopic(
        - TIMELINESS: Write as if the event happened TODAY or YESTERDAY
        - Use current time references (today, yesterday, this week, ${currentYear})`;
 
+  // Category-specific content guidelines
+  const categoryGuidelines: Record<string, { de: string; en: string }> = {
+    news: { de: 'Aktuelle Nachrichtenmeldungen und Ereignisse', en: 'Current news events and happenings' },
+    technology: { de: 'Tech-Neuigkeiten, Gadgets, Software, Digitales', en: 'Tech news, gadgets, software, digital' },
+    health: { de: 'Gesundheit, Medizin, Wellness, Fitness', en: 'Health, medicine, wellness, fitness' },
+    finance: { de: 'Wirtschaft, Börse, Geld, Investments', en: 'Economy, stocks, money, investments' },
+    sports: { de: 'Sport-Events, Teams, Athleten, Ergebnisse', en: 'Sports events, teams, athletes, results' },
+    lifestyle: { de: 'Lifestyle, Mode, Trends, Wohnen', en: 'Lifestyle, fashion, trends, living' },
+    entertainment: { de: 'Filme, Musik, Stars, Kultur', en: 'Movies, music, celebrities, culture' },
+    recipes: { de: 'Rezepte, Kochen, Backen, Küchentipps', en: 'Recipes, cooking, baking, kitchen tips' },
+    relationships: { de: 'Beziehungen, Dating, Familie', en: 'Relationships, dating, family' },
+    travel: { de: 'Reisen, Urlaub, Destinations', en: 'Travel, vacation, destinations' },
+  };
+  
+  const categoryGuide = categoryGuidelines[topic.category.toLowerCase()] || categoryGuidelines.news;
+
   const userPrompt = language === 'de'
     ? `AUFGABE: Schreibe ${getArticleTypeLabel(selectedType, 'de')} basierend auf folgenden Quellen.
 
-KATEGORIE: ${topic.category}
+ZIELKATEGORIE: ${topic.category.toUpperCase()}
+KATEGORIE-FOKUS: ${categoryGuide.de}
+WICHTIG: Der Artikel MUSS thematisch zur Kategorie "${topic.category}" passen!
+
 QUELLINFORMATIONEN:
 ${sourcesText}
 
 ${formatInstructions}
 
-WICHTIG:
+KRITISCHE REGELN:
+- Der Inhalt MUSS zur Kategorie "${topic.category}" passen - KEINE themenfremden Artikel!
 - Schreibe EINZIGARTIGEN Inhalt - kein Copy-Paste aus Quellen
 - Synthetisiere Informationen zu einer kohärenten Geschichte
 - Füge eigene Analyse und Kontext hinzu
@@ -223,13 +243,17 @@ Antworte NUR als JSON (ohne Markdown-Codeblöcke):
 }`
     : `TASK: Write ${getArticleTypeLabel(selectedType, 'en')} based on the following sources.
 
-CATEGORY: ${topic.category}
+TARGET CATEGORY: ${topic.category.toUpperCase()}
+CATEGORY FOCUS: ${categoryGuide.en}
+IMPORTANT: The article MUST thematically fit the "${topic.category}" category!
+
 SOURCE INFORMATION:
 ${sourcesText}
 
 ${formatInstructions}
 
-IMPORTANT:
+CRITICAL RULES:
+- Content MUST fit the "${topic.category}" category - NO off-topic articles!
 - Write UNIQUE content - no copy-paste from sources
 - Synthesize information into a coherent story
 - Add your own analysis and context
