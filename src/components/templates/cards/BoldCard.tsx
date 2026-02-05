@@ -9,6 +9,9 @@ export function BoldCard({ article, template, locale, showCategory = true, showA
   const colors = template.activeColors;
   const features = template.features;
 
+  // Support both naming conventions
+  const imageUrl = article.image || article.thumbnail;
+
   return (
     <article 
       className="group relative overflow-hidden"
@@ -22,9 +25,9 @@ export function BoldCard({ article, template, locale, showCategory = true, showA
         href={`/${locale}/article/${article.slug}`}
         className="relative block aspect-[3/4] overflow-hidden"
       >
-        {article.image ? (
+        {imageUrl ? (
           <Image
-            src={article.image}
+            src={imageUrl}
             alt={article.title}
             fill
             className="object-cover transition-transform duration-500 group-hover:scale-110"

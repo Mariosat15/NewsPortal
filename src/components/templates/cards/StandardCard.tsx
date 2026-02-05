@@ -9,6 +9,11 @@ export function StandardCard({ article, template, locale, showCategory = true, s
   const colors = template.activeColors;
   const features = template.features;
   
+  // Support both naming conventions
+  const imageUrl = article.image || article.thumbnail;
+  const excerptText = article.excerpt || article.teaser;
+  const dateText = article.date || article.publishDate;
+  
   const displayAuthor = showAuthor && features.showAuthor;
   const displayReadingTime = showReadingTime && features.showReadingTime;
   const displayCategory = showCategory && features.categoryBadges;
@@ -33,9 +38,9 @@ export function StandardCard({ article, template, locale, showCategory = true, s
         href={`/${locale}/article/${article.slug}`}
         className="relative aspect-video overflow-hidden"
       >
-        {article.image ? (
+        {imageUrl ? (
           <Image
-            src={article.image}
+            src={imageUrl}
             alt={article.title}
             fill
             className="object-cover transition-transform duration-300 group-hover:scale-105"
@@ -81,7 +86,7 @@ export function StandardCard({ article, template, locale, showCategory = true, s
           </h3>
         </Link>
 
-        {article.excerpt && (
+        {excerptText && (
           <p 
             className="text-sm line-clamp-2 mb-3 flex-1"
             style={{ 
@@ -89,7 +94,7 @@ export function StandardCard({ article, template, locale, showCategory = true, s
               color: colors.textMuted,
             }}
           >
-            {article.excerpt}
+            {excerptText}
           </p>
         )}
 
@@ -113,8 +118,8 @@ export function StandardCard({ article, template, locale, showCategory = true, s
               {article.readingTime}
             </span>
           )}
-          {article.date && (
-            <span className="ml-auto">{article.date}</span>
+          {dateText && (
+            <span className="ml-auto">{dateText}</span>
           )}
         </div>
       </div>

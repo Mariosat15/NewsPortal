@@ -9,6 +9,11 @@ export function HorizontalCard({ article, template, locale, showCategory = true,
   const colors = template.activeColors;
   const features = template.features;
 
+  // Support both naming conventions
+  const imageUrl = article.image || article.thumbnail;
+  const excerptText = article.excerpt || article.teaser;
+  const dateText = article.date || article.publishDate;
+
   return (
     <article 
       className="group flex gap-4 md:gap-6 p-4 transition-all"
@@ -32,9 +37,9 @@ export function HorizontalCard({ article, template, locale, showCategory = true,
           borderRadius: template.features.roundedCorners === 'none' ? '0' : '0.375rem',
         }}
       >
-        {article.image ? (
+        {imageUrl ? (
           <Image
-            src={article.image}
+            src={imageUrl}
             alt={article.title}
             fill
             className="object-cover transition-transform duration-300 group-hover:scale-105"
@@ -74,7 +79,7 @@ export function HorizontalCard({ article, template, locale, showCategory = true,
           </h3>
         </Link>
 
-        {article.excerpt && (
+        {excerptText && (
           <p 
             className="text-sm line-clamp-2 mb-3 hidden md:block"
             style={{ 
@@ -82,7 +87,7 @@ export function HorizontalCard({ article, template, locale, showCategory = true,
               color: colors.textMuted,
             }}
           >
-            {article.excerpt}
+            {excerptText}
           </p>
         )}
 
@@ -103,8 +108,8 @@ export function HorizontalCard({ article, template, locale, showCategory = true,
               {article.readingTime}
             </span>
           )}
-          {article.date && (
-            <span>{article.date}</span>
+          {dateText && (
+            <span>{dateText}</span>
           )}
           
           <Link 

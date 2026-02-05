@@ -9,6 +9,10 @@ export function CompactCard({ article, template, locale, showCategory = true, sh
   const colors = template.activeColors;
   const features = template.features;
 
+  // Support both naming conventions
+  const imageUrl = article.image || article.thumbnail;
+  const dateText = article.date || article.publishDate;
+
   return (
     <article 
       className="group flex gap-3 py-3 border-b last:border-b-0"
@@ -22,9 +26,9 @@ export function CompactCard({ article, template, locale, showCategory = true, sh
           borderRadius: template.features.roundedCorners === 'none' ? '0' : '0.25rem',
         }}
       >
-        {article.image ? (
+        {imageUrl ? (
           <Image
-            src={article.image}
+            src={imageUrl}
             alt={article.title}
             fill
             className="object-cover transition-transform duration-300 group-hover:scale-110"
@@ -74,8 +78,8 @@ export function CompactCard({ article, template, locale, showCategory = true, sh
               {article.readingTime}
             </span>
           )}
-          {article.date && (
-            <span>{article.date}</span>
+          {dateText && (
+            <span>{dateText}</span>
           )}
         </div>
       </div>

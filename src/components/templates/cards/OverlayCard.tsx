@@ -9,6 +9,11 @@ export function OverlayCard({ article, template, locale, showCategory = true, sh
   const colors = template.activeColors;
   const features = template.features;
 
+  // Support both naming conventions
+  const imageUrl = article.image || article.thumbnail;
+  const excerptText = article.excerpt || article.teaser;
+  const dateText = article.date || article.publishDate;
+
   const aspectRatio = size === 'large' ? 'aspect-[16/10]' : size === 'small' ? 'aspect-square' : 'aspect-video';
   const titleSize = size === 'large' ? 'text-2xl md:text-3xl' : size === 'small' ? 'text-sm' : 'text-lg';
 
@@ -24,9 +29,9 @@ export function OverlayCard({ article, template, locale, showCategory = true, sh
     >
       {/* Background Image */}
       <Link href={`/${locale}/article/${article.slug}`} className="absolute inset-0">
-        {article.image ? (
+        {imageUrl ? (
           <Image
-            src={article.image}
+            src={imageUrl}
             alt={article.title}
             fill
             className="object-cover transition-transform duration-500 group-hover:scale-105"
@@ -75,9 +80,9 @@ export function OverlayCard({ article, template, locale, showCategory = true, sh
           </h3>
         </Link>
 
-        {size !== 'small' && article.excerpt && (
+        {size !== 'small' && excerptText && (
           <p className="text-sm text-white/80 line-clamp-2 mb-3 hidden md:block">
-            {article.excerpt}
+            {excerptText}
           </p>
         )}
 
@@ -95,8 +100,8 @@ export function OverlayCard({ article, template, locale, showCategory = true, sh
               {article.readingTime}
             </span>
           )}
-          {article.date && (
-            <span>{article.date}</span>
+          {dateText && (
+            <span>{dateText}</span>
           )}
         </div>
       </div>

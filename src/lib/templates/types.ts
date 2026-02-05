@@ -151,7 +151,7 @@ export interface NavigationProps {
 // Props for category layout components
 export interface CategoryLayoutProps {
   template: ResolvedTemplate;
-  articles: TemplateArticle[];
+  articles: ArticleForCard[];
   locale: string;
   categoryName: string;
   categorySlug?: string;
@@ -160,21 +160,27 @@ export interface CategoryLayoutProps {
 // Props for home layout components
 export interface HomeLayoutProps {
   template: ResolvedTemplate;
-  articles: TemplateArticle[];
+  articles: ArticleForCard[];
   categories: CategoryConfig[];
   locale: string;
 }
 
-// Simplified TemplateArticle for compatibility with card components
+// Unified article type for card components (accepts both naming conventions)
 export interface ArticleForCard {
   slug: string;
   title: string;
+  // Content preview (supports both naming conventions)
   excerpt?: string;
+  teaser?: string;
+  // Image (supports both naming conventions)
   image?: string;
+  thumbnail?: string;
+  // Metadata
   category?: string;
   author?: string;
   date?: string;
-  readingTime?: string;
+  publishDate?: string;
+  readingTime?: string | number;
 }
 
 // Props for article cards with simpler article interface  

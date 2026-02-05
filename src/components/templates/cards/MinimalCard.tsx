@@ -8,6 +8,10 @@ export function MinimalCard({ article, template, locale, showCategory = true, sh
   const colors = template.activeColors;
   const features = template.features;
 
+  // Support both naming conventions
+  const excerptText = article.excerpt || article.teaser;
+  const dateText = article.date || article.publishDate;
+
   return (
     <article className="group py-4 border-b" style={{ borderColor: colors.border }}>
       {/* Category & Date Row */}
@@ -23,8 +27,8 @@ export function MinimalCard({ article, template, locale, showCategory = true, sh
             <span style={{ color: colors.border }}>•</span>
           </>
         )}
-        {article.date && (
-          <span style={{ color: colors.textMuted }}>{article.date}</span>
+        {dateText && (
+          <span style={{ color: colors.textMuted }}>{dateText}</span>
         )}
       </div>
 
@@ -42,7 +46,7 @@ export function MinimalCard({ article, template, locale, showCategory = true, sh
       </Link>
 
       {/* Excerpt */}
-      {article.excerpt && (
+      {excerptText && (
         <p 
           className="text-sm line-clamp-2 mb-2"
           style={{ 
@@ -50,7 +54,7 @@ export function MinimalCard({ article, template, locale, showCategory = true, sh
             color: colors.textMuted,
           }}
         >
-          {article.excerpt}
+          {excerptText}
         </p>
       )}
 
