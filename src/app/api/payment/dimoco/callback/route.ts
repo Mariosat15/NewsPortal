@@ -282,6 +282,32 @@ export async function GET(request: NextRequest) {
 
   // Redirect user
   if (isSuccess) {
+    // For mock/sandbox payments: Process the unlock if not already done
+    // (Real DIMOCO sends a POST callback first, but mock only sends GET)
+    if (body.msisdn && body.articleId && body.transactionId) {
+      try {
+        const unlockRepo = getUnlockRepository(brandId);
+        const existingUnlock = await unlockRepo.findByTransactionId(body.transactionId);
+        
+        if (!existingUnlock) {
+          console.log('[Payment Callback GET] Processing mock payment - creating unlock record');
+          
+          // Process the payment (create unlock record, billing event, etc.)
+          await processCallback({
+            transactionId: body.transactionId,
+            status: 'success',
+            msisdn: body.msisdn,
+            amountCents: body.amountCents,
+            articleId: body.articleId,
+            brandId: body.brandId,
+            metadata: body.metadata,
+          });
+        }
+      } catch (processError) {
+        console.error('[Payment Callback GET] Error processing mock payment:', processError);
+      }
+    }
+    
     const url = new URL(redirectUrl, request.url);
     url.searchParams.set('unlocked', 'true');
     url.searchParams.set('tid', body.transactionId || '');
