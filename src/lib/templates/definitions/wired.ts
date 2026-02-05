@@ -56,8 +56,8 @@ export const wiredTemplate: TemplateDefinition = {
   features: {
     darkMode: true,
     animations: true,
-    roundedCorners: 'none',
-    shadows: 'none',
+    roundedCorners: 'sm',
+    shadows: 'subtle',
     stickyHeader: true,
     showBreadcrumbs: false,
     showReadingTime: true,
@@ -66,9 +66,9 @@ export const wiredTemplate: TemplateDefinition = {
   },
   
   spacing: {
-    containerMax: '1400px',
-    sectionGap: '2.5rem',
-    cardGap: '1.25rem',
-    headerHeight: '60px',
+    containerMax: '1440px',
+    sectionGap: '2.75rem',
+    cardGap: '1.5rem',
+    headerHeight: '64px',
   },
 };

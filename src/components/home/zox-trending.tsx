@@ -70,7 +70,7 @@ export function ZoxTrending({ articles, locale, title }: ZoxTrendingProps) {
 
       {/* Trending Articles */}
       <div className="space-y-4">
-        {articles.slice(0, 6).map((article, index) => (
+        {articles.slice(0, 10).map((article, index) => (
           <Link
             key={article.slug}
             href={`/${locale}/article/${article.slug}`}

@@ -66,9 +66,9 @@ export const mediumTemplate: TemplateDefinition = {
   },
   
   spacing: {
-    containerMax: '728px',
-    sectionGap: '3rem',
-    cardGap: '2rem',
-    headerHeight: '56px',
+    containerMax: '780px',
+    sectionGap: '3.5rem',
+    cardGap: '2.5rem',
+    headerHeight: '64px',
   },
 };

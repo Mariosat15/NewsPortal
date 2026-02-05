@@ -66,9 +66,9 @@ export const bloombergTemplate: TemplateDefinition = {
   },
   
   spacing: {
-    containerMax: '1400px',
-    sectionGap: '2rem',
-    cardGap: '1rem',
-    headerHeight: '56px',
+    containerMax: '1440px',
+    sectionGap: '2.5rem',
+    cardGap: '1.25rem',
+    headerHeight: '52px',
   },
 };

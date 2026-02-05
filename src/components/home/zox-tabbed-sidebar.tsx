@@ -89,7 +89,7 @@ export function ZoxTabbedSidebar({ latestArticles, popularArticles, locale }: Zo
 
       {/* Articles List */}
       <div className="space-y-4">
-        {articles.slice(0, 5).map((article) => (
+        {articles.slice(0, 8).map((article) => (
           <Link
             key={article.slug}
             href={`/${locale}/article/${article.slug}`}

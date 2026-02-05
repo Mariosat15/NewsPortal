@@ -66,9 +66,9 @@ export const cnnTemplate: TemplateDefinition = {
   },
   
   spacing: {
-    containerMax: '1280px',
-    sectionGap: '1.5rem',
-    cardGap: '1rem',
-    headerHeight: '60px',
+    containerMax: '1360px',
+    sectionGap: '2rem',
+    cardGap: '1.25rem',
+    headerHeight: '64px',
   },
 };

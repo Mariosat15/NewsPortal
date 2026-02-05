@@ -77,7 +77,11 @@ export function Header() {
   useEffect(() => {
     async function loadBrandInfo() {
       try {
-        const response = await fetch('/api/brand');
+        // Add cache-busting to the fetch request
+        const response = await fetch('/api/brand', {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
+        });
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.brand?.logoUrl) {
@@ -90,10 +94,14 @@ export function Header() {
     }
     
     loadBrandInfo();
+    
+    // Refresh logo every 10 seconds to catch updates quickly
+    const interval = setInterval(loadBrandInfo, 10000);
+    return () => clearInterval(interval);
   }, []);
 
-  // Use fresh logo if available, otherwise fall back to context
-  const logoUrl = freshLogoUrl || brand.logoUrl;
+  // Use fresh logo if available, otherwise fall back to context with cache buster
+  const logoUrl = freshLogoUrl || (brand.logoUrl ? `${brand.logoUrl}?v=${Date.now()}` : null);
 
   // Fetch enabled categories from API
   useEffect(() => {

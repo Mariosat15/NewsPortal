@@ -135,7 +135,7 @@ export default async function HomePage({
     
     const result = await repo.listPublished({
       page: 1,
-      limit: 50,
+      limit: 120, // Increased for more content density
     });
     
     if (result.articles.length > 0) {
@@ -315,12 +315,12 @@ export default async function HomePage({
     );
   }
 
-  // Default: Magazine template
-  const trendingArticles = articles.slice(0, 6);
-  const featuredArticles = articles.slice(0, 4);
+  // Default: Magazine template - increased article counts for density
+  const trendingArticles = articles.slice(0, 10); // Increased from 6 to 10
+  const featuredArticles = articles.slice(0, 5); // Increased from 4 to 5
   // Latest Articles - show all articles except the main featured one (for a full list)
   const latestArticles = articles.slice(1); // Skip only the main hero article
-  const popularArticles = [...articles].sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0)).slice(0, 8);
+  const popularArticles = [...articles].sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0)).slice(0, 12); // Increased from 8 to 12
   
   const articlesByCategory = groupByCategory(articles);
   // Get enabled categories from Categories Manager (single source of truth)

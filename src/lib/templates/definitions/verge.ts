@@ -66,9 +66,9 @@ export const vergeTemplate: TemplateDefinition = {
   },
   
   spacing: {
-    containerMax: '1400px',
-    sectionGap: '2.5rem',
-    cardGap: '1.5rem',
+    containerMax: '1480px',
+    sectionGap: '3rem',
+    cardGap: '1.75rem',
     headerHeight: '72px',
   },
 };

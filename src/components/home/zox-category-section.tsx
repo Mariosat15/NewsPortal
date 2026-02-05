@@ -47,7 +47,7 @@ export function ZoxCategorySection({
   };
 
   const mainArticle = articles[0];
-  const sideArticles = articles.slice(1, 5);
+  const sideArticles = articles.slice(1, 7); // Increased from 5 to 7 for more content
 
   if (layout === 'featured-left') {
     return (
@@ -161,7 +161,7 @@ export function ZoxCategorySection({
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-        {articles.slice(0, 4).map((article) => (
+        {articles.slice(0, 8).map((article) => (
           <Link
             key={article.slug}
             href={`/${locale}/article/${article.slug}`}

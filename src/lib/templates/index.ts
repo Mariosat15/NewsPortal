@@ -55,6 +55,7 @@ export function getTemplateIds(): string[] {
   return Array.from(templates.keys());
 }
 
-// Re-export types
+// Re-export types and utilities
 export * from './types';
 export * from './context';
+export * from './utils';
