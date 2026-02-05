@@ -706,7 +706,7 @@ export function CategoriesManager({ onCategoriesChange }: CategoriesManagerProps
                             <Badge variant="outline" className="text-xs">{category.slug}</Badge>
                             {category.displayName && (
                               <span className="text-xs text-muted-foreground">
-                                ({category.displayName.de} / {category.displayName.en})
+                                ({category.displayName?.de || ''} / {category.displayName?.en || ''})
                               </span>
                             )}
                           </div>

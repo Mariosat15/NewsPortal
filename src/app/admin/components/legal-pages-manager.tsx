@@ -182,7 +182,7 @@ export function LegalPagesManager() {
       alert('System pages cannot be deleted');
       return;
     }
-    if (!confirm(`Are you sure you want to delete "${page.title.de}"?`)) return;
+    if (!confirm(`Are you sure you want to delete "${page.title?.de || page.slug}"?`)) return;
 
     try {
       const res = await fetch(`/api/admin/legal-pages/${page._id}`, {
@@ -402,8 +402,8 @@ export function LegalPagesManager() {
                         ...prev,
                         slug: e.target.value,
                         title: {
-                          de: type?.label.split(' / ')[0] || prev.title.de,
-                          en: type?.label.split(' / ')[1] || type?.label || prev.title.en,
+                          de: type?.label.split(' / ')[0] || prev.title?.de || '',
+                          en: type?.label.split(' / ')[1] || type?.label || prev.title?.en || '',
                         },
                       }));
                     }
@@ -526,7 +526,7 @@ export function LegalPagesManager() {
                       <div key={page._id} className="flex items-center justify-between p-4 hover:bg-muted/50">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium">{page.title.de}</span>
+                            <span className="font-medium">{page.title?.de || page.slug}</span>
                             {page.isSystem && <Badge variant="secondary" className="text-xs">System</Badge>}
                             {!page.isActive && <Badge variant="outline" className="text-xs">Draft</Badge>}
                             {page.showInFooter && <Badge className="text-xs">Footer</Badge>}
@@ -569,7 +569,7 @@ export function LegalPagesManager() {
                       <div key={page._id} className="flex items-center gap-3 p-3 border rounded-lg">
                         <GripVertical className="h-4 w-4 text-muted-foreground" />
                         <div className="flex-1">
-                          <span className="font-medium">{page.title.de}</span>
+                          <span className="font-medium">{page.title?.de || page.slug}</span>
                           <span className="text-muted-foreground ml-2 text-sm">/{page.slug}</span>
                         </div>
                         <div className="flex items-center gap-1">
@@ -609,7 +609,7 @@ export function LegalPagesManager() {
                       .filter(p => !p.showInFooter && p.isActive)
                       .map((page) => (
                         <div key={page._id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
-                          <span>{page.title.de}</span>
+                          <span>{page.title?.de || page.slug}</span>
                           <Button
                             variant="outline"
                             size="sm"
@@ -681,10 +681,10 @@ export function LegalPagesManager() {
                 <div className="space-y-2">
                   <Label>Disclaimer Text ({formLang.toUpperCase()})</Label>
                   <textarea
-                    value={disclaimer.content[formLang]}
+                    value={disclaimer.content?.[formLang] || ''}
                     onChange={(e) => setDisclaimer({
                       ...disclaimer,
-                      content: { ...disclaimer.content, [formLang]: e.target.value },
+                      content: { ...(disclaimer.content || { de: '', en: '' }), [formLang]: e.target.value },
                     })}
                     rows={4}
                     className="w-full px-3 py-2 border rounded-md text-sm"
