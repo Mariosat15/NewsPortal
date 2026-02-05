@@ -7,3 +7,4 @@ export { ZoxFeatured } from './zox-featured';
 export { ZoxTabbedSidebar } from './zox-tabbed-sidebar';
 export { ZoxArticleCarousel } from './zox-article-carousel';
 export { ZoxCategorySection } from './zox-category-section';
+export { PaginatedArticles } from './paginated-articles';

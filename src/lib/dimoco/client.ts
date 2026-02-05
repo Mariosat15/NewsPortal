@@ -1,4 +1,5 @@
 import { generateTransactionId } from '@/lib/utils';
+import crypto from 'crypto';
 
 // ===========================================
 // DIMOCO API Configuration
@@ -10,6 +11,31 @@ export interface DimocoConfig {
   password: string;
   orderId: string;
   useSandbox: boolean;
+}
+
+/**
+ * Calculate DIMOCO digest (HMAC-SHA256)
+ * The payload is constructed by concatenation of all unencoded parameter values
+ * in alphabetical order of the parameter names.
+ */
+function calculateDigest(params: Record<string, string>, password: string): string {
+  // Sort parameters alphabetically by key
+  const sortedKeys = Object.keys(params).sort();
+  
+  // Concatenate values in alphabetical order of keys
+  const payload = sortedKeys.map(key => params[key]).join('');
+  
+  // Calculate HMAC-SHA256
+  const hmac = crypto.createHmac('sha256', password);
+  hmac.update(payload, 'utf8');
+  return hmac.digest('hex');
+}
+
+/**
+ * Generate a unique request ID (UUID v4 style)
+ */
+function generateRequestId(): string {
+  return crypto.randomUUID();
 }
 
 export interface PaymentInitRequest {
@@ -37,6 +63,7 @@ export interface IdentifyResponse {
   success: boolean;
   msisdn?: string;
   operator?: string;
+  redirectUrl?: string;
   error?: string;
 }
 
@@ -81,47 +108,86 @@ export function getDimocoConfig(): DimocoConfig {
 // ===========================================
 
 /**
- * Identify - Detect user's MSISDN via carrier header enrichment
+ * Identify - Detect user's MSISDN via DIMOCO's header enrichment
+ * 
+ * DIMOCO API Requirements:
+ * - Must use POST request
+ * - Must include digest (HMAC-SHA256)
+ * - Must include request_id
+ * - Parameter name: url_return, url_callback (not returnurl)
+ * 
  * In sandbox: Always returns MSISDN 436763602302 and operator AT_SANDBOX
  */
 export async function identifyUser(baseUrl: string): Promise<IdentifyResponse> {
   const config = getDimocoConfig();
+  const requestId = generateRequestId();
   
   try {
     console.log('[DIMOCO] Calling identify action...');
     
-    const params = new URLSearchParams({
+    // Build parameters (without digest first)
+    const params: Record<string, string> = {
       action: 'identify',
       merchant: config.merchantId,
-      password: config.password,
       order: config.orderId,
-      returnurl: `${baseUrl}/api/payment/dimoco/identify-callback`,
+      request_id: requestId,
+      url_callback: `${baseUrl}/api/payment/dimoco/identify-callback`,
+      url_return: `${baseUrl}/api/payment/dimoco/identify-callback`,
+    };
+
+    // Calculate digest from all parameters
+    const digest = calculateDigest(params, config.password);
+    params.digest = digest;
+
+    // Build form data for POST request
+    const formData = new URLSearchParams(params);
+
+    console.log('[DIMOCO] POST identify request to:', config.apiUrl);
+
+    const response = await fetch(config.apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': '*/*',
+      },
+      body: formData.toString(),
     });
 
-    const response = await fetch(`${config.apiUrl}?${params.toString()}`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/x-www-form-urlencoded',
-      },
-    });
+    console.log('[DIMOCO] Identify response status:', response.status, response.statusText);
 
     const text = await response.text();
-    console.log('[DIMOCO] Identify response:', text);
+    console.log('[DIMOCO] Identify raw response:', text.substring(0, 500));
 
-    // Parse DIMOCO response (format: key=value&key=value)
+    // Parse DIMOCO response (XML format)
     const result = parseResponse(text);
+    console.log('[DIMOCO] Identify parsed result:', result);
     
-    if (result.status === 'OK' || result.status === 'ok') {
+    // Check for redirect URL (status 3 means redirect required)
+    const redirectUrlMatch = text.match(/<redirect>[\s\S]*?<url>([^<]+)<\/url>[\s\S]*?<\/redirect>/);
+    const redirectUrl = redirectUrlMatch ? redirectUrlMatch[1] : null;
+    
+    // Status 0 = success (user identified), status 3 = redirect required
+    const statusCode = result.status;
+    
+    if (statusCode === '0' || statusCode === 'OK') {
       return {
         success: true,
-        msisdn: result.msisdn || result.MSISDN,
-        operator: result.operator || result.OPERATOR,
+        msisdn: result.msisdn,
+        operator: result.operator,
+      };
+    }
+    
+    if (statusCode === '3' || redirectUrl) {
+      // Redirect required to DIMOCO for identification
+      return {
+        success: true,
+        redirectUrl: redirectUrl || result.redirect_url,
       };
     }
 
     return {
       success: false,
-      error: result.errormessage || result.error || 'Identification failed',
+      error: result.errormessage || result.detail || result.error || 'Identification failed',
     };
   } catch (error) {
     console.error('[DIMOCO] Identify error:', error);
@@ -134,90 +200,163 @@ export async function identifyUser(baseUrl: string): Promise<IdentifyResponse> {
 
 /**
  * Start - Initiate a payment transaction
- * Requires redirect=1 in sandbox mode
+ * 
+ * DIMOCO API Requirements:
+ * - Must use POST request
+ * - Must include digest (HMAC-SHA256)
+ * - Must include request_id
+ * - Must include service_name
+ * - Parameter names: url_callback, url_return (not callbackurl, returnurl)
+ * - Sandbox requires redirect=1
+ * 
+ * SANDBOX BEHAVIOR:
+ * - Always returns MSISDN: 436763602302
+ * - Always returns operator: AT_SANDBOX
+ * - Works on WiFi/Desktop (no network restrictions)
  */
 export async function startPayment(
   request: PaymentInitRequest
 ): Promise<PaymentInitResponse> {
   const config = getDimocoConfig();
   const transactionId = generateTransactionId();
+  const requestId = generateRequestId();
   const baseUrl = request.baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
-  // Store metadata for later retrieval in callback
+  // URLs for callbacks and returns
   const callbackUrl = `${baseUrl}/api/payment/dimoco/callback`;
-  const successUrl = request.returnUrl || `${baseUrl}/de/article/${request.articleSlug}`;
-  const errorUrl = `${baseUrl}/payment/error?transactionId=${transactionId}`;
+  const returnUrl = request.returnUrl || `${baseUrl}/de/article/${request.articleSlug}`;
 
   try {
+    // Clean service name - alphanumeric and spaces only, max 50 chars
+    const serviceName = request.description
+      .substring(0, 50)
+      .replace(/[^\w\s\-äöüÄÖÜß]/g, '')
+      .trim() || 'Article Unlock';
+
+    // IMPORTANT: url_return should go through our callback handler so we can set the MSISDN cookie
+    // The callback handler will then redirect to the final article URL
+    const userReturnUrl = `${callbackUrl}?finalRedirect=${encodeURIComponent(returnUrl)}`;
+
+    // Build parameters (without digest first - digest is calculated from these)
+    const params: Record<string, string> = {
+      action: 'start',
+      amount: (request.amount / 100).toFixed(2), // DIMOCO expects amount in EUR
+      merchant: config.merchantId,
+      order: config.orderId,
+      redirect: '1', // Required for sandbox
+      request_id: requestId,
+      service_name: serviceName,
+      url_callback: callbackUrl,
+      url_return: userReturnUrl, // Goes through callback to set cookie, then redirects
+      // Custom parameters with cp_ prefix
+      cp_articleId: request.articleId,
+      cp_brandId: request.brandId,
+      cp_transactionId: transactionId,
+      cp_returnUrl: returnUrl, // Store original return URL
+    };
+
+    // Add optional metadata as custom parameter
+    if (request.metadata) {
+      const simplifiedMeta = {
+        fp: (request.metadata as Record<string, unknown>).fp || '',
+        ip: (request.metadata as Record<string, unknown>).ipAddress || '',
+      };
+      params.cp_metadata = JSON.stringify(simplifiedMeta);
+    }
+
+    // Calculate digest from all parameters
+    const digest = calculateDigest(params, config.password);
+    params.digest = digest;
+
     console.log('[DIMOCO] Starting payment...', {
       transactionId,
-      amount: request.amount,
+      requestId,
+      amount: params.amount,
       articleId: request.articleId,
+      apiUrl: config.apiUrl,
+      merchantId: config.merchantId,
+      isSandbox: config.useSandbox,
     });
 
-    // Build DIMOCO start request
-    const params = new URLSearchParams({
-      action: 'start',
-      merchant: config.merchantId,
-      password: config.password,
-      order: config.orderId,
-      tid: transactionId,
-      amount: (request.amount / 100).toFixed(2), // DIMOCO expects amount in EUR, not cents
-      currency: request.currency || 'EUR',
-      description: request.description.substring(0, 50), // Max 50 chars
-      returnurl: successUrl,
-      errorurl: errorUrl,
-      callbackurl: callbackUrl,
-      // Sandbox requires redirect=1
-      redirect: '1',
-      // Custom data to pass through
-      custom1: request.articleId,
-      custom2: request.brandId,
-      custom3: request.metadata ? encodeURIComponent(JSON.stringify(request.metadata)) : '',
-    });
+    // Build form data for POST request
+    const formData = new URLSearchParams(params);
 
-    console.log('[DIMOCO] Request URL:', `${config.apiUrl}?action=start&...`);
+    console.log('[DIMOCO] POST request to:', config.apiUrl);
+    console.log('[DIMOCO] Parameters (digest hidden):', 
+      Object.entries(params)
+        .filter(([k]) => k !== 'digest')
+        .map(([k, v]) => `${k}=${v}`)
+        .join('&')
+    );
 
-    const response = await fetch(`${config.apiUrl}?${params.toString()}`, {
-      method: 'GET',
+    // Make POST request (as required by DIMOCO spec)
+    const response = await fetch(config.apiUrl, {
+      method: 'POST',
       headers: {
-        'Accept': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': '*/*',
       },
+      body: formData.toString(),
     });
 
+    console.log('[DIMOCO] Response status:', response.status, response.statusText);
+    
     const text = await response.text();
-    console.log('[DIMOCO] Start response:', text);
+    console.log('[DIMOCO] Raw response:', text.substring(0, 500));
 
-    // Parse response
+    // Parse XML response
     const result = parseResponse(text);
+    console.log('[DIMOCO] Parsed response:', result);
 
-    if (result.status === 'OK' || result.status === 'ok') {
-      // DIMOCO returns a redirect URL for payment page
-      const redirectUrl = result.redirect_url || result.redirecturl || result.url;
+    // Check for redirect URL in XML (status 3 = redirect required)
+    // Format: /result/action_result/redirect/url
+    const redirectUrlMatch = text.match(/<redirect>[\s\S]*?<url>([^<]+)<\/url>[\s\S]*?<\/redirect>/);
+    let redirectUrl = redirectUrlMatch ? redirectUrlMatch[1] : null;
+
+    // Also check for other redirect URL formats
+    if (!redirectUrl) {
+      redirectUrl = result.redirect_url || result.redirecturl || result.url || result.redirect;
+    }
+    
+    // Decode HTML entities in redirect URL (DIMOCO encodes & as &amp;)
+    if (redirectUrl) {
+      redirectUrl = redirectUrl.replace(/&amp;/g, '&');
+    }
+
+    // Status 0 = success, status 3 = redirect required (both are OK)
+    const statusCode = result.status;
+    const isSuccess = statusCode === '0' || statusCode === 'OK' || 
+                      statusCode === '3' || // redirect required
+                      statusCode === '5';   // pending
+    
+    if (isSuccess || redirectUrl) {
+      console.log('[DIMOCO] Payment initiation successful');
+      console.log('[DIMOCO] Status:', statusCode, '| Redirect URL:', redirectUrl);
       
       return {
         success: true,
         transactionId,
-        redirectUrl,
-        paymentUrl: redirectUrl,
+        redirectUrl: redirectUrl || undefined,
+        paymentUrl: redirectUrl || undefined,
         msisdn: result.msisdn,
       };
     }
 
-    // Check if we got a redirect URL even without OK status
-    if (result.redirect_url || result.redirecturl || result.url) {
-      return {
-        success: true,
-        transactionId,
-        redirectUrl: result.redirect_url || result.redirecturl || result.url,
-        paymentUrl: result.redirect_url || result.redirecturl || result.url,
-      };
-    }
+    // Log detailed error info
+    const errorCode = result.errorcode || result.code || 'unknown';
+    const errorMessage = result.errormessage || result.detail || result.error || 'Unknown error';
+    
+    console.error('[DIMOCO] Payment initiation failed:', {
+      status: statusCode,
+      errorCode,
+      errorMessage,
+      fullResult: result,
+    });
 
     return {
       success: false,
       transactionId,
-      error: result.errormessage || result.error || 'Payment initiation failed',
+      error: `DIMOCO Error ${errorCode}: ${errorMessage}`,
     };
   } catch (error) {
     console.error('[DIMOCO] Start error:', error);
@@ -231,9 +370,16 @@ export async function startPayment(
 
 /**
  * Refund - Process a refund for a completed transaction
+ * 
+ * DIMOCO API Requirements:
+ * - Must use POST request
+ * - Must include digest (HMAC-SHA256)
+ * - Must include request_id
+ * - Uses transaction parameter (the original transaction ID)
  */
 export async function refundPayment(request: RefundRequest): Promise<RefundResponse> {
   const config = getDimocoConfig();
+  const requestId = generateRequestId();
 
   try {
     console.log('[DIMOCO] Processing refund...', {
@@ -241,21 +387,32 @@ export async function refundPayment(request: RefundRequest): Promise<RefundRespo
       amount: request.amount,
     });
 
-    const params = new URLSearchParams({
+    // Build parameters (without digest first)
+    const params: Record<string, string> = {
       action: 'refund',
-      merchant: config.merchantId,
-      password: config.password,
-      order: config.orderId,
-      tid: request.transactionId,
       amount: (request.amount / 100).toFixed(2), // DIMOCO expects amount in EUR
-      reason: request.reason || 'Customer refund',
-    });
+      merchant: config.merchantId,
+      order: config.orderId,
+      request_id: requestId,
+      transaction: request.transactionId,
+    };
 
-    const response = await fetch(`${config.apiUrl}?${params.toString()}`, {
-      method: 'GET',
+    // Calculate digest from all parameters
+    const digest = calculateDigest(params, config.password);
+    params.digest = digest;
+
+    // Build form data for POST request
+    const formData = new URLSearchParams(params);
+
+    console.log('[DIMOCO] POST refund request to:', config.apiUrl);
+
+    const response = await fetch(config.apiUrl, {
+      method: 'POST',
       headers: {
-        'Accept': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': '*/*',
       },
+      body: formData.toString(),
     });
 
     const text = await response.text();
@@ -263,7 +420,8 @@ export async function refundPayment(request: RefundRequest): Promise<RefundRespo
 
     const result = parseResponse(text);
 
-    if (result.status === 'OK' || result.status === 'ok') {
+    // Status 0 = success
+    if (result.status === '0' || result.status === 'OK' || result.status === 'ok') {
       return {
         success: true,
         refundId: result.refund_id || result.refundid || request.transactionId,
@@ -272,7 +430,7 @@ export async function refundPayment(request: RefundRequest): Promise<RefundRespo
 
     return {
       success: false,
-      error: result.errormessage || result.error || 'Refund failed',
+      error: result.errormessage || result.detail || result.error || 'Refund failed',
     };
   } catch (error) {
     console.error('[DIMOCO] Refund error:', error);
@@ -288,25 +446,60 @@ export async function refundPayment(request: RefundRequest): Promise<RefundRespo
 // ===========================================
 
 /**
- * Parse DIMOCO response (URL-encoded format)
+ * Parse DIMOCO response (URL-encoded, JSON, or XML format)
  */
 function parseResponse(text: string): Record<string, string> {
   const result: Record<string, string> = {};
   
   // Handle JSON response
-  if (text.startsWith('{')) {
+  if (text.trim().startsWith('{')) {
     try {
       return JSON.parse(text);
     } catch {
-      // Not JSON, continue with URL encoding
+      // Not JSON, continue
     }
+  }
+  
+  // Handle XML response
+  if (text.trim().startsWith('<?xml') || text.trim().startsWith('<result')) {
+    console.log('[DIMOCO] Parsing XML response...');
+    
+    // Extract code
+    const codeMatch = text.match(/<code>(\d+)<\/code>/);
+    if (codeMatch) result.errorcode = codeMatch[1];
+    
+    // Extract detail/error message
+    const detailMatch = text.match(/<detail>([^<]+)<\/detail>/);
+    if (detailMatch) result.errormessage = detailMatch[1];
+    
+    // Extract status
+    const statusMatch = text.match(/<status>(\d+)<\/status>/);
+    if (statusMatch) {
+      result.status = statusMatch[1] === '0' ? 'OK' : 'ERROR';
+    }
+    
+    // Extract redirect URL if present
+    const urlMatch = text.match(/<url>([^<]+)<\/url>/) || 
+                     text.match(/<redirect[^>]*>([^<]+)<\/redirect>/);
+    if (urlMatch) result.redirect_url = urlMatch[1];
+    
+    // Extract MSISDN if present
+    const msisdnMatch = text.match(/<msisdn>([^<]+)<\/msisdn>/);
+    if (msisdnMatch) result.msisdn = msisdnMatch[1];
+    
+    // Extract operator if present
+    const operatorMatch = text.match(/<operator>([^<]+)<\/operator>/);
+    if (operatorMatch) result.operator = operatorMatch[1];
+    
+    console.log('[DIMOCO] Parsed XML result:', result);
+    return result;
   }
   
   // Handle URL-encoded response
   const pairs = text.split('&');
   for (const pair of pairs) {
     const [key, value] = pair.split('=');
-    if (key) {
+    if (key && key.length > 0) {
       result[key.toLowerCase()] = decodeURIComponent(value || '');
     }
   }

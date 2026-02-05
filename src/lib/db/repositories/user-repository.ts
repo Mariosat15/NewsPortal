@@ -387,6 +387,169 @@ export class UserRepository {
   async unbanUser(id: string | ObjectId): Promise<User | null> {
     return this.updateById(id, { isActive: true });
   }
+
+  // Add a visit record to existing user (by normalized MSISDN)
+  async addVisit(normalizedMsisdn: string, visitData: {
+    ip: string;
+    userAgent: string;
+    referrer: string;
+    page: string;
+    sessionId: string;
+  }): Promise<void> {
+    const collection = await this.getCollection();
+    const visit = createVisit(
+      visitData.ip,
+      visitData.userAgent,
+      visitData.referrer,
+      visitData.page,
+      visitData.sessionId
+    );
+
+    await collection.updateOne(
+      { normalizedMsisdn },
+      {
+        $set: { lastSeen: new Date(), updatedAt: new Date() },
+        $push: { visits: { $each: [visit], $slice: -100 } },
+        $inc: { totalVisits: 1 },
+      }
+    );
+  }
+
+  // Add landing page visit to user
+  async addLandingPageVisit(normalizedMsisdn: string, visitData: {
+    landingPageSlug: string;
+    landingPageId?: string;
+    utm?: {
+      source?: string;
+      medium?: string;
+      campaign?: string;
+      content?: string;
+      term?: string;
+    };
+  }): Promise<void> {
+    const collection = await this.getCollection();
+    
+    const lpVisit = {
+      landingPageSlug: visitData.landingPageSlug,
+      landingPageId: visitData.landingPageId,
+      timestamp: new Date(),
+      utm: visitData.utm,
+    };
+
+    await collection.updateOne(
+      { normalizedMsisdn },
+      {
+        $set: { 
+          lastSeen: new Date(), 
+          updatedAt: new Date(),
+          lastLandingPage: visitData.landingPageSlug,
+        },
+        $push: { landingPageVisits: { $each: [lpVisit], $slice: -50 } },
+      }
+    );
+  }
+
+  // Create new user with full MSISDN input
+  async createMsisdnUser(input: MSISDNUserCreateInput): Promise<User> {
+    const collection = await this.getCollection();
+    const user = createMSISDNUser(input);
+    const result = await collection.insertOne(user as User);
+    return { ...user, _id: result.insertedId };
+  }
+
+  // Update user to customer status after purchase
+  async convertToCustomer(normalizedMsisdn: string, purchaseAmount: number): Promise<void> {
+    const collection = await this.getCollection();
+    const now = new Date();
+
+    await collection.updateOne(
+      { normalizedMsisdn },
+      {
+        $set: {
+          status: 'customer',
+          lastSeen: now,
+          updatedAt: now,
+          lastPurchaseAt: now,
+          msisdnConfirmedAt: now,
+        },
+        $setOnInsert: { firstPurchaseAt: now },
+        $inc: { 
+          totalPurchases: 1,
+          totalSpent: purchaseAmount,
+        },
+      }
+    );
+  }
+
+  // Get users by status
+  async listByStatus(status: 'visitor' | 'identified' | 'customer', options: {
+    page?: number;
+    limit?: number;
+    landingPageSlug?: string;
+  } = {}): Promise<{ users: User[]; total: number }> {
+    const collection = await this.getCollection();
+    const { page = 1, limit = 20, landingPageSlug } = options;
+    const skip = (page - 1) * limit;
+
+    const filter: Filter<User> = { status };
+    if (landingPageSlug) {
+      filter.$or = [
+        { firstLandingPage: landingPageSlug },
+        { 'landingPageVisits.landingPageSlug': landingPageSlug },
+      ];
+    }
+
+    const [users, total] = await Promise.all([
+      collection.find(filter).sort({ lastSeen: -1 }).skip(skip).limit(limit).toArray(),
+      collection.countDocuments(filter),
+    ]);
+
+    return { users, total };
+  }
+
+  // Get landing page stats
+  async getLandingPageStats(landingPageSlug: string): Promise<{
+    visitors: number;
+    identified: number;
+    customers: number;
+    totalVisits: number;
+  }> {
+    const collection = await this.getCollection();
+
+    const stats = await collection.aggregate([
+      {
+        $match: {
+          $or: [
+            { firstLandingPage: landingPageSlug },
+            { 'landingPageVisits.landingPageSlug': landingPageSlug },
+          ],
+        },
+      },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          totalVisits: { $sum: '$totalVisits' },
+        },
+      },
+    ]).toArray();
+
+    const result = {
+      visitors: 0,
+      identified: 0,
+      customers: 0,
+      totalVisits: 0,
+    };
+
+    for (const stat of stats) {
+      if (stat._id === 'visitor') result.visitors = stat.count;
+      else if (stat._id === 'identified') result.identified = stat.count;
+      else if (stat._id === 'customer') result.customers = stat.count;
+      result.totalVisits += stat.totalVisits;
+    }
+
+    return result;
+  }
 }
 
 // Factory function to get repository for a brand

@@ -4,31 +4,64 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useTranslations, useLocale } from 'next-intl';
 import { usePathname } from 'next/navigation';
-import { Menu, Search, X, User, LogIn } from 'lucide-react';
-import { useState } from 'react';
+import { Menu, Search, X, Wifi, Smartphone } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { useBrand } from '@/lib/brand/context';
 import { cn } from '@/lib/utils';
 
-const navItems = [
+// Category name translations
+const categoryTranslations: Record<string, { de: string; en: string }> = {
+  news: { de: 'Nachrichten', en: 'News' },
+  technology: { de: 'Technologie', en: 'Tech' },
+  health: { de: 'Gesundheit', en: 'Health' },
+  finance: { de: 'Finanzen', en: 'Finance' },
+  sports: { de: 'Sport', en: 'Sports' },
+  lifestyle: { de: 'Lifestyle', en: 'Lifestyle' },
+  entertainment: { de: 'Unterhaltung', en: 'Entertainment' },
+  recipes: { de: 'Rezepte', en: 'Recipes' },
+  relationships: { de: 'Beziehungen', en: 'Relationships' },
+  travel: { de: 'Reisen', en: 'Travel' },
+  science: { de: 'Wissenschaft', en: 'Science' },
+  culture: { de: 'Kultur', en: 'Culture' },
+  music: { de: 'Musik', en: 'Music' },
+  business: { de: 'Wirtschaft', en: 'Business' },
+};
+
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+interface NavItem {
+  key: string;
+  href: string;
+  labelDe: string;
+  labelEn: string;
+  isHome?: boolean;
+}
+
+// Default fallback items if API fails
+const defaultNavItems: NavItem[] = [
   { key: 'home', href: '', labelDe: 'Start', labelEn: 'Home', isHome: true },
   { key: 'news', href: '/categories/news', labelDe: 'Nachrichten', labelEn: 'News' },
   { key: 'technology', href: '/categories/technology', labelDe: 'Technologie', labelEn: 'Tech' },
   { key: 'entertainment', href: '/categories/entertainment', labelDe: 'Unterhaltung', labelEn: 'Entertainment' },
   { key: 'sports', href: '/categories/sports', labelDe: 'Sport', labelEn: 'Sports' },
   { key: 'health', href: '/categories/health', labelDe: 'Gesundheit', labelEn: 'Health' },
-  { key: 'finance', href: '/categories/finance', labelDe: 'Finanzen', labelEn: 'Business' },
+  { key: 'finance', href: '/categories/finance', labelDe: 'Finanzen', labelEn: 'Finance' },
 ];
 
-interface HeaderProps {
-  user?: {
+interface NetworkInfo {
+  networkType: 'MOBILE_DATA' | 'WIFI' | 'UNKNOWN';
+  isMobileNetwork: boolean;
+  carrier?: {
     name: string;
-    email: string;
-    avatar?: string;
-  } | null;
+  };
 }
 
-export function Header({ user }: HeaderProps) {
+export function Header() {
   const t = useTranslations();
   const locale = useLocale();
   const pathname = usePathname();
@@ -36,6 +69,63 @@ export function Header({ user }: HeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [navItems, setNavItems] = useState<NavItem[]>(defaultNavItems);
+  const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
+
+  // Fetch enabled categories from API
+  useEffect(() => {
+    async function loadCategories() {
+      try {
+        const response = await fetch('/api/categories');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.categories && data.categories.length > 0) {
+            // Build nav items from categories
+            const items: NavItem[] = [
+              { key: 'home', href: '', labelDe: 'Start', labelEn: 'Home', isHome: true },
+            ];
+            
+            data.categories.forEach((cat: Category) => {
+              const translation = categoryTranslations[cat.slug] || { de: cat.name, en: cat.name };
+              items.push({
+                key: cat.slug,
+                href: `/categories/${cat.slug}`,
+                labelDe: translation.de,
+                labelEn: translation.en,
+              });
+            });
+            
+            setNavItems(items);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load categories for nav:', error);
+        // Keep default items on error
+      }
+    }
+    
+    loadCategories();
+  }, []);
+
+  // Detect network type for display
+  useEffect(() => {
+    async function detectNetwork() {
+      try {
+        const response = await fetch('/api/network/detect');
+        if (response.ok) {
+          const data = await response.json();
+          setNetworkInfo(data);
+        }
+      } catch (error) {
+        console.error('Failed to detect network:', error);
+      }
+    }
+    
+    detectNetwork();
+    // Re-check network every 30 seconds
+    const interval = setInterval(detectNetwork, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const otherLocale = locale === 'de' ? 'en' : 'de';
 
@@ -53,14 +143,6 @@ export function Header({ user }: HeaderProps) {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      window.location.href = `/${locale}`;
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
 
   return (
     <header className="sticky top-0 z-50 w-full bg-white shadow-sm">
@@ -98,22 +180,28 @@ export function Header({ user }: HeaderProps) {
 
           {/* Right - Actions */}
           <div className="flex items-center gap-2">
-            {user ? (
-              <Link 
-                href={`/${locale}/profile`}
-                className="p-2 text-gray-600 hover:text-[#e91e8c] transition-colors"
-                aria-label="Profile"
+            {/* Network Indicator */}
+            {networkInfo && (
+              <div 
+                className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium"
+                style={{
+                  backgroundColor: networkInfo.isMobileNetwork ? '#dcfce7' : '#fef3c7',
+                  color: networkInfo.isMobileNetwork ? '#15803d' : '#92400e',
+                }}
+                title={networkInfo.carrier ? `${networkInfo.carrier.name}` : networkInfo.networkType}
               >
-                <User className="h-5 w-5" />
-              </Link>
-            ) : (
-              <Link 
-                href={`/${locale}/login`}
-                className="p-2 text-gray-600 hover:text-[#e91e8c] transition-colors"
-                aria-label="Login"
-              >
-                <LogIn className="h-5 w-5" />
-              </Link>
+                {networkInfo.isMobileNetwork ? (
+                  <Smartphone className="h-3.5 w-3.5" />
+                ) : (
+                  <Wifi className="h-3.5 w-3.5" />
+                )}
+                <span className="hidden lg:inline">
+                  {networkInfo.isMobileNetwork 
+                    ? (locale === 'de' ? 'Mobil' : 'Mobile')
+                    : 'WiFi'
+                  }
+                </span>
+              </div>
             )}
             <button 
               onClick={() => setIsSearchOpen(!isSearchOpen)}
@@ -228,54 +316,45 @@ export function Header({ user }: HeaderProps) {
             ))}
           </nav>
 
-          <div className="p-4 border-t">
-            {user ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#e91e8c] to-purple-600 flex items-center justify-center text-white font-bold">
-                    {user.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm text-gray-900">{user.name}</p>
-                    <p className="text-xs text-gray-500">{user.email}</p>
-                  </div>
+          <div className="p-4 border-t space-y-4">
+            {/* Network Status */}
+            {networkInfo && (
+              <div 
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm"
+                style={{
+                  backgroundColor: networkInfo.isMobileNetwork ? '#dcfce7' : '#fef3c7',
+                  color: networkInfo.isMobileNetwork ? '#15803d' : '#92400e',
+                }}
+              >
+                {networkInfo.isMobileNetwork ? (
+                  <Smartphone className="h-4 w-4 flex-shrink-0" />
+                ) : (
+                  <Wifi className="h-4 w-4 flex-shrink-0" />
+                )}
+                <div className="flex-1">
+                  <p className="font-medium">
+                    {networkInfo.isMobileNetwork 
+                      ? (locale === 'de' ? 'Mobile Daten' : 'Mobile Data')
+                      : 'WiFi'
+                    }
+                  </p>
+                  {networkInfo.carrier && networkInfo.isMobileNetwork && (
+                    <p className="text-xs opacity-75">{networkInfo.carrier.name}</p>
+                  )}
+                  {!networkInfo.isMobileNetwork && (
+                    <p className="text-xs opacity-75">
+                      {locale === 'de' 
+                        ? 'Mobile Daten benötigt für Käufe'
+                        : 'Mobile data required for purchases'
+                      }
+                    </p>
+                  )}
                 </div>
-                <div className="flex gap-2">
-                  <Link
-                    href={`/${locale}/profile`}
-                    className="flex-1 py-2 px-3 text-sm text-center font-medium text-gray-700 bg-gray-100 rounded hover:bg-gray-200"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    {locale === 'de' ? 'Profil' : 'Profile'}
-                  </Link>
-                  <button
-                    onClick={() => { setIsMenuOpen(false); handleLogout(); }}
-                    className="flex-1 py-2 px-3 text-sm text-center font-medium text-gray-700 bg-gray-100 rounded hover:bg-gray-200"
-                  >
-                    {locale === 'de' ? 'Abmelden' : 'Logout'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <Link
-                  href={`/${locale}/login`}
-                  className="block w-full py-2.5 px-4 bg-[#e91e8c] text-white text-center text-sm font-semibold rounded hover:bg-[#d11a7d]"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  {locale === 'de' ? 'Anmelden' : 'Login'}
-                </Link>
-                <Link
-                  href={`/${locale}/register`}
-                  className="block w-full py-2.5 px-4 border border-gray-300 text-gray-700 text-center text-sm font-medium rounded hover:bg-gray-50"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  {locale === 'de' ? 'Registrieren' : 'Register'}
-                </Link>
               </div>
             )}
             
-            <div className="mt-4 pt-4 border-t">
+            {/* Language Switcher */}
+            <div className="pt-2 border-t">
               <Link
                 href={`/${otherLocale}`}
                 className="text-sm text-gray-600 hover:text-[#e91e8c]"

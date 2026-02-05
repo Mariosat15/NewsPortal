@@ -5,6 +5,7 @@ import { cookies } from 'next/headers';
 import { getServerBrandConfig } from '@/lib/brand/server';
 import { BrandProvider } from '@/lib/brand/provider';
 import { AppLayout } from '@/components/layout/app-layout';
+import { MsisdnDetector } from '@/components/tracking/msisdn-detector';
 
 // Supported locales
 const locales = ['de', 'en'];
@@ -31,21 +32,6 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   };
 }
 
-// Get current user from session
-async function getCurrentUser() {
-  try {
-    const cookieStore = await cookies();
-    const userCookie = cookieStore.get('user_session')?.value;
-    if (userCookie) {
-      const userData = JSON.parse(userCookie);
-      return userData;
-    }
-  } catch {
-    // No user session
-  }
-  return null;
-}
-
 export default async function LocaleLayout({
   children,
   params,
@@ -66,13 +52,15 @@ export default async function LocaleLayout({
   // Get messages for the locale
   const messages = await getMessages();
 
-  // Get current user
-  const user = await getCurrentUser();
-
   return (
     <NextIntlClientProvider messages={messages} locale={locale}>
       <BrandProvider config={brandConfig}>
-        <AppLayout user={user}>
+        {/* Global MSISDN detection - works on all pages */}
+        <MsisdnDetector 
+          autoDetect={true} 
+          debug={process.env.NODE_ENV === 'development'}
+        />
+        <AppLayout>
           {children}
         </AppLayout>
       </BrandProvider>

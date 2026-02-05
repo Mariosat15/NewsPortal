@@ -7,6 +7,25 @@ interface Settings {
 }
 
 /**
+ * Default categories for the news portal
+ * These match the categories manager defaults
+ */
+function getDefaultCategories() {
+  return [
+    { id: '1', name: 'News', slug: 'news', description: 'Breaking news and current events', color: '#3b82f6', icon: 'news', enabled: true, contentTypes: ['news', 'analysis'], order: 0 },
+    { id: '2', name: 'Technology', slug: 'technology', description: 'Tech news, gadgets, and innovations', color: '#8b5cf6', icon: 'technology', enabled: true, contentTypes: ['news', 'review', 'guide'], order: 1 },
+    { id: '3', name: 'Health', slug: 'health', description: 'Health tips, wellness, and medical news', color: '#22c55e', icon: 'health', enabled: true, contentTypes: ['news', 'guide', 'listicle'], order: 2 },
+    { id: '4', name: 'Finance', slug: 'finance', description: 'Financial news, investing, and money tips', color: '#f97316', icon: 'finance', enabled: true, contentTypes: ['news', 'analysis', 'guide'], order: 3 },
+    { id: '5', name: 'Sports', slug: 'sports', description: 'Sports news, scores, and highlights', color: '#ef4444', icon: 'sports', enabled: true, contentTypes: ['news', 'analysis'], order: 4 },
+    { id: '6', name: 'Lifestyle', slug: 'lifestyle', description: 'Lifestyle, trends, and living tips', color: '#ec4899', icon: 'lifestyle', enabled: true, contentTypes: ['guide', 'listicle', 'review'], order: 5 },
+    { id: '7', name: 'Entertainment', slug: 'entertainment', description: 'Movies, music, and celebrity news', color: '#6366f1', icon: 'entertainment', enabled: true, contentTypes: ['news', 'review', 'interview'], order: 6 },
+    { id: '8', name: 'Recipes', slug: 'recipes', description: 'Delicious recipes and cooking guides', color: '#f59e0b', icon: 'recipes', enabled: false, contentTypes: ['recipe', 'guide', 'listicle'], order: 7 },
+    { id: '9', name: 'Relationships', slug: 'relationships', description: 'Dating, relationships, and advice', color: '#ec4899', icon: 'relationships', enabled: false, contentTypes: ['guide', 'analysis', 'listicle'], order: 8 },
+    { id: '10', name: 'Travel', slug: 'travel', description: 'Travel guides, destinations, and tips', color: '#06b6d4', icon: 'travel', enabled: false, contentTypes: ['guide', 'listicle', 'review'], order: 9 },
+  ];
+}
+
+/**
  * Get default settings from environment variables
  * These are used to seed the database on first run
  */
@@ -52,6 +71,9 @@ function getDefaultSettings() {
       defaultTopics: ['news', 'technology', 'sports', 'lifestyle', 'health', 'finance'],
       defaultLanguage: 'de',
     },
+    
+    // Categories - default content categories
+    categories: getDefaultCategories(),
     
     // Template settings
     selectedTemplate: 'developer-developer',

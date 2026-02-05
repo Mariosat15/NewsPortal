@@ -51,3 +51,8 @@ Thumbs.db
 # Logs
 logs/
 *.log
+
+# Installer
+installer/node_modules/
+installer/.next/
+installer/package-lock.json

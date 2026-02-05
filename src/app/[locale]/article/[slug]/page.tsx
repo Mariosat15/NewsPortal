@@ -147,42 +147,62 @@ export default async function ArticlePage({
       if (pricingEnabled) {
         const cookieStore = await cookies();
         
-        // Check 1: MSISDN-based unlock (legacy/anonymous)
+        // Check MSISDN-based unlock (primary method for DCB)
         const msisdn = cookieStore.get('user_msisdn')?.value;
         if (msisdn) {
+          // Try repository check first
           isUnlocked = await unlockRepo.hasUnlocked(msisdn, found._id!);
-        }
-        
-        // Check 2: User account-based unlock (logged-in users)
-        if (!isUnlocked) {
-          const userSessionCookie = cookieStore.get('user_session')?.value;
-          if (userSessionCookie) {
-            try {
-              const sessionData = JSON.parse(userSessionCookie);
-              const userId = sessionData.id;
-              const userEmail = sessionData.email;
-              
-              if (userId || userEmail) {
-                // Check unlocks collection for this user's purchases
-                const unlocksCollection = await getCollection(brandId, 'unlocks');
-                const userUnlock = await unlocksCollection.findOne({
-                  articleId: found._id,
-                  status: 'completed',
-                  $or: [
-                    { 'metadata.userId': userId },
-                    { 'metadata.userEmail': userEmail },
-                  ],
-                });
-                
-                if (userUnlock) {
-                  isUnlocked = true;
-                }
-              }
-            } catch (e) {
-              console.error('Error parsing user session:', e);
+          console.log('[Article Access] MSISDN repo check:', { 
+            msisdn: msisdn.substring(0, 4) + '****',
+            articleId: found._id?.toString(),
+            isUnlocked 
+          });
+          
+          // If not found, try direct database query with multiple matching strategies
+          if (!isUnlocked) {
+            const unlocksCollection = await getCollection(brandId, 'unlocks');
+            // Normalize MSISDN for comparison
+            const cleanMsisdn = msisdn.replace(/\D/g, '');
+            
+            const userUnlock = await unlocksCollection.findOne({
+              articleId: found._id,
+              status: 'completed',
+              $or: [
+                { msisdn: msisdn },
+                { msisdn: `+${cleanMsisdn}` },
+                { normalizedMsisdn: cleanMsisdn },
+                // Also check without leading country code variations
+                { normalizedMsisdn: cleanMsisdn.replace(/^49/, '') },
+              ],
+            });
+            
+            if (userUnlock) {
+              isUnlocked = true;
+              console.log('[Article Access] Found via direct query:', userUnlock.transactionId);
             }
           }
         }
+        
+        // Also check by article ID directly (for URL unlocked=true flow)
+        if (!isUnlocked) {
+          const unlocksCollection = await getCollection(brandId, 'unlocks');
+          const recentUnlock = await unlocksCollection.findOne({
+            articleId: found._id,
+            status: 'completed',
+          }, { sort: { unlockedAt: -1 } });
+          
+          // If there's a recent unlock for this article and user has same session, allow
+          if (recentUnlock && msisdn) {
+            const cleanMsisdn = msisdn.replace(/\D/g, '');
+            const unlockCleanMsisdn = recentUnlock.normalizedMsisdn || recentUnlock.msisdn?.replace(/\D/g, '');
+            if (cleanMsisdn === unlockCleanMsisdn) {
+              isUnlocked = true;
+              console.log('[Article Access] Matched via session MSISDN');
+            }
+          }
+        }
+        
+        console.log('[Article Access] Final status:', { isUnlocked, hasMsisdn: !!msisdn });
       } else {
         // Pricing disabled - all articles are free
         isUnlocked = true;

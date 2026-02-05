@@ -254,11 +254,29 @@ export async function detectMsisdn(
 
 /**
  * Extract IP address from request
+ * Supports various proxies and CDNs:
+ * - Cloudflare: cf-connecting-ip
+ * - Standard: x-forwarded-for, x-real-ip
  */
 export function extractIpFromRequest(request: Request): string {
+  // Cloudflare tunnel/proxy - most reliable for CF
+  const cfConnectingIp = request.headers.get('cf-connecting-ip');
+  if (cfConnectingIp) {
+    return cfConnectingIp.trim();
+  }
+  
+  // Standard proxied requests
   const forwardedFor = request.headers.get('x-forwarded-for');
+  if (forwardedFor) {
+    return forwardedFor.split(',')[0].trim();
+  }
+  
   const realIp = request.headers.get('x-real-ip');
-  return forwardedFor?.split(',')[0]?.trim() || realIp || '0.0.0.0';
+  if (realIp) {
+    return realIp.trim();
+  }
+  
+  return '0.0.0.0';
 }
 
 /**

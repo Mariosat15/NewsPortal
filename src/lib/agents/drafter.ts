@@ -153,10 +153,22 @@ async function createDraftFromTopic(
   // Build dynamic system prompt based on article style
   const styleInstructions = getStyleInstructions(effectiveStyle, selectedType, language);
   const formatInstructions = getFormatInstructions(effectiveStyle, selectedType, language, randomImages);
+  
+  // Get current date for freshness context
+  const now = new Date();
+  const currentDate = now.toLocaleDateString(language === 'de' ? 'de-DE' : 'en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+  const currentYear = now.getFullYear();
 
   const systemPrompt = language === 'de'
     ? `Du bist ein erfahrener Content-Ersteller bei einer führenden Medienplattform.
        Du schreibst ${getArticleTypeLabel(selectedType, 'de')} in einem ${getToneLabel(articleStyle.tone, 'de')} Stil.
+       
+       AKTUELLES DATUM: ${currentDate} (${currentYear})
        
        DEIN PROFESSIONELLER STANDARD:
        ${styleInstructions}
@@ -167,9 +179,12 @@ async function createDraftFromTopic(
        - Lebendige, aber präzise Sprache
        - Kontext und Hintergrundinformationen liefern
        - Mehrwert für den Leser bieten
-       - Aktualität und Relevanz betonen`
+       - AKTUALITÄT: Schreibe so, als ob das Ereignis HEUTE oder GESTERN passiert ist
+       - Verwende aktuelle Zeitreferenzen (heute, gestern, diese Woche, ${currentYear})`
     : `You are an experienced content creator at a leading media platform.
        You write ${getArticleTypeLabel(selectedType, 'en')} in a ${getToneLabel(articleStyle.tone, 'en')} style.
+       
+       CURRENT DATE: ${currentDate} (${currentYear})
        
        YOUR PROFESSIONAL STANDARDS:
        ${styleInstructions}
@@ -180,7 +195,8 @@ async function createDraftFromTopic(
        - Vivid but precise language
        - Provide context and background information
        - Provide value to the reader
-       - Emphasize timeliness and relevance`;
+       - TIMELINESS: Write as if the event happened TODAY or YESTERDAY
+       - Use current time references (today, yesterday, this week, ${currentYear})`;
 
   const userPrompt = language === 'de'
     ? `AUFGABE: Schreibe ${getArticleTypeLabel(selectedType, 'de')} basierend auf folgenden Quellen.

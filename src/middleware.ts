@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getBrandIdFromDomain } from './lib/brand/config';
 import { routing } from './i18n/routing';
+import { msisdnDetectionMiddleware } from './lib/middleware/msisdn-detector';
 
 // Create the next-intl middleware
 const intlMiddleware = createMiddleware(routing);
@@ -21,7 +22,7 @@ const publicPaths = [
   '/lp',     // Landing pages don't need locale prefix
 ];
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hostname = request.headers.get('host') || 'localhost:3000';
 
@@ -31,7 +32,7 @@ export function middleware(request: NextRequest) {
   if (publicPaths.some(path => pathname.startsWith(path))) {
     console.log('[Middleware] Skipping locale for public path:', pathname);
     const brandId = getBrandIdFromDomain(hostname);
-    const response = NextResponse.next();
+    let response = NextResponse.next();
     response.headers.set('x-brand-id', brandId);
     response.cookies.set('BRAND_ID', brandId, {
       httpOnly: false,
@@ -39,6 +40,12 @@ export function middleware(request: NextRequest) {
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 365,
     });
+    
+    // Apply MSISDN detection for non-API routes
+    if (!pathname.startsWith('/api/') && !pathname.startsWith('/_next')) {
+      response = await msisdnDetectionMiddleware(request, response);
+    }
+    
     return response;
   }
 
@@ -48,7 +55,7 @@ export function middleware(request: NextRequest) {
   const brandId = getBrandIdFromDomain(hostname);
 
   // Run the next-intl middleware for locale handling
-  const response = intlMiddleware(request);
+  let response = intlMiddleware(request);
   
   // Add brand ID to the response
   response.headers.set('x-brand-id', brandId);
@@ -58,6 +65,9 @@ export function middleware(request: NextRequest) {
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 365,
   });
+
+  // Apply MSISDN detection middleware
+  response = await msisdnDetectionMiddleware(request, response);
 
   return response;
 }

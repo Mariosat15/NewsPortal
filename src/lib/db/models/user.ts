@@ -13,6 +13,8 @@ export interface UserVisit {
 }
 
 export type AuthProvider = 'email' | 'msisdn';
+export type MsisdnSource = 'header_enrichment' | 'dimoco_identify' | 'payment' | 'manual';
+export type UserStatus = 'visitor' | 'identified' | 'customer';
 
 export interface User {
   _id?: ObjectId;
@@ -26,9 +28,25 @@ export interface User {
   // MSISDN authentication fields (for mobile payment identification)
   msisdn?: string;
   normalizedMsisdn?: string;
+  msisdnSource?: MsisdnSource;      // How we detected the MSISDN
+  msisdnConfirmedAt?: Date;          // When MSISDN was confirmed via payment
   
   // Auth provider tracking
   authProvider: AuthProvider;
+  
+  // User status (visitor → identified → customer)
+  status: UserStatus;
+  
+  // Landing page tracking
+  firstLandingPage?: string;         // Slug of first landing page
+  lastLandingPage?: string;          // Slug of most recent landing page
+  landingPageVisits: LandingPageVisit[];
+  
+  // Conversion tracking
+  firstPurchaseAt?: Date;
+  lastPurchaseAt?: Date;
+  totalPurchases: number;
+  totalSpent: number;                // In cents
   
   // Timestamps and tracking
   firstSeen: Date;
@@ -40,10 +58,27 @@ export interface User {
   bookmarks: string[]; // Article IDs
   favorites: string[]; // Article IDs
   
+  // Carrier info
+  carrier?: string;
+  country?: string;
+  
   // Account status
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface LandingPageVisit {
+  landingPageSlug: string;
+  landingPageId?: string;
+  timestamp: Date;
+  utm?: {
+    source?: string;
+    medium?: string;
+    campaign?: string;
+    content?: string;
+    term?: string;
+  };
 }
 
 export interface UserCreateInput {
@@ -78,6 +113,18 @@ export interface MSISDNUserCreateInput {
   referrer?: string;
   page?: string;
   sessionId?: string;
+  msisdnSource?: MsisdnSource;
+  landingPageSlug?: string;
+  landingPageId?: string;
+  carrier?: string;
+  country?: string;
+  utm?: {
+    source?: string;
+    medium?: string;
+    campaign?: string;
+    content?: string;
+    term?: string;
+  };
 }
 
 // Normalize MSISDN to standard format - supports international numbers
@@ -150,6 +197,10 @@ export function createEmailUser(input: EmailUserCreateInput): Omit<User, '_id'> 
     name: input.name,
     emailVerified: false,
     authProvider: 'email',
+    status: 'visitor',
+    landingPageVisits: [],
+    totalPurchases: 0,
+    totalSpent: 0,
     firstSeen: now,
     lastSeen: now,
     visits: [initialVisit],
@@ -162,7 +213,7 @@ export function createEmailUser(input: EmailUserCreateInput): Omit<User, '_id'> 
   };
 }
 
-// Create a new MSISDN-based user record (for backward compatibility)
+// Create a new MSISDN-based user record
 export function createMSISDNUser(input: MSISDNUserCreateInput): Omit<User, '_id'> {
   const now = new Date();
   const normalizedMsisdn = normalizeMSISDN(input.msisdn);
@@ -180,17 +231,36 @@ export function createMSISDNUser(input: MSISDNUserCreateInput): Omit<User, '_id'
     sessionId: input.sessionId || '',
   };
 
+  const landingPageVisits: LandingPageVisit[] = [];
+  if (input.landingPageSlug) {
+    landingPageVisits.push({
+      landingPageSlug: input.landingPageSlug,
+      landingPageId: input.landingPageId,
+      timestamp: now,
+      utm: input.utm,
+    });
+  }
+
   return {
     msisdn: input.msisdn,
     normalizedMsisdn,
+    msisdnSource: input.msisdnSource || 'dimoco_identify',
     emailVerified: false,
     authProvider: 'msisdn',
+    status: 'identified',
+    firstLandingPage: input.landingPageSlug,
+    lastLandingPage: input.landingPageSlug,
+    landingPageVisits,
+    totalPurchases: 0,
+    totalSpent: 0,
     firstSeen: now,
     lastSeen: now,
     visits: [initialVisit],
     totalVisits: 1,
     bookmarks: [],
     favorites: [],
+    carrier: input.carrier,
+    country: input.country,
     isActive: true,
     createdAt: now,
     updatedAt: now,

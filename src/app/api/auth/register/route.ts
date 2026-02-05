@@ -7,6 +7,21 @@ import { getSessionRepository } from '@/lib/db/repositories/session-repository';
 import { cookies } from 'next/headers';
 
 export async function POST(request: NextRequest) {
+  // Email registration has been disabled - system now uses MSISDN-based authentication
+  // Users are automatically created when they make their first purchase via mobile carrier billing
+  console.log('[Auth] Registration attempt blocked - email authentication is deprecated');
+  
+  return NextResponse.json(
+    { 
+      error: 'Email registration is no longer available',
+      message: 'This platform now uses mobile carrier billing. Your account is created automatically when you make your first purchase using your mobile phone.',
+      deprecated: true,
+      redirectTo: '/',
+    },
+    { status: 410 } // 410 Gone - resource permanently removed
+  );
+  
+  /* LEGACY CODE - Email registration (disabled)
   try {
     const body = await request.json();
     const { email, password, name } = body;
@@ -132,4 +147,5 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+  */ // End of legacy code
 }

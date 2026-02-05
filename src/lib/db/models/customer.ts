@@ -7,14 +7,34 @@ export interface CustomerSession {
   source?: string;
 }
 
+export type ConversionStatus = 'visitor' | 'identified' | 'customer';
+
 export interface Customer {
   _id: string; // normalizedMsisdn as primary key
   msisdn: string; // Original format
   tenantId: string;
+  
+  // Conversion tracking
+  conversionStatus: ConversionStatus;
+  identifiedAt?: Date;              // When MSISDN was first detected
+  convertedAt?: Date;               // When first purchase was made
+  firstPurchaseDate?: Date;
+  lastPurchaseDate?: Date;
+  
   // User account link (if customer registered/logged in during purchase)
   userId?: string;
   userEmail?: string;
   userName?: string;
+  
+  // Landing page attribution
+  firstLandingPage?: string;
+  lastLandingPage?: string;
+  landingPagesVisited: string[];    // List of all landing pages visited
+  
+  // Carrier info
+  carrier?: string;
+  country?: string;
+  
   // Timestamps
   firstSeenAt: Date;
   lastSeenAt: Date;
@@ -24,10 +44,16 @@ export interface Customer {
   topCampaign?: string;
   topSource?: string;
   sessions: CustomerSession[];
+  
   // Billing
   totalBillingAmount: number; // In cents
   totalPurchases: number; // Count of purchases
   lastBillingDate?: Date;
+  
+  // Repurchase tracking
+  repurchaseCount: number;          // Total repurchases (totalPurchases - 1)
+  averagePurchaseValue: number;     // Average purchase value in cents
+  
   notes?: string;
   tags?: string[];
   createdAt: Date;
@@ -47,6 +73,11 @@ export interface CustomerCreateInput {
   landingPageSlug?: string;
   campaign?: string;
   source?: string;
+  // Carrier info
+  carrier?: string;
+  country?: string;
+  // Conversion status
+  conversionStatus?: ConversionStatus;
 }
 
 export interface CustomerUpdateInput {

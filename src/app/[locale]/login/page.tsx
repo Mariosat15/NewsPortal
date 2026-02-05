@@ -1,60 +1,24 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { useTranslations, useLocale } from 'next-intl';
-import { Mail, Lock, Eye, EyeOff, Loader2, LogIn } from 'lucide-react';
+import { useLocale } from 'next-intl';
+import { Smartphone, ArrowRight, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useBrand } from '@/lib/brand/context';
 
 export default function LoginPage() {
-  const t = useTranslations('auth');
   const locale = useLocale();
   const router = useRouter();
   const brand = useBrand();
-  
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
-
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.error || 'Login failed');
-        return;
-      }
-
-      // Redirect to home page on success
-      router.push(`/${locale}`);
-      router.refresh();
-    } catch {
-      setError('An error occurred. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+  const handleGoHome = () => {
+    router.push(`/${locale}`);
   };
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-2xl">
         {/* Header */}
         <div className="text-center mb-8">
           <div 
@@ -63,100 +27,122 @@ export default function LoginPage() {
           >
             {brand.name.charAt(0)}
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('welcomeBack')}</h1>
-          <p className="text-slate-600 mt-2">{t('loginSubtitle')}</p>
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">
+            {locale === 'de' ? 'Anmeldung nicht mehr erforderlich' : 'Login No Longer Required'}
+          </h1>
+          <p className="text-slate-600 text-lg">
+            {locale === 'de' 
+              ? 'Wir haben zu mobilem Bezahlen gewechselt'
+              : 'We have switched to mobile carrier billing'
+            }
+          </p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Email */}
-          <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium text-slate-700">
-              {t('email')}
-            </label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                className="pl-10 h-12 bg-white border-slate-200 focus:border-blue-500 focus:ring-blue-500"
-                required
-                disabled={isLoading}
-              />
-            </div>
-          </div>
+        {/* Info Card */}
+        <Card className="border-blue-200 bg-blue-50/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-blue-900">
+              <Smartphone className="h-6 w-6" />
+              {locale === 'de' ? 'So funktioniert es jetzt' : 'How It Works Now'}
+            </CardTitle>
+            <CardDescription className="text-blue-700">
+              {locale === 'de' 
+                ? 'Einfacher und schneller Zugriff auf Premium-Inhalte'
+                : 'Easier and faster access to premium content'
+              }
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Steps */}
+            <div className="space-y-4">
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">
+                  1
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900">
+                    {locale === 'de' ? 'Mobile Daten verwenden' : 'Use Mobile Data'}
+                  </h3>
+                  <p className="text-sm text-slate-600">
+                    {locale === 'de' 
+                      ? 'Besuchen Sie unsere Seite über Ihr mobiles Datennetz (4G/5G), nicht über WLAN'
+                      : 'Visit our site using your mobile data network (4G/5G), not WiFi'
+                    }
+                  </p>
+                </div>
+              </div>
 
-          {/* Password */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label htmlFor="password" className="text-sm font-medium text-slate-700">
-                {t('password')}
-              </label>
-              <Link 
-                href={`/${locale}/forgot-password`}
-                className="text-sm text-blue-600 hover:text-blue-700"
-              >
-                {t('forgotPassword')}
-              </Link>
-            </div>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-              <Input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="pl-10 pr-10 h-12 bg-white border-slate-200 focus:border-blue-500 focus:ring-blue-500"
-                required
-                disabled={isLoading}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
-          </div>
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">
+                  2
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900">
+                    {locale === 'de' ? 'Artikel lesen und freischalten' : 'Read and Unlock Articles'}
+                  </h3>
+                  <p className="text-sm text-slate-600">
+                    {locale === 'de' 
+                      ? 'Stöbern Sie frei und schalten Sie Premium-Artikel mit einem Klick frei'
+                      : 'Browse freely and unlock premium articles with one click'
+                    }
+                  </p>
+                </div>
+              </div>
 
-          {/* Error message */}
-          {error && (
-            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-              {error}
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">
+                  3
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900">
+                    {locale === 'de' ? 'Automatischer Zugriff' : 'Automatic Access'}
+                  </h3>
+                  <p className="text-sm text-slate-600">
+                    {locale === 'de' 
+                      ? 'Ihre gekauften Artikel bleiben automatisch freigeschaltet wenn Sie zurückkehren'
+                      : 'Your purchased articles stay unlocked automatically when you return'
+                    }
+                  </p>
+                </div>
+              </div>
             </div>
-          )}
 
-          {/* Submit button */}
-          <Button
-            type="submit"
-            disabled={isLoading}
-            className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-medium"
-          >
-            {isLoading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <>
-                <LogIn className="h-5 w-5 mr-2" />
-                {t('signIn')}
-              </>
-            )}
-          </Button>
-        </form>
+            {/* Benefits */}
+            <div className="p-4 bg-white rounded-lg border border-blue-200">
+              <div className="flex items-start gap-2 mb-3">
+                <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-slate-900">
+                    {locale === 'de' ? 'Ihre Vorteile' : 'Your Benefits'}
+                  </p>
+                </div>
+              </div>
+              <ul className="space-y-2 text-sm text-slate-700 ml-7">
+                <li>{locale === 'de' ? 'Keine Registrierung erforderlich' : 'No registration required'}</li>
+                <li>{locale === 'de' ? 'Keine Passwörter zu merken' : 'No passwords to remember'}</li>
+                <li>{locale === 'de' ? 'Zahlung über Mobilfunkrechnung' : 'Payment via mobile phone bill'}</li>
+                <li>{locale === 'de' ? 'Automatische Wiedererkennung auf Ihrem Gerät' : 'Automatic recognition on your device'}</li>
+              </ul>
+            </div>
 
-        {/* Register link */}
-        <p className="text-center mt-6 text-slate-600">
-          {t('noAccount')}{' '}
-          <Link 
-            href={`/${locale}/register`}
-            className="text-blue-600 hover:text-blue-700 font-medium"
-          >
-            {t('register')}
-          </Link>
+            {/* CTA */}
+            <Button 
+              onClick={handleGoHome}
+              className="w-full h-12"
+              size="lg"
+            >
+              {locale === 'de' ? 'Zur Startseite' : 'Go to Homepage'}
+              <ArrowRight className="h-5 w-5 ml-2" />
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Help text */}
+        <p className="text-center mt-6 text-sm text-slate-500">
+          {locale === 'de' 
+            ? 'Benötigen Sie Hilfe? Besuchen Sie unsere FAQ oder kontaktieren Sie den Support.'
+            : 'Need help? Visit our FAQ or contact support.'
+          }
         </p>
       </div>
     </div>

@@ -7,12 +7,79 @@ import { normalizeMSISDN } from '@/lib/utils';
 import { normalizePhoneNumber } from '@/lib/utils/phone';
 
 // POST /api/payment/dimoco/callback - DIMOCO payment callback (server-to-server)
+// DIMOCO sends callbacks as: digest=xxx&data=<XML payload>
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    console.log('[Payment Callback POST] Received:', body);
+    // Get the raw text to determine format
+    const contentType = request.headers.get('content-type') || '';
+    let mappedBody: Record<string, string | null | undefined>;
     
-    return await processCallback(body);
+    if (contentType.includes('application/json')) {
+      // JSON format (from mock or other sources)
+      const body = await request.json();
+      console.log('[Payment Callback POST] Received JSON:', body);
+      mappedBody = {
+        transactionId: body.transactionId || body.tid,
+        status: mapDimocoStatusCode(body.status),
+        msisdn: body.msisdn,
+        amount: body.amount,
+        currency: body.currency || 'EUR',
+        operator: body.operator,
+        articleId: body.articleId,
+        brandId: body.brandId,
+        metadata: body.metadata,
+        errorCode: body.errorCode,
+        errorMessage: body.errorMessage,
+      };
+    } else {
+      // URL-encoded form data (from real DIMOCO)
+      // Format: digest=xxx&data=<URL-encoded XML>
+      const text = await request.text();
+      console.log('[Payment Callback POST] Received form data:', text.substring(0, 500));
+      
+      // Parse URL-encoded form data
+      const params = new URLSearchParams(text);
+      const digest = params.get('digest');
+      const xmlData = params.get('data');
+      
+      console.log('[Payment Callback POST] Has digest:', !!digest);
+      console.log('[Payment Callback POST] Has XML data:', !!xmlData);
+      
+      if (xmlData) {
+        // Parse the XML data field
+        mappedBody = parseXmlCallback(xmlData);
+        mappedBody.digest = digest;
+      } else {
+        // Fallback: try direct field mapping (older format)
+        const body: Record<string, string | null> = {};
+        for (const [key, value] of params.entries()) {
+          body[key] = value;
+        }
+        mappedBody = {
+          transactionId: body.transaction || body.transactionId || body.tid || body.cp_transactionId,
+          status: mapDimocoStatusCode(body.status),
+          msisdn: body.msisdn || body.MSISDN,
+          amount: body.amount,
+          currency: body.currency || 'EUR',
+          operator: body.operator,
+          articleId: body.cp_articleId || body.articleId || body.custom1,
+          brandId: body.cp_brandId || body.brandId || body.custom2,
+          metadata: body.cp_metadata || body.metadata || body.custom3,
+          errorCode: body.errorcode || body.code,
+          errorMessage: body.errormessage || body.detail,
+          requestId: body.request_id,
+          digest: body.digest,
+        };
+      }
+    }
+    
+    console.log('[Payment Callback POST] Mapped body:', {
+      ...mappedBody,
+      metadata: mappedBody.metadata ? 'present' : 'missing',
+      digest: mappedBody.digest ? 'present' : 'missing',
+    });
+    
+    return await processCallback(mappedBody);
   } catch (error) {
     console.error('Callback processing error:', error);
     return NextResponse.json(
@@ -22,27 +89,180 @@ export async function POST(request: NextRequest) {
   }
 }
 
+/**
+ * Parse DIMOCO XML callback data
+ * Extracts: status, msisdn, amount, transaction ID, custom parameters, etc.
+ */
+function parseXmlCallback(xml: string): Record<string, string | null | undefined> {
+  console.log('[Payment Callback] Parsing XML callback...');
+  
+  const result: Record<string, string | null | undefined> = {
+    currency: 'EUR',
+  };
+  
+  // Extract status code from <status>X</status> inside <action_result>
+  const statusMatch = xml.match(/<action_result>[\s\S]*?<status>(\d+)<\/status>[\s\S]*?<\/action_result>/);
+  if (statusMatch) {
+    result.status = mapDimocoStatusCode(statusMatch[1]);
+  }
+  
+  // Extract error code and message
+  const codeMatch = xml.match(/<code>(\d+)<\/code>/);
+  if (codeMatch) result.errorCode = codeMatch[1];
+  
+  const detailMatch = xml.match(/<detail>([^<]+)<\/detail>/);
+  if (detailMatch) result.errorMessage = detailMatch[1];
+  
+  // Extract MSISDN from <customer><msisdn>xxx</msisdn></customer>
+  const msisdnMatch = xml.match(/<customer>[\s\S]*?<msisdn>([^<]+)<\/msisdn>[\s\S]*?<\/customer>/);
+  if (msisdnMatch) result.msisdn = msisdnMatch[1];
+  
+  // Extract operator
+  const operatorMatch = xml.match(/<operator>([^<]+)<\/operator>/);
+  if (operatorMatch) result.operator = operatorMatch[1];
+  
+  // Extract transaction ID from <transaction><id>xxx</id></transaction>
+  const txnIdMatch = xml.match(/<transaction>[\s\S]*?<id>([^<]+)<\/id>[\s\S]*?<\/transaction>/);
+  if (txnIdMatch) result.dimocoTransactionId = txnIdMatch[1];
+  
+  // Extract amount from transaction
+  const amountMatch = xml.match(/<transaction>[\s\S]*?<amount>([^<]+)<\/amount>[\s\S]*?<\/transaction>/);
+  if (amountMatch) result.amount = amountMatch[1];
+  
+  // Extract billed amount
+  const billedMatch = xml.match(/<billed_amount>([^<]+)<\/billed_amount>/);
+  if (billedMatch) result.billedAmount = billedMatch[1];
+  
+  // Extract currency
+  const currencyMatch = xml.match(/<currency>([^<]+)<\/currency>/);
+  if (currencyMatch) result.currency = currencyMatch[1];
+  
+  // Extract request_id
+  const requestIdMatch = xml.match(/<request_id>([^<]+)<\/request_id>/);
+  if (requestIdMatch) result.requestId = requestIdMatch[1];
+  
+  // Extract reference
+  const referenceMatch = xml.match(/<reference>([^<]+)<\/reference>/);
+  if (referenceMatch) result.reference = referenceMatch[1];
+  
+  // Extract custom parameters (our data)
+  // Format: <custom_parameter><key>cp_xxx</key><value>yyy</value></custom_parameter>
+  const customParamRegex = /<custom_parameter>\s*<key>([^<]+)<\/key>\s*<value>([^<]*)<\/value>\s*<\/custom_parameter>/g;
+  let match;
+  while ((match = customParamRegex.exec(xml)) !== null) {
+    const key = match[1];
+    const value = match[2];
+    
+    if (key === 'cp_articleId') result.articleId = value;
+    else if (key === 'cp_brandId') result.brandId = value;
+    else if (key === 'cp_transactionId') result.transactionId = value;
+    else if (key === 'cp_metadata') result.metadata = value;
+  }
+  
+  console.log('[Payment Callback] Parsed XML result:', {
+    status: result.status,
+    msisdn: result.msisdn ? result.msisdn.substring(0, 6) + '****' : undefined,
+    transactionId: result.transactionId,
+    articleId: result.articleId,
+    errorCode: result.errorCode,
+    errorMessage: result.errorMessage,
+    amount: result.amount,
+    billedAmount: result.billedAmount,
+  });
+  
+  return result;
+}
+
+// Map DIMOCO status code to our status
+// DIMOCO: 0 = success, other values = error
+function mapDimocoStatusCode(status: string | null): 'success' | 'failed' | 'cancelled' {
+  if (!status) return 'failed';
+  
+  // DIMOCO uses numeric status: 0 = success
+  if (status === '0' || status === 'ok' || status === 'OK' || status === 'success' || status === 'billed') {
+    return 'success';
+  }
+  if (status === 'cancelled' || status === 'canceled' || status === 'aborted') {
+    return 'cancelled';
+  }
+  return 'failed';
+}
+
 // GET /api/payment/dimoco/callback - DIMOCO redirect callback (user browser)
+// This is called when DIMOCO redirects the user back after payment
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   
   console.log('[Payment Callback GET] Received params:', Object.fromEntries(searchParams.entries()));
 
+  // Get the final redirect URL (where to send user after setting cookie)
+  const finalRedirect = searchParams.get('finalRedirect');
+  
   // DIMOCO returns various parameters - map them to our format
-  // amountCents = cents from mock, amount = euros from real DIMOCO
   const amountCents = searchParams.get('amountCents');
   const amountEuros = searchParams.get('amount');
   
+  // Get MSISDN from URL params (DIMOCO may or may not include it)
+  let msisdn = searchParams.get('msisdn') || searchParams.get('MSISDN');
+  let transactionId = searchParams.get('tid') || searchParams.get('transactionId');
+  
+  // Try to get transaction info from database (the POST callback already processed the payment)
+  const brandId = getBrandIdSync();
+  let transaction = null;
+  
+  // If we don't have MSISDN in URL, look it up from the processed transaction
+  if (!msisdn || !transactionId) {
+    try {
+      const transactionsCollection = await getCollection(brandId, 'transactions');
+      
+      // Try to find recent completed transaction
+      // Look for transaction by various identifiers that DIMOCO might send
+      const reference = searchParams.get('sph-r') || searchParams.get('reference');
+      
+      if (reference) {
+        // DIMOCO sends sph-r parameter which we can use to find the transaction
+        transaction = await transactionsCollection.findOne({ 
+          status: 'completed',
+          createdAt: { $gte: new Date(Date.now() - 10 * 60 * 1000) } // Last 10 minutes
+        }, { sort: { createdAt: -1 } });
+      }
+      
+      if (!transaction && transactionId) {
+        transaction = await transactionsCollection.findOne({ transactionId });
+      }
+      
+      // Get the most recent completed transaction if still not found
+      if (!transaction) {
+        transaction = await transactionsCollection.findOne({
+          status: 'completed',
+          createdAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) } // Last 5 minutes
+        }, { sort: { createdAt: -1 } });
+      }
+      
+      if (transaction) {
+        console.log('[Payment Callback GET] Found transaction:', {
+          transactionId: transaction.transactionId,
+          msisdn: transaction.msisdn?.substring(0, 6) + '****',
+          status: transaction.status,
+        });
+        
+        msisdn = msisdn || transaction.msisdn;
+        transactionId = transactionId || transaction.transactionId;
+      }
+    } catch (e) {
+      console.error('[Payment Callback GET] Error fetching transaction:', e);
+    }
+  }
+
   const body = {
-    transactionId: searchParams.get('tid') || searchParams.get('transactionId'),
-    status: mapDimocoStatus(searchParams.get('status') || searchParams.get('result')),
-    msisdn: searchParams.get('msisdn') || searchParams.get('MSISDN'),
-    // amountCents is already in cents (from mock), amount needs conversion (from real DIMOCO)
+    transactionId,
+    status: mapDimocoStatus(searchParams.get('status') || searchParams.get('result') || (transaction?.status === 'completed' ? 'success' : null)),
+    msisdn,
     amountCents: amountCents ? parseInt(amountCents, 10) : (amountEuros ? parseAmount(amountEuros) : undefined),
-    articleId: searchParams.get('custom1') || searchParams.get('articleId'),
-    brandId: searchParams.get('custom2'),
+    articleId: searchParams.get('custom1') || searchParams.get('articleId') || transaction?.articleId,
+    brandId: searchParams.get('custom2') || transaction?.brandId,
     metadata: searchParams.get('custom3') || searchParams.get('metadata'),
-    returnUrl: searchParams.get('returnurl') || searchParams.get('returnUrl'),
+    returnUrl: finalRedirect || searchParams.get('returnurl') || searchParams.get('returnUrl') || transaction?.returnUrl,
     operator: searchParams.get('operator'),
     errorCode: searchParams.get('errorcode'),
     errorMessage: searchParams.get('errormessage'),
@@ -50,37 +270,38 @@ export async function GET(request: NextRequest) {
 
   console.log('[Payment Callback GET] Mapped body:', {
     ...body,
+    msisdn: body.msisdn ? body.msisdn.substring(0, 6) + '****' : 'missing',
     metadata: body.metadata ? 'present' : 'missing',
   });
-
-  // Process the callback
-  const result = await processCallback(body);
-  const data = await result.json();
 
   // Determine redirect URL
   let redirectUrl = body.returnUrl || '/';
   
-  // Try to get returnUrl from stored transaction
-  if (!redirectUrl || redirectUrl === '/') {
-    try {
-      const brandId = getBrandIdSync();
-      const transactionsCollection = await getCollection(brandId, 'transactions');
-      const transaction = await transactionsCollection.findOne({ transactionId: body.transactionId });
-      if (transaction?.returnUrl) {
-        redirectUrl = transaction.returnUrl;
-      }
-    } catch (e) {
-      console.error('[Payment Callback] Error fetching transaction:', e);
-    }
-  }
+  // If we have a completed transaction, consider it successful (POST callback already processed)
+  const isSuccess = body.status === 'success' || transaction?.status === 'completed';
 
   // Redirect user
-  if (data.success) {
+  if (isSuccess) {
     const url = new URL(redirectUrl, request.url);
     url.searchParams.set('unlocked', 'true');
     url.searchParams.set('tid', body.transactionId || '');
     console.log('[Payment Callback] Success - redirecting to:', url.toString());
-    return NextResponse.redirect(url);
+    
+    const response = NextResponse.redirect(url);
+    
+    // IMPORTANT: Set MSISDN cookie so user can access the article
+    if (body.msisdn) {
+      response.cookies.set('user_msisdn', body.msisdn as string, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 365, // 1 year
+        path: '/',
+      });
+      console.log('[Payment Callback] Set MSISDN cookie:', (body.msisdn as string).substring(0, 4) + '****');
+    }
+    
+    return response;
   }
 
   // Payment failed
@@ -289,7 +510,8 @@ async function processCallback(body: Record<string, unknown>) {
         rawRowJson: body,
       });
 
-      // Update customer with user link
+      // Update customer - convert to customer status and add billing
+      // First ensure customer record exists (might have been created during MSISDN detection)
       await customerRepo.upsert({
         msisdn: callbackData.msisdn,
         normalizedMsisdn: e164Msisdn,
@@ -297,10 +519,17 @@ async function processCallback(body: Record<string, unknown>) {
         userId: userId,
         userEmail: userEmail,
       });
-      await customerRepo.addBillingAmount(e164Msisdn, callbackData.amount || 99, {
-        userId: userId,
-        userEmail: userEmail,
-      });
+      
+      // Convert to customer and add purchase amount
+      await customerRepo.convertToCustomer(e164Msisdn, callbackData.amount || 99);
+      
+      // Also update user record if exists
+      try {
+        const userRepo = getUserRepository(brandId);
+        await userRepo.convertToCustomer(e164Msisdn, callbackData.amount || 99);
+      } catch (userUpdateError) {
+        console.error('[Payment Callback] Error updating user:', userUpdateError);
+      }
 
       // Link MSISDN to any recent tracking sessions
       try {

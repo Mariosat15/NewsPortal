@@ -1,5 +1,5 @@
 import { getTranslations } from 'next-intl/server';
-import { ZoxTrending, ZoxFeatured, ZoxTabbedSidebar, ZoxCategorySection } from '@/components/home';
+import { ZoxTrending, ZoxFeatured, ZoxTabbedSidebar, ZoxCategorySection, PaginatedArticles } from '@/components/home';
 import { DarkProTemplate, DarkPortalTemplate } from '@/components/templates';
 import { getArticleRepository } from '@/lib/db';
 import { getBrandId } from '@/lib/brand/server';
@@ -7,6 +7,28 @@ import { getTemplateSettings, colorSchemes } from '@/lib/settings/get-template';
 import { ArrowRight, Flame, Clock, Star } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { getCollection } from '@/lib/db/mongodb';
+
+// Fetch enabled categories from Categories Manager (single source of truth)
+async function getEnabledCategorySlugs(): Promise<string[]> {
+  try {
+    const brandId = await getBrandId();
+    const settingsCollection = await getCollection(brandId, 'settings');
+    const categoriesDoc = await settingsCollection.findOne({ key: 'categories' });
+    
+    if (categoriesDoc?.value && Array.isArray(categoriesDoc.value) && categoriesDoc.value.length > 0) {
+      return categoriesDoc.value
+        .filter((c: { enabled?: boolean }) => c.enabled !== false)
+        .sort((a: { order?: number }, b: { order?: number }) => (a.order || 0) - (b.order || 0))
+        .map((c: { slug: string }) => c.slug);
+    }
+  } catch (error) {
+    console.error('Error fetching enabled categories:', error);
+  }
+  
+  // Fallback to default enabled categories if DB fails (matches seed.ts)
+  return ['news', 'technology', 'health', 'finance', 'sports', 'lifestyle', 'entertainment'];
+}
 
 type ArticlePreview = {
   slug: string;
@@ -192,9 +214,10 @@ export default async function HomePage({
   const popularArticles = [...articles].sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0)).slice(0, 8);
   
   const articlesByCategory = groupByCategory(articles);
-  // Show all categories that have articles (dynamically)
-  const allCategories = ['news', 'technology', 'health', 'finance', 'sports', 'lifestyle', 'entertainment', 'recipes', 'relationships', 'travel', 'science', 'culture', 'music'];
-  const categories = allCategories.filter(cat => articlesByCategory[cat] && articlesByCategory[cat].length >= 2);
+  // Get enabled categories from Categories Manager (single source of truth)
+  const enabledCategories = await getEnabledCategorySlugs();
+  // Filter to only show categories that have at least 2 articles
+  const categories = enabledCategories.filter(cat => articlesByCategory[cat] && articlesByCategory[cat].length >= 2);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
@@ -328,37 +351,13 @@ export default async function HomePage({
                 </span>
               </div>
               
-              <div className="space-y-5">
-                {latestArticles.map((article) => (
-                  <Link
-                    key={article.slug}
-                    href={`/${locale}/article/${article.slug}`}
-                    className="group block bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-gray-100"
-                  >
-                    <div className="flex flex-col sm:flex-row">
-                      <div className="relative sm:w-48 h-40 sm:h-auto flex-shrink-0">
-                        <Image
-                          src={article.thumbnail}
-                          alt={article.title}
-                          fill
-                          className="object-cover"
-                        />
-                      </div>
-                      <div className="p-5 flex-1">
-                        <span className={`inline-block ${categoryColors[article.category] || 'bg-gray-600'} text-white text-[10px] font-bold uppercase px-2 py-0.5 rounded mb-2`}>
-                          {currentLabels[article.category]}
-                        </span>
-                        <h3 className="font-bold text-gray-900 leading-snug line-clamp-2 group-hover:opacity-80 transition-colors mb-2">
-                          {article.title}
-                        </h3>
-                        <p className="text-gray-500 text-sm line-clamp-2">
-                          {article.teaser}
-                        </p>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
+              <PaginatedArticles
+                articles={latestArticles}
+                locale={locale}
+                categoryLabels={currentLabels}
+                articlesPerPage={4}
+                primaryColor={colors.primary}
+              />
             </main>
 
             {/* Right Sidebar */}

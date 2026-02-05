@@ -3,6 +3,8 @@ import { startPayment, initiatePaymentMock, getDimocoConfig } from '@/lib/dimoco
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getArticleRepository } from '@/lib/db';
 import { getCollection } from '@/lib/db/mongodb';
+import { detectNetworkType } from '@/lib/services/carrier-ip-ranges';
+import { extractIpFromRequest } from '@/lib/services/msisdn-detection';
 
 const ARTICLE_PRICE_CENTS = parseInt(process.env.ARTICLE_PRICE_CENTS || '99', 10);
 
@@ -72,17 +74,55 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get IP address from request headers
-    const ipAddress = request.headers.get('x-forwarded-for')?.split(',')[0] || 
-                      request.headers.get('x-real-ip') || 
-                      'unknown';
+    // Get IP address from request headers (supports Cloudflare, standard proxies)
+    const ipAddress = extractIpFromRequest(request) || 'unknown';
+
+    // VALIDATE NETWORK TYPE - Block WiFi purchases
+    // Only bypass if explicitly set in .env (for local testing when needed)
+    const bypassNetworkCheck = process.env.BYPASS_NETWORK_CHECK === 'true';
+    
+    const networkResult = detectNetworkType(ipAddress);
+    if (!networkResult.isMobileNetwork && !bypassNetworkCheck) {
+      console.log('[Payment] Blocked - Not on mobile network:', networkResult.networkType);
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Mobile data required',
+          errorCode: 'WIFI_NOT_ALLOWED',
+          message: 'Please switch to mobile data (4G/5G) to make a purchase. WiFi purchases are not supported.',
+          networkType: networkResult.networkType
+        },
+        { status: 403 }
+      );
+    }
+
+    if (bypassNetworkCheck && !networkResult.isMobileNetwork) {
+      console.log('[Payment] ⚠️ BYPASS_NETWORK_CHECK enabled: Allowing WiFi purchase for testing');
+    }
+
+    console.log('[Payment] Network validation passed:', {
+      networkType: networkResult.networkType,
+      carrier: networkResult.carrier?.name,
+      bypassed: bypassNetworkCheck && !networkResult.isMobileNetwork,
+    });
 
     // Get dynamic base URL from request
     const baseUrl = getBaseUrl(request);
 
     // Check if we should use mock or real DIMOCO
     const config = getDimocoConfig();
-    const shouldUseMock = useMock || !config.password || config.password === '';
+    // Only use mock if explicitly requested OR no password configured
+    // When we have real credentials, use real DIMOCO (no fallback to mock)
+    const hasRealCredentials = config.password && config.password !== '';
+    const shouldUseMock = useMock || !hasRealCredentials;
+
+    console.log('[Payment] DIMOCO config check:', {
+      hasPassword: !!config.password,
+      apiUrl: config.apiUrl,
+      merchantId: config.merchantId,
+      useSandbox: config.useSandbox,
+      shouldUseMock,
+    });
 
     // Prepare payment request
     const paymentRequest = {
@@ -104,19 +144,27 @@ export async function GET(request: NextRequest) {
     let response;
 
     if (shouldUseMock) {
-      console.log('[Payment] Using MOCK payment flow');
+      console.log('[Payment] Using MOCK payment flow (no real credentials)');
       response = await initiatePaymentMock(paymentRequest);
     } else {
-      console.log('[Payment] Using REAL DIMOCO API');
-      response = await startPayment(paymentRequest);
-    }
-
-    if (!response.success) {
-      console.error('[Payment] Failed:', response.error);
+      console.log('[Payment] Using REAL DIMOCO SANDBOX API');
+      console.log('[Payment] Expected sandbox behavior: MSISDN=436763602302, operator=AT_SANDBOX');
       
-      // Fallback to mock if real API fails
-      if (!shouldUseMock) {
-        console.log('[Payment] Falling back to mock...');
+      try {
+        response = await startPayment(paymentRequest);
+        
+        // Log the full response for debugging
+        console.log('[Payment] DIMOCO response:', JSON.stringify(response));
+        
+        // If real API fails, fall back to mock for development/testing
+        if (!response.success) {
+          console.error('[Payment] DIMOCO API Error:', response.error);
+          console.log('[Payment] ⚠️ Falling back to MOCK payment for testing...');
+          response = await initiatePaymentMock(paymentRequest);
+        }
+      } catch (dimocoError) {
+        console.error('[Payment] DIMOCO API exception:', dimocoError);
+        console.log('[Payment] ⚠️ Falling back to MOCK payment due to exception...');
         response = await initiatePaymentMock(paymentRequest);
       }
     }
@@ -148,7 +196,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Redirect to payment page
-    const redirectUrl = response.redirectUrl || response.paymentUrl;
+    let redirectUrl = response.redirectUrl || response.paymentUrl;
+    
+    // DIMOCO returns HTML-encoded ampersands (&amp;) which need to be decoded
+    if (redirectUrl) {
+      redirectUrl = redirectUrl.replace(/&amp;/g, '&');
+    }
+    
     const fullRedirectUrl = redirectUrl?.startsWith('http') 
       ? redirectUrl 
       : new URL(redirectUrl!, baseUrl).toString();

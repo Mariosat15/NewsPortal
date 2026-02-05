@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTrackingRepository, getCustomerRepository } from '@/lib/db';
 import { getBrandId } from '@/lib/brand/server';
 import { parseUserAgent, extractIpFromRequest } from '@/lib/services/msisdn-detection';
+import { detectNetworkType } from '@/lib/services/carrier-ip-ranges';
 import { VisitorSessionCreateInput, UtmParams, DeviceInfo } from '@/lib/db/models/visitor-session';
 import { ObjectId } from 'mongodb';
 
@@ -33,9 +34,21 @@ export async function POST(request: NextRequest) {
     const ip = extractIpFromRequest(request);
     const deviceInfo: DeviceInfo = parseUserAgent(userAgent);
 
+    // Detect network type from IP
+    const networkResult = detectNetworkType(ip);
+    const networkType = networkResult.isMobileNetwork ? 'MOBILE_DATA' : 'WIFI';
+    const carrier = networkResult.carrier?.name;
+
+    console.log('[Tracking Session] Network detection:', {
+      ip: ip.substring(0, 10) + '***',
+      networkType,
+      carrier,
+      landingPageSlug: landingPageSlug || 'main-site',
+    });
+
     // Parse UTM parameters
     const utmParams: UtmParams = {
-      source: utm?.source || utm?.utm_source,
+      source: utm?.source || utm?.utm_source || 'direct',
       medium: utm?.medium || utm?.utm_medium,
       campaign: utm?.campaign || utm?.utm_campaign,
       adgroup: utm?.adgroup || utm?.utm_adgroup,
@@ -60,9 +73,34 @@ export async function POST(request: NextRequest) {
     // Get or create session
     const session = await trackingRepo.getOrCreateSession(sessionInput);
 
-    // Update last page URL if provided
+    // IMPORTANT: Always update network type (it might have been UNKNOWN at creation)
+    const updateData: Record<string, unknown> = {
+      networkType,
+      lastSeenAt: new Date(),
+    };
+    
+    if (carrier) {
+      updateData.carrier = carrier;
+    }
+    
     if (pageUrl) {
-      await trackingRepo.updateSession(sessionId, { lastPageUrl: pageUrl });
+      updateData.lastPageUrl = pageUrl;
+    }
+
+    await trackingRepo.updateSession(sessionId, updateData);
+
+    // Check for existing MSISDN in cookies
+    const existingMsisdn = request.cookies.get('user_msisdn')?.value;
+    if (existingMsisdn && !session.msisdn) {
+      // Link existing MSISDN to this session
+      await trackingRepo.setSessionMsisdn(
+        sessionId,
+        existingMsisdn,
+        existingMsisdn, // Already normalized in cookie
+        'CONFIRMED',
+        carrier
+      );
+      console.log('[Tracking Session] Linked MSISDN to session:', existingMsisdn.substring(0, 6) + '****');
     }
 
     return NextResponse.json({
@@ -71,8 +109,10 @@ export async function POST(request: NextRequest) {
         sessionId: session.sessionId,
         firstSeenAt: session.firstSeenAt,
         lastSeenAt: session.lastSeenAt,
-        msisdnConfidence: session.msisdnConfidence,
-        networkType: session.networkType,
+        msisdn: existingMsisdn || session.msisdn,
+        msisdnConfidence: existingMsisdn ? 'CONFIRMED' : session.msisdnConfidence,
+        networkType,
+        carrier,
         pageViews: session.pageViews,
         events: session.events,
       },

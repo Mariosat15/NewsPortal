@@ -4,41 +4,77 @@ import { getCollection } from '@/lib/db/mongodb';
 import { getArticleRepository } from '@/lib/db/repositories/article-repository';
 import { getBrandId } from '@/lib/brand/server';
 import { Unlock } from '@/lib/db/models/unlock';
+import { normalizeMsisdn } from '@/lib/utils/phone';
 
-// GET - Get user's purchase history
+// GET - Get user's purchase history by MSISDN
 export async function GET() {
   try {
     const cookieStore = await cookies();
-    const userCookie = cookieStore.get('user_session')?.value;
     
-    if (!userCookie) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    // Try to get MSISDN from cookie (primary DCB method)
+    const msisdnCookie = cookieStore.get('user_msisdn')?.value;
+    
+    // Fallback: Check for legacy user session for backward compatibility
+    const userCookie = cookieStore.get('user_session')?.value;
+    let userId: string | null = null;
+    let userEmail: string | null = null;
+    
+    if (userCookie) {
+      try {
+        const sessionData = JSON.parse(userCookie);
+        userId = sessionData.id;
+        userEmail = sessionData.email;
+      } catch {
+        // Invalid session data
+      }
     }
 
-    const sessionData = JSON.parse(userCookie);
-    const userId = sessionData.id;
-    const userEmail = sessionData.email;
-    
-    if (!userId) {
-      return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
+    // Must have either MSISDN or legacy user session
+    if (!msisdnCookie && !userId) {
+      return NextResponse.json({ 
+        success: true,
+        data: {
+          purchases: [],
+          summary: {
+            totalPurchases: 0,
+            totalSpent: 0,
+            currency: 'EUR',
+          },
+        },
+      });
     }
 
     const brandId = await getBrandId();
-    
-    // Get user's unlocks - filter by userId in metadata or by user's linked MSISDN
     const unlocksCollection = await getCollection<Unlock>(brandId, 'unlocks');
     const articleRepo = getArticleRepository(brandId);
 
-    // Find unlocks that belong to this user
-    // 1. By userId stored in metadata
-    // 2. Or by user's linked MSISDN (if they have one)
+    // Build query to find unlocks by MSISDN or legacy user credentials
+    const queryConditions: any[] = [];
+    
+    // Primary: Search by MSISDN (both original and normalized)
+    if (msisdnCookie) {
+      const normalizedMsisdn = normalizeMsisdn(msisdnCookie);
+      queryConditions.push(
+        { msisdn: msisdnCookie },
+        { msisdn: normalizedMsisdn },
+        { normalizedMsisdn: normalizedMsisdn },
+        { 'metadata.msisdn': msisdnCookie },
+        { 'metadata.normalizedMsisdn': normalizedMsisdn }
+      );
+    }
+    
+    // Fallback: Search by legacy user ID/email
+    if (userId) {
+      queryConditions.push(
+        { 'metadata.userId': userId },
+        { 'metadata.userEmail': userEmail }
+      );
+    }
+
     const unlocks = await unlocksCollection
       .find({ 
         status: 'completed',
-        $or: [
-          { 'metadata.userId': userId },
-          { 'metadata.userEmail': userEmail },
-        ]
+        $or: queryConditions
       })
       .sort({ unlockedAt: -1 })
       .limit(100)

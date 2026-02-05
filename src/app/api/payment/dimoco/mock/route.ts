@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // Mock payment page for development/demo
-// In production, this would be replaced by actual DIMOCO integration
+// In production, DIMOCO gets MSISDN directly from carrier - user cannot choose their number
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const transactionId = searchParams.get('transactionId');
@@ -15,6 +15,33 @@ export async function GET(request: NextRequest) {
   
   // Parse callback URL to get the base for building the full callback
   const callbackBase = callbackUrl || '/api/payment/dimoco/callback';
+  
+  // Get MSISDN from cookie (detected by middleware or previous payment)
+  // In PRODUCTION: Carrier provides this automatically via header enrichment
+  // In MOCK: We use stored MSISDN or generate a test one based on IP
+  const storedMsisdn = request.cookies.get('user_msisdn')?.value;
+  const sessionId = request.cookies.get('news_session')?.value || transactionId;
+  
+  // Generate a consistent test MSISDN based on session/IP if not stored
+  // This simulates carrier detection - same session = same MSISDN
+  const ipAddress = request.headers.get('x-forwarded-for')?.split(',')[0] || 
+                    request.headers.get('x-real-ip') || 
+                    '127.0.0.1';
+  
+  // Create a consistent MSISDN from IP (simulates carrier detection)
+  const ipHash = ipAddress.split('.').reduce((acc, octet) => acc + parseInt(octet, 10), 0);
+  const generatedMsisdn = `+49170${(1000000 + (ipHash * 1234) % 9000000).toString()}`;
+  
+  // Use stored MSISDN if available, otherwise use generated one
+  const detectedMsisdn = storedMsisdn || generatedMsisdn;
+  const msisdnSource = storedMsisdn ? 'stored' : 'generated';
+  
+  console.log('[Payment Mock] MSISDN detection:', { 
+    storedMsisdn: storedMsisdn ? storedMsisdn.substring(0, 6) + '****' : null,
+    generatedMsisdn,
+    source: msisdnSource,
+    ipAddress 
+  });
   
   // Parse metadata for display/logging
   let deviceInfo: Record<string, string> = {};
@@ -145,7 +172,7 @@ export async function GET(request: NextRequest) {
     <div class="logo">DIMOCO pay:smart</div>
     
     <div class="demo-note">
-      <strong>Demo-Modus:</strong> Dies ist eine simulierte Zahlungsseite.
+      <strong>Demo-Modus:</strong> Ihre Nummer wurde automatisch erkannt (wie bei echtem Carrier Billing).
     </div>
     
     <h1>Zahlung bestätigen</h1>
@@ -154,13 +181,18 @@ export async function GET(request: NextRequest) {
     
     <form id="paymentForm">
       <div class="form-group">
-        <label for="phone">Handynummer</label>
-        <input type="tel" id="phone" name="phone" placeholder="+49 123 456 7890" required 
-               pattern="[+]?[0-9\\s-]{10,}" value="+49 172 1234567">
+        <label for="phone">Erkannte Handynummer</label>
+        <input type="tel" id="phone" name="phone" readonly
+               value="${detectedMsisdn}" 
+               style="background: #f0f0f0; cursor: not-allowed;">
+        <div style="font-size: 11px; color: #888; margin-top: 4px;">
+          📱 ${msisdnSource === 'stored' ? 'Von Ihrem Gerät erkannt' : 'Von Mobilfunknetz erkannt'} - 
+          <span style="color: #28a745;">Kann nicht geändert werden</span>
+        </div>
       </div>
       
       <button type="submit" class="btn btn-primary">
-        Jetzt bezahlen
+        Jetzt bezahlen (${(parseFloat(amount || '99') / 100).toFixed(2)} €)
       </button>
       
       <button type="button" class="btn btn-secondary" onclick="handleCancel()">
@@ -169,32 +201,35 @@ export async function GET(request: NextRequest) {
     </form>
     
     <div class="secure">
-      🔒 Sichere Zahlung über Ihre Handyrechnung
+      🔒 Sichere Zahlung über Ihre Handyrechnung<br>
+      <span style="font-size: 10px; color: #666;">
+        Der Betrag wird Ihrer Mobilfunkrechnung belastet.
+      </span>
     </div>
   </div>
 
   <script>
     const form = document.getElementById('paymentForm');
+    // MSISDN is fixed - detected from carrier/session (cannot be changed by user)
+    const detectedMsisdn = '${detectedMsisdn}';
     
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       
-      const phone = document.getElementById('phone').value;
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       submitBtn.textContent = 'Verarbeitung...';
       
-      // Simulate payment processing
+      // Simulate payment processing (carrier verification)
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // Build callback URL - use the dynamic callback base passed from initiate
-      // Note: metadata is already URL-encoded, so we build the URL manually to avoid double-encoding
-      // Amount is sent in cents (same as stored) to avoid conversion issues
+      // Build callback URL with the DETECTED MSISDN (not user input)
+      // In production, DIMOCO returns this from carrier - cannot be faked
       const amountCents = '${amount || '99'}';
       const baseParams = new URLSearchParams({
         transactionId: '${transactionId}',
         status: 'success',
-        msisdn: phone.replace(/[^0-9+]/g, ''),
+        msisdn: detectedMsisdn,  // Use detected MSISDN, not user input!
         amountCents: amountCents,
         articleId: '${articleId}',
         returnUrl: '${successUrl}'
@@ -204,6 +239,7 @@ export async function GET(request: NextRequest) {
       const metadataParam = '${metadata || ''}';
       const fullCallbackUrl = '${callbackBase}' + '?' + baseParams + (metadataParam ? '&metadata=' + metadataParam : '');
       
+      console.log('[Payment Mock] MSISDN (carrier-detected):', detectedMsisdn);
       console.log('[Payment Mock] Callback URL:', fullCallbackUrl);
       window.location.href = fullCallbackUrl;
     });

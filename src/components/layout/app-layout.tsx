@@ -5,18 +5,13 @@ import { Footer } from './footer';
 
 interface AppLayoutProps {
   children: React.ReactNode;
-  user?: {
-    name: string;
-    email: string;
-    avatar?: string;
-  } | null;
 }
 
-export function AppLayout({ children, user }: AppLayoutProps) {
+export function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="min-h-screen bg-[#f5f5f5] flex flex-col">
       {/* ZOX-style Header */}
-      <Header user={user} />
+      <Header />
 
       {/* Main content - Full width, no sidebar */}
       <main className="flex-1">

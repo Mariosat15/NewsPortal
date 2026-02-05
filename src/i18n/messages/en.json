@@ -102,7 +102,13 @@
     "business": "Business",
     "entertainment": "Entertainment",
     "politics": "Politics",
-    "world": "World"
+    "world": "World",
+    "recipes": "Recipes",
+    "relationships": "Relationships",
+    "travel": "Travel",
+    "science": "Science",
+    "culture": "Culture",
+    "music": "Music"
   },
   "footer": {
     "hilfe": "Help",

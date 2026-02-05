@@ -8,7 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import {
   RefreshCw, Loader2, Eye, Users, Globe, Smartphone, Monitor,
   Clock, MapPin, MousePointer, ArrowRight, Phone, Search,
-  TrendingUp, Calendar, Filter, ChevronDown, ChevronUp, X
+  TrendingUp, Calendar, Filter, ChevronDown, ChevronUp, X, Download,
+  ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 
 interface VisitorSession {
@@ -52,9 +53,12 @@ interface TrackingEvent {
 interface LandingPageStats {
   slug: string;
   name: string;
+  type?: 'landing_page' | 'main_site';
   totalVisits: number;
   uniqueVisitors: number;
   msisdnCaptured: number;
+  mobileDataVisits?: number;
+  wifiVisits?: number;
   conversionRate: number;
   topSource?: string;
 }
@@ -80,6 +84,13 @@ export function TrackingAnalytics() {
   const [dateTo, setDateTo] = useState('');
   const [selectedSession, setSelectedSession] = useState<VisitorSession | null>(null);
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
+  const [selectedPage, setSelectedPage] = useState<string | null>(null); // Filter by page slug
+  const [mobileOnly, setMobileOnly] = useState(true); // Default to showing only mobile data visits
+  
+  // Sorting state
+  type SortField = 'lastSeen' | 'firstSeen' | 'msisdn' | 'visits' | 'referrer' | 'network' | 'carrier' | 'page';
+  const [sortField, setSortField] = useState<SortField>('lastSeen');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     loadData();
@@ -131,14 +142,65 @@ export function TrackingAnalytics() {
   };
 
   const filteredSessions = sessions.filter(session => {
+    // Filter by date range
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      const sessionDate = new Date(session.firstSeenAt);
+      if (sessionDate < fromDate) {
+        return false;
+      }
+    }
+    
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      const sessionDate = new Date(session.lastSeenAt);
+      if (sessionDate > toDate) {
+        return false;
+      }
+    }
+
+    // Filter by mobile only
+    if (mobileOnly && session.networkType !== 'MOBILE_DATA') {
+      return false;
+    }
+
+    // Filter by selected page
+    if (selectedPage) {
+      if (selectedPage === 'main-site') {
+        // Main site = sessions without landing page
+        if (session.landingPageSlug) {
+          return false;
+        }
+      } else {
+        // Landing page filter
+        if (session.landingPageSlug !== selectedPage) {
+          return false;
+        }
+      }
+    }
+
+    // Filter by search (searches multiple fields)
     if (search) {
       const searchLower = search.toLowerCase();
-      if (
-        !session.sessionId.toLowerCase().includes(searchLower) &&
-        !session.ip.toLowerCase().includes(searchLower) &&
-        !(session.msisdn && session.msisdn.includes(search)) &&
-        !(session.landingPageSlug && session.landingPageSlug.toLowerCase().includes(searchLower))
-      ) {
+      const searchableFields = [
+        session.sessionId,
+        session.ip,
+        session.msisdn,
+        session.landingPageSlug,
+        session.referrer,
+        session.carrier,
+        session.networkType,
+        session.utm?.source,
+        session.utm?.medium,
+        session.utm?.campaign,
+        session.device?.browser,
+        session.device?.os,
+      ].filter(Boolean).map(f => f!.toLowerCase());
+      
+      const matchesSearch = searchableFields.some(field => field.includes(searchLower));
+      if (!matchesSearch) {
         return false;
       }
     }
@@ -185,6 +247,233 @@ export function TrackingAnalytics() {
     });
   };
 
+  // Group sessions by MSISDN (or IP if no MSISDN)
+  interface SessionGroup {
+    key: string;
+    msisdn: string | null;
+    sessions: VisitorSession[];
+    latestSession: VisitorSession;
+    totalVisits: number;
+    landingPages: string[];
+    firstSeenAt: string;
+  }
+
+  const groupSessionsByMsisdn = (sessionList: VisitorSession[]): SessionGroup[] => {
+    const groups = new Map<string, VisitorSession[]>();
+    
+    sessionList.forEach(session => {
+      // Use MSISDN as key if available, otherwise use IP
+      const key = session.msisdn || `ip_${session.ip}`;
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+      groups.get(key)!.push(session);
+    });
+
+    // Convert to array and sort by latest activity
+    return Array.from(groups.entries()).map(([key, sessions]) => {
+      // Sort sessions by lastSeenAt descending
+      sessions.sort((a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime());
+      const latestSession = sessions[0];
+      
+      // Get unique landing pages
+      const landingPages = [...new Set(sessions.map(s => s.landingPageSlug).filter(Boolean))] as string[];
+      
+      // Sum total page views
+      const totalVisits = sessions.reduce((sum, s) => sum + (s.pageViews || 1), 0);
+      
+      // Get earliest first seen
+      const firstSeenAt = sessions.reduce((earliest, s) => {
+        const sDate = new Date(s.firstSeenAt).getTime();
+        const eDate = new Date(earliest).getTime();
+        return sDate < eDate ? s.firstSeenAt : earliest;
+      }, sessions[0].firstSeenAt);
+
+      return {
+        key,
+        msisdn: latestSession.msisdn || null,
+        sessions,
+        latestSession,
+        totalVisits,
+        landingPages,
+        firstSeenAt,
+      };
+    });
+  };
+
+  // Sort grouped sessions based on current sort settings
+  const sortGroups = (groups: SessionGroup[]): SessionGroup[] => {
+    return [...groups].sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortField) {
+        case 'lastSeen':
+          comparison = new Date(a.latestSession.lastSeenAt).getTime() - new Date(b.latestSession.lastSeenAt).getTime();
+          break;
+        case 'firstSeen':
+          comparison = new Date(a.firstSeenAt).getTime() - new Date(b.firstSeenAt).getTime();
+          break;
+        case 'msisdn':
+          const msisdnA = a.msisdn || '';
+          const msisdnB = b.msisdn || '';
+          comparison = msisdnA.localeCompare(msisdnB);
+          break;
+        case 'visits':
+          comparison = a.totalVisits - b.totalVisits;
+          break;
+        case 'referrer':
+          const refA = a.latestSession.referrer || '';
+          const refB = b.latestSession.referrer || '';
+          comparison = refA.localeCompare(refB);
+          break;
+        case 'network':
+          const netA = a.latestSession.networkType || '';
+          const netB = b.latestSession.networkType || '';
+          comparison = netA.localeCompare(netB);
+          break;
+        case 'carrier':
+          const carrierA = a.latestSession.carrier || '';
+          const carrierB = b.latestSession.carrier || '';
+          comparison = carrierA.localeCompare(carrierB);
+          break;
+        case 'page':
+          const pageA = a.latestSession.landingPageSlug || 'Main Site';
+          const pageB = b.latestSession.landingPageSlug || 'Main Site';
+          comparison = pageA.localeCompare(pageB);
+          break;
+        default:
+          comparison = new Date(a.latestSession.lastSeenAt).getTime() - new Date(b.latestSession.lastSeenAt).getTime();
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  };
+
+  // Toggle sort - if same field, toggle direction; if different field, set to desc
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  // Get sort icon for a field
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-3 w-3 ml-1 opacity-50" />;
+    }
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="h-3 w-3 ml-1" />
+      : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
+
+  // Get sorted and grouped data
+  const getSortedGroupedData = () => {
+    return sortGroups(groupSessionsByMsisdn(filteredSessions));
+  };
+
+  // Export visitor sessions to CSV (uses current sort order)
+  const exportToCSV = () => {
+    const groupedData = getSortedGroupedData();
+    
+    // CSV Headers
+    const headers = [
+      'Mobile Number (MSISDN)',
+      'IP Address',
+      'Network Type',
+      'Carrier',
+      'Device Type',
+      'Browser',
+      'OS',
+      'Current Page',
+      'Landing Pages Visited',
+      'Referrer',
+      'UTM Source',
+      'UTM Medium',
+      'UTM Campaign',
+      'Total Visits',
+      'Total Sessions',
+      'First Seen',
+      'Last Seen',
+      'MSISDN Confidence',
+      'User Agent'
+    ];
+
+    // CSV Rows
+    const rows = groupedData.map(group => {
+      const session = group.latestSession;
+      // Format MSISDN as text for Excel (prefix with ' to prevent scientific notation)
+      const msisdnForExcel = group.msisdn ? `'${group.msisdn}` : 'Not detected';
+      return [
+        msisdnForExcel,
+        session.ip || '',
+        session.networkType || 'UNKNOWN',
+        session.carrier || '',
+        session.device?.type || '',
+        session.device?.browser || '',
+        session.device?.os || '',
+        session.landingPageSlug ? `/lp/${session.landingPageSlug}` : 'Main Site',
+        group.landingPages.map(lp => `/lp/${lp}`).join('; ') || 'None',
+        session.referrer || '',
+        session.utm?.source || '',
+        session.utm?.medium || '',
+        session.utm?.campaign || '',
+        group.totalVisits.toString(),
+        group.sessions.length.toString(),
+        new Date(group.firstSeenAt).toLocaleString('de-DE'),
+        new Date(session.lastSeenAt).toLocaleString('de-DE'),
+        session.msisdnConfidence || 'NONE',
+        session.userAgent || ''
+      ];
+    });
+
+    // Escape CSV values
+    const escapeCSV = (value: string) => {
+      if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+        return `"${value.replace(/"/g, '""')}"`;
+      }
+      return value;
+    };
+
+    // Build CSV content
+    const csvContent = [
+      headers.map(escapeCSV).join(','),
+      ...rows.map(row => row.map(escapeCSV).join(','))
+    ].join('\n');
+
+    // Add BOM for Excel UTF-8 compatibility
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    
+    // Generate filename with date and filter info
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    let filename = `visitor-sessions-${dateStr}`;
+    if (selectedPage) {
+      filename += `-${selectedPage}`;
+    }
+    if (dateFrom) {
+      filename += `-from-${dateFrom}`;
+    }
+    if (dateTo) {
+      filename += `-to-${dateTo}`;
+    }
+    filename += '.csv';
+
+    // Download
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -199,8 +488,8 @@ export function TrackingAnalytics() {
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Landing Page Analytics</h1>
-          <p className="text-muted-foreground">Track visitor sessions and MSISDN captures</p>
+          <h1 className="text-2xl font-bold">Visitor Analytics</h1>
+          <p className="text-muted-foreground">Track visitor sessions, MSISDN captures, and conversions across all pages</p>
         </div>
         <Button variant="outline" onClick={loadData}>
           <RefreshCw className="h-4 w-4 mr-2" />
@@ -248,40 +537,109 @@ export function TrackingAnalytics() {
         </div>
       )}
 
-      {/* Landing Page Performance */}
+      {/* Page Performance - Clickable to filter visitors */}
       {landingPageStats.length > 0 && (
         <Card className="mb-6">
           <CardHeader className="py-3 px-4 border-b">
-            <CardTitle className="text-base font-medium">Landing Page Performance</CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-base font-medium">
+                Page Performance (Click to filter visitors)
+              </CardTitle>
+              {selectedPage && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setSelectedPage(null)}
+                  className="text-xs"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Clear Filter
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="p-4">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="text-left p-3 text-sm font-medium text-gray-500">Landing Page</th>
-                    <th className="text-left p-3 text-sm font-medium text-gray-500">Visits</th>
-                    <th className="text-left p-3 text-sm font-medium text-gray-500">Unique</th>
-                    <th className="text-left p-3 text-sm font-medium text-gray-500">MSISDN</th>
-                    <th className="text-left p-3 text-sm font-medium text-gray-500">Rate</th>
-                    <th className="text-left p-3 text-sm font-medium text-gray-500">Top Source</th>
+                    <th className="text-left p-3 text-sm font-medium text-gray-500">Page</th>
+                    <th className="text-left p-3 text-sm font-medium text-gray-500">Type</th>
+                    <th className="text-center p-3 text-sm font-medium text-gray-500">Visits</th>
+                    <th className="text-center p-3 text-sm font-medium text-gray-500">Unique</th>
+                    <th className="text-center p-3 text-sm font-medium text-gray-500">
+                      <div className="flex items-center justify-center gap-1">
+                        <Phone className="h-3 w-3" />
+                        MSISDN
+                      </div>
+                    </th>
+                    <th className="text-center p-3 text-sm font-medium text-gray-500">
+                      <div className="flex items-center justify-center gap-1">
+                        <Smartphone className="h-3 w-3" />
+                        Mobile
+                      </div>
+                    </th>
+                    <th className="text-center p-3 text-sm font-medium text-gray-500">
+                      <div className="flex items-center justify-center gap-1">
+                        <Globe className="h-3 w-3" />
+                        WiFi
+                      </div>
+                    </th>
+                    <th className="text-center p-3 text-sm font-medium text-gray-500">Rate</th>
+                    <th className="text-left p-3 text-sm font-medium text-gray-500">Source</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {landingPageStats.map((lp) => (
-                    <tr key={lp.slug} className="hover:bg-gray-50">
-                      <td className="p-3 font-medium">{lp.name || lp.slug}</td>
-                      <td className="p-3">{lp.totalVisits}</td>
-                      <td className="p-3">{lp.uniqueVisitors}</td>
-                      <td className="p-3 text-green-600 font-medium">{lp.msisdnCaptured}</td>
-                      <td className="p-3">
-                        <Badge variant={lp.conversionRate > 50 ? 'default' : 'outline'}>
-                          {lp.conversionRate.toFixed(1)}%
-                        </Badge>
-                      </td>
-                      <td className="p-3 text-gray-500">{lp.topSource || '-'}</td>
-                    </tr>
-                  ))}
+                  {landingPageStats.map((lp) => {
+                    const isSelected = selectedPage === lp.slug;
+                    return (
+                      <tr 
+                        key={lp.slug} 
+                        className={`cursor-pointer transition-colors ${
+                          isSelected 
+                            ? 'bg-blue-100 hover:bg-blue-150 ring-2 ring-blue-500 ring-inset' 
+                            : lp.type === 'main_site' 
+                              ? 'bg-blue-50 hover:bg-blue-100' 
+                              : 'hover:bg-gray-100'
+                        }`}
+                        onClick={() => setSelectedPage(isSelected ? null : lp.slug)}
+                      >
+                        <td className="p-3 font-medium">
+                          <div className="flex items-center gap-2">
+                            {isSelected && <MousePointer className="h-3 w-3 text-blue-600" />}
+                            <span>{lp.name || lp.slug}</span>
+                            {lp.type === 'landing_page' && (
+                              <span className="text-xs text-gray-400">/lp/{lp.slug}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <Badge variant={lp.type === 'main_site' ? 'default' : 'outline'} className="text-xs">
+                            {lp.type === 'main_site' ? 'Main' : 'LP'}
+                          </Badge>
+                        </td>
+                        <td className="p-3 text-center">{lp.totalVisits}</td>
+                        <td className="p-3 text-center">{lp.uniqueVisitors}</td>
+                        <td className="p-3 text-center">
+                          <span className={`font-medium ${lp.msisdnCaptured > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                            {lp.msisdnCaptured}
+                          </span>
+                        </td>
+                        <td className="p-3 text-center">
+                          <span className="text-blue-600">{lp.mobileDataVisits || 0}</span>
+                        </td>
+                        <td className="p-3 text-center">
+                          <span className="text-purple-600">{lp.wifiVisits || 0}</span>
+                        </td>
+                        <td className="p-3 text-center">
+                          <Badge variant={lp.conversionRate > 50 ? 'default' : 'outline'}>
+                            {lp.conversionRate.toFixed(1)}%
+                          </Badge>
+                        </td>
+                        <td className="p-3 text-gray-500 text-sm">{lp.topSource || 'direct'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -317,16 +675,62 @@ export function TrackingAnalytics() {
                 className="w-36 h-9"
               />
             </div>
+            {/* Mobile Only Filter */}
+            <label className="flex items-center gap-2 cursor-pointer select-none ml-2">
+              <input
+                type="checkbox"
+                checked={mobileOnly}
+                onChange={(e) => setMobileOnly(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700 flex items-center gap-1">
+                <Smartphone className="h-3.5 w-3.5" />
+                Mobile Data Only
+              </span>
+            </label>
           </div>
         </CardContent>
       </Card>
 
-      {/* Sessions List */}
+      {/* Sessions List - Grouped by MSISDN */}
       <Card>
         <CardHeader className="py-3 px-4 border-b">
-          <div className="flex justify-between items-center">
-            <CardTitle className="text-base font-medium">Visitor Sessions</CardTitle>
-            <span className="text-sm text-muted-foreground">{filteredSessions.length} sessions</span>
+          <div className="flex justify-between items-center flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base font-medium">Visitor Sessions</CardTitle>
+              {selectedPage && (
+                <Badge variant="default" className="bg-blue-600">
+                  <Filter className="h-3 w-3 mr-1" />
+                  {selectedPage === 'main-site' ? 'Main Site' : `/lp/${selectedPage}`}
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">
+                {filteredSessions.length} sessions | {groupSessionsByMsisdn(filteredSessions).length} unique visitors
+              </span>
+              {selectedPage && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setSelectedPage(null)}
+                  className="text-xs h-7"
+                >
+                  Show All
+                </Button>
+              )}
+              {/* Export Button */}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={exportToCSV}
+                disabled={filteredSessions.length === 0}
+                className="text-xs h-7"
+              >
+                <Download className="h-3 w-3 mr-1" />
+                Export CSV
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -334,48 +738,145 @@ export function TrackingAnalytics() {
             <div className="text-center py-12 text-gray-500">
               <Globe className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="font-medium">No sessions found</p>
-              <p className="text-sm">Sessions will appear when visitors land on your landing pages</p>
+              <p className="text-sm">
+                {selectedPage 
+                  ? `No visitors for ${selectedPage === 'main-site' ? 'Main Site' : `/lp/${selectedPage}`}` 
+                  : 'Sessions will appear when visitors land on your pages'}
+              </p>
+              {selectedPage && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setSelectedPage(null)}
+                  className="mt-4"
+                >
+                  Show All Visitors
+                </Button>
+              )}
             </div>
           ) : (
             <div className="divide-y">
-              {filteredSessions.slice(0, 50).map((session) => (
-                <div key={session._id} className="hover:bg-gray-50">
+              {/* Sortable Header Row */}
+              <div className="px-4 py-2 bg-gray-50 border-b flex items-center gap-4 text-xs font-medium text-gray-600">
+                <div className="w-8"></div> {/* Device icon space */}
+                <button 
+                  onClick={() => toggleSort('msisdn')}
+                  className="flex items-center hover:text-gray-900 min-w-[140px]"
+                >
+                  Phone/IP {getSortIcon('msisdn')}
+                </button>
+                <button 
+                  onClick={() => toggleSort('network')}
+                  className="flex items-center hover:text-gray-900 min-w-[80px]"
+                >
+                  Network {getSortIcon('network')}
+                </button>
+                <button 
+                  onClick={() => toggleSort('carrier')}
+                  className="flex items-center hover:text-gray-900 min-w-[70px]"
+                >
+                  Carrier {getSortIcon('carrier')}
+                </button>
+                <button 
+                  onClick={() => toggleSort('page')}
+                  className="flex items-center hover:text-gray-900 min-w-[80px]"
+                >
+                  Page {getSortIcon('page')}
+                </button>
+                <button 
+                  onClick={() => toggleSort('referrer')}
+                  className="flex items-center hover:text-gray-900 flex-1"
+                >
+                  Referrer {getSortIcon('referrer')}
+                </button>
+                <button 
+                  onClick={() => toggleSort('visits')}
+                  className="flex items-center hover:text-gray-900 min-w-[60px]"
+                >
+                  Visits {getSortIcon('visits')}
+                </button>
+                <button 
+                  onClick={() => toggleSort('firstSeen')}
+                  className="flex items-center hover:text-gray-900 min-w-[90px]"
+                >
+                  First Seen {getSortIcon('firstSeen')}
+                </button>
+                <button 
+                  onClick={() => toggleSort('lastSeen')}
+                  className="flex items-center hover:text-gray-900 min-w-[90px]"
+                >
+                  Last Seen {getSortIcon('lastSeen')}
+                </button>
+              </div>
+              {getSortedGroupedData().slice(0, 50).map((group) => (
+                <div key={group.key} className="hover:bg-gray-50">
                   {/* Session Row */}
                   <div 
                     className="p-4 cursor-pointer flex items-center justify-between"
-                    onClick={() => setExpandedSession(expandedSession === session._id ? null : session._id)}
+                    onClick={() => setExpandedSession(expandedSession === group.key ? null : group.key)}
                   >
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2 text-gray-400">
-                        {getDeviceIcon(session.device?.type)}
+                        {getDeviceIcon(group.latestSession.device?.type)}
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          {session.msisdn ? (
-                            <span className="font-medium text-green-600">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {group.msisdn ? (
+                            <span className="font-medium text-green-600 font-mono">
                               <Phone className="h-3 w-3 inline mr-1" />
-                              {session.msisdn.slice(0, -4)}****{session.msisdn.slice(-2)}
+                              {group.msisdn}
                             </span>
                           ) : (
-                            <span className="text-gray-500 text-sm">{session.ip}</span>
+                            <span className="text-gray-500 text-sm font-mono">{group.latestSession.ip}</span>
                           )}
-                          {getConfidenceBadge(session.msisdnConfidence)}
-                          {getNetworkBadge(session.networkType)}
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-gray-500 mt-1">
-                          <span>{session.device?.browser} on {session.device?.os}</span>
-                          {session.landingPageSlug && (
-                            <span className="text-blue-600">/lp/{session.landingPageSlug}</span>
+                          {getConfidenceBadge(group.latestSession.msisdnConfidence)}
+                          {getNetworkBadge(group.latestSession.networkType)}
+                          {group.latestSession.carrier && (
+                            <Badge variant="outline" className="text-xs">{group.latestSession.carrier}</Badge>
                           )}
                         </div>
+                        <div className="flex items-center gap-4 text-sm text-gray-500 mt-1 flex-wrap">
+                          <span>{group.latestSession.device?.browser} on {group.latestSession.device?.os}</span>
+                          {/* Show current page/landing page */}
+                          {group.latestSession.landingPageSlug ? (
+                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
+                              📍 /lp/{group.latestSession.landingPageSlug}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600">
+                              📍 Main Site
+                            </Badge>
+                          )}
+                          {/* Show other landing pages visited */}
+                          {group.landingPages.length > 0 && !group.landingPages.includes(group.latestSession.landingPageSlug || '') && (
+                            <span className="text-blue-600 text-xs">
+                              Also: {group.landingPages.filter(lp => lp !== group.latestSession.landingPageSlug).map(lp => `/lp/${lp}`).join(', ')}
+                            </span>
+                          )}
+                        </div>
+                        {/* Referrer - where they came from */}
+                        {group.latestSession.referrer && (
+                          <div className="text-xs text-orange-600 mt-1 truncate max-w-lg" title={group.latestSession.referrer}>
+                            <span className="text-gray-500 mr-1">Came from:</span>
+                            {group.latestSession.referrer}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-right text-sm">
-                        <div className="font-medium">{session.pageViews} views</div>
-                        <div className="text-gray-500">{formatDate(session.lastSeenAt)}</div>
+                        <div className="font-medium">
+                          {group.totalVisits} visit{group.totalVisits > 1 ? 's' : ''}
+                          {group.sessions.length > 1 && (
+                            <span className="text-gray-400 ml-1">({group.sessions.length} sessions)</span>
+                          )}
+                        </div>
+                        <div className="text-gray-500">{formatDate(group.latestSession.lastSeenAt)}</div>
+                        {group.firstSeenAt !== group.latestSession.lastSeenAt && (
+                          <div className="text-xs text-gray-400">First: {formatDate(group.firstSeenAt)}</div>
+                        )}
                       </div>
-                      {expandedSession === session._id ? (
+                      {expandedSession === group.key ? (
                         <ChevronUp className="h-4 w-4 text-gray-400" />
                       ) : (
                         <ChevronDown className="h-4 w-4 text-gray-400" />
@@ -384,52 +885,72 @@ export function TrackingAnalytics() {
                   </div>
 
                   {/* Expanded Details */}
-                  {expandedSession === session._id && (
+                  {expandedSession === group.key && (
                     <div className="px-4 pb-4 bg-gray-50 border-t">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-4">
                         <div>
-                          <p className="text-xs text-gray-500 uppercase">Session ID</p>
-                          <p className="font-mono text-sm truncate">{session.sessionId}</p>
+                          <p className="text-xs text-gray-500 uppercase">Mobile Number (Full)</p>
+                          <p className="font-mono text-sm font-medium text-green-600">{group.msisdn || 'Not detected'}</p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500 uppercase">IP Address</p>
-                          <p className="font-mono text-sm">{session.ip}</p>
+                          <p className="font-mono text-sm">{group.latestSession.ip}</p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500 uppercase">First Seen</p>
-                          <p className="text-sm">{formatDate(session.firstSeenAt)}</p>
+                          <p className="text-sm">{formatDate(group.firstSeenAt)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500 uppercase">Last Seen</p>
-                          <p className="text-sm">{formatDate(session.lastSeenAt)}</p>
+                          <p className="text-sm">{formatDate(group.latestSession.lastSeenAt)}</p>
                         </div>
-                        {session.utm?.source && (
+                        <div>
+                          <p className="text-xs text-gray-500 uppercase">Total Sessions</p>
+                          <p className="text-sm font-medium">{group.sessions.length}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 uppercase">Total Page Views</p>
+                          <p className="text-sm font-medium">{group.totalVisits}</p>
+                        </div>
+                        {group.latestSession.utm?.source && (
                           <div>
                             <p className="text-xs text-gray-500 uppercase">UTM Source</p>
-                            <p className="text-sm">{session.utm.source}</p>
+                            <p className="text-sm">{group.latestSession.utm.source}</p>
                           </div>
                         )}
-                        {session.utm?.campaign && (
+                        {group.latestSession.utm?.campaign && (
                           <div>
                             <p className="text-xs text-gray-500 uppercase">Campaign</p>
-                            <p className="text-sm">{session.utm.campaign}</p>
+                            <p className="text-sm">{group.latestSession.utm.campaign}</p>
                           </div>
                         )}
-                        {session.referrer && (
-                          <div>
-                            <p className="text-xs text-gray-500 uppercase">Referrer</p>
-                            <p className="text-sm truncate">{session.referrer}</p>
-                          </div>
-                        )}
-                        {session.carrier && (
+                        {group.latestSession.carrier && (
                           <div>
                             <p className="text-xs text-gray-500 uppercase">Carrier</p>
-                            <p className="text-sm">{session.carrier}</p>
+                            <p className="text-sm">{group.latestSession.carrier}</p>
                           </div>
                         )}
                       </div>
-                      <div className="text-xs text-gray-400 border-t pt-2">
-                        User Agent: {session.userAgent}
+                      {/* Referrer - Full URL */}
+                      {group.latestSession.referrer && (
+                        <div className="border-t pt-2 mt-2">
+                          <p className="text-xs text-gray-500 uppercase mb-1">Referrer (Full URL)</p>
+                          <p className="text-sm text-orange-600 break-all">{group.latestSession.referrer}</p>
+                        </div>
+                      )}
+                      {/* Landing Pages Visited */}
+                      {group.landingPages.length > 0 && (
+                        <div className="border-t pt-2 mt-2">
+                          <p className="text-xs text-gray-500 uppercase mb-1">Landing Pages Visited</p>
+                          <div className="flex flex-wrap gap-1">
+                            {group.landingPages.map(lp => (
+                              <Badge key={lp} variant="outline" className="text-xs">/lp/{lp}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div className="text-xs text-gray-400 border-t pt-2 mt-2">
+                        User Agent: {group.latestSession.userAgent}
                       </div>
                     </div>
                   )}

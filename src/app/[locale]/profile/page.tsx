@@ -2,12 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations, useLocale } from 'next-intl';
-import { User, Mail, Calendar, Shield, LogOut, Loader2, Settings, Bookmark, Heart, Edit, Save, X, Eye, Lock, ShoppingBag, ExternalLink } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useLocale } from 'next-intl';
+import { Smartphone, Calendar, ShoppingBag, ExternalLink, Loader2, Wifi, AlertCircle, CheckCircle } from 'lucide-react';
 import { useBrand } from '@/lib/brand/context';
-import type { SafeUser } from '@/lib/db/models/user';
 import { Link } from '@/i18n/navigation';
 
 interface Purchase {
@@ -23,52 +20,51 @@ interface Purchase {
   status: string;
 }
 
+interface NetworkInfo {
+  networkType: 'MOBILE_DATA' | 'WIFI' | 'UNKNOWN';
+  isMobileNetwork: boolean;
+  carrier?: {
+    name: string;
+  };
+}
+
 export default function ProfilePage() {
-  const t = useTranslations();
   const locale = useLocale();
   const router = useRouter();
   const brand = useBrand();
   
-  const [user, setUser] = useState<SafeUser | null>(null);
+  const [msisdn, setMsisdn] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-  
-  // Edit mode states
-  const [editMode, setEditMode] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  
-  // Password change states
-  const [showPasswordChange, setShowPasswordChange] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
   
   // Purchases
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [purchasesSummary, setPurchasesSummary] = useState({ totalPurchases: 0, totalSpent: 0 });
   const [loadingPurchases, setLoadingPurchases] = useState(true);
-  const [activeTab, setActiveTab] = useState<'profile' | 'purchases' | 'security'>('profile');
 
   useEffect(() => {
-    const fetchUser = async () => {
+    const initializeProfile = async () => {
       try {
-        const response = await fetch('/api/auth/me');
-        const data = await response.json();
+        // Get MSISDN from cookie
+        const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+          const [key, value] = cookie.trim().split('=');
+          acc[key] = value;
+          return acc;
+        }, {} as Record<string, string>);
 
-        if (!response.ok) {
-          router.push(`/${locale}/login`);
-          return;
+        const msisdnValue = cookies['user_msisdn'];
+        if (msisdnValue) {
+          setMsisdn(msisdnValue);
         }
 
-        setUser(data.user);
-        setEditName(data.user.name || '');
+        // Detect network type
+        const networkResponse = await fetch('/api/network/detect');
+        if (networkResponse.ok) {
+          const networkData = await networkResponse.json();
+          setNetworkInfo(networkData);
+        }
       } catch (error) {
-        console.error('Failed to fetch user:', error);
-        router.push(`/${locale}/login`);
+        console.error('Failed to initialize profile:', error);
       } finally {
         setIsLoading(false);
       }
@@ -89,93 +85,24 @@ export default function ProfilePage() {
       }
     };
 
-    fetchUser();
+    initializeProfile();
     fetchPurchases();
   }, [locale, router]);
-
-  const handleLogout = async () => {
-    setIsLoggingOut(true);
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      router.push(`/${locale}`);
-      router.refresh();
-    } catch (error) {
-      console.error('Logout failed:', error);
-    } finally {
-      setIsLoggingOut(false);
-    }
-  };
-
-  const handleSaveProfile = async () => {
-    setIsSaving(true);
-    setSaveError(null);
-    try {
-      const response = await fetch('/api/auth/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editName }),
-      });
-      const data = await response.json();
-      
-      if (!response.ok) {
-        setSaveError(data.error || 'Failed to save');
-        return;
-      }
-      
-      setUser(data.user);
-      setEditMode(false);
-    } catch (error) {
-      setSaveError('Failed to save profile');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleChangePassword = async () => {
-    setPasswordError(null);
-    setPasswordSuccess(false);
-
-    if (newPassword !== confirmPassword) {
-      setPasswordError(locale === 'de' ? 'Passwörter stimmen nicht überein' : 'Passwords do not match');
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      setPasswordError(locale === 'de' ? 'Passwort muss mindestens 8 Zeichen haben' : 'Password must be at least 8 characters');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const response = await fetch('/api/auth/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
-      const data = await response.json();
-      
-      if (!response.ok) {
-        setPasswordError(data.error || 'Failed to change password');
-        return;
-      }
-      
-      setPasswordSuccess(true);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setShowPasswordChange(false);
-    } catch (error) {
-      setPasswordError('Failed to change password');
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const formatAmount = (amount: number, currency: string) => {
     return new Intl.NumberFormat(locale === 'de' ? 'de-DE' : 'en-US', {
       style: 'currency',
       currency: currency || 'EUR',
     }).format(amount / 100);
+  };
+
+  const formatMsisdn = (msisdn: string) => {
+    // Format MSISDN to be more readable (e.g., +49 123 456 789)
+    if (!msisdn) return '';
+    if (msisdn.length > 6) {
+      return msisdn.substring(0, 3) + ' ' + msisdn.substring(3, 6) + ' ' + msisdn.substring(6);
+    }
+    return msisdn;
   };
 
   if (isLoading) {
@@ -186,12 +113,8 @@ export default function ProfilePage() {
     );
   }
 
-  if (!user) {
-    return null; // Will redirect
-  }
-
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Profile Header */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
         <div 
@@ -202,322 +125,228 @@ export default function ProfilePage() {
         <div className="px-6 pb-6">
           <div className="flex flex-col sm:flex-row sm:items-end gap-4 -mt-12 sm:-mt-16">
             <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-2xl bg-white shadow-lg flex items-center justify-center border-4 border-white">
-              {user.avatar ? (
-                <img src={user.avatar} alt={user.name} className="w-full h-full rounded-xl object-cover" />
-              ) : (
-                <span className="text-4xl sm:text-5xl font-bold text-slate-400">
-                  {user.name?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
-                </span>
-              )}
+              <Smartphone className="h-12 w-12 sm:h-16 sm:w-16 text-slate-400" />
             </div>
             
             <div className="flex-1 sm:pb-2">
-              <h1 className="text-2xl font-bold text-slate-900">{user.name || 'User'}</h1>
-              <p className="text-slate-600">{user.email}</p>
-            </div>
-            
-            <div className="flex gap-2 sm:pb-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-                onClick={handleLogout}
-                disabled={isLoggingOut}
-              >
-                {isLoggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
-                {t('auth.logout')}
-              </Button>
+              <h1 className="text-2xl font-bold text-slate-900">
+                {locale === 'de' ? 'Mein Profil' : 'My Profile'}
+              </h1>
+              <p className="text-slate-600">
+                {msisdn ? formatMsisdn(msisdn) : (locale === 'de' ? 'Telefonnummer wird erkannt...' : 'Detecting phone number...')}
+              </p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Network Status Banner */}
+      {networkInfo && (
+        <div 
+          className="mb-6 rounded-xl p-4 flex items-center gap-3"
+          style={{
+            backgroundColor: networkInfo.isMobileNetwork ? '#dcfce7' : '#fef3c7',
+            border: `1px solid ${networkInfo.isMobileNetwork ? '#86efac' : '#fde047'}`,
+          }}
+        >
+          {networkInfo.isMobileNetwork ? (
+            <>
+              <CheckCircle 
+                className="h-5 w-5 flex-shrink-0" 
+                style={{ color: '#15803d' }}
+              />
+              <div style={{ color: '#15803d' }}>
+                <p className="font-semibold">
+                  {locale === 'de' ? 'Mobile Daten aktiv' : 'Mobile Data Active'}
+                </p>
+                <p className="text-sm opacity-90">
+                  {networkInfo.carrier 
+                    ? `${networkInfo.carrier.name}` 
+                    : (locale === 'de' ? 'Sie können Artikel kaufen' : 'You can purchase articles')
+                  }
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <AlertCircle 
+                className="h-5 w-5 flex-shrink-0" 
+                style={{ color: '#92400e' }}
+              />
+              <div style={{ color: '#92400e' }}>
+                <p className="font-semibold">
+                  {locale === 'de' ? 'WiFi erkannt' : 'WiFi Detected'}
+                </p>
+                <p className="text-sm opacity-90">
+                  {locale === 'de' 
+                    ? 'Bitte wechseln Sie zu mobilen Daten, um Artikel zu kaufen'
+                    : 'Please switch to mobile data to purchase articles'
+                  }
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="bg-white rounded-xl p-5 border border-slate-100 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-              <Bookmark className="h-5 w-5 text-blue-600" />
+            <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center">
+              <ShoppingBag className="h-6 w-6 text-green-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-900">0</p>
-              <p className="text-sm text-slate-600">{t('nav.bookmarks')}</p>
+              <p className="text-3xl font-bold text-slate-900">{purchasesSummary.totalPurchases}</p>
+              <p className="text-sm text-slate-600">{locale === 'de' ? 'Gekaufte Artikel' : 'Purchased Articles'}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
+        <div className="bg-white rounded-xl p-5 border border-slate-100 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
-              <Heart className="h-5 w-5 text-red-600" />
+            <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
+              <Calendar className="h-6 w-6 text-blue-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-900">0</p>
-              <p className="text-sm text-slate-600">{locale === 'de' ? 'Favoriten' : 'Favorites'}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-              <ShoppingBag className="h-5 w-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-900">{purchasesSummary.totalPurchases}</p>
-              <p className="text-sm text-slate-600">{locale === 'de' ? 'Gekauft' : 'Purchased'}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-              <Calendar className="h-5 w-5 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-900">
-                {new Date(user.createdAt).toLocaleDateString(locale, { month: 'short', year: 'numeric' })}
+              <p className="text-lg font-bold text-slate-900">
+                {purchasesSummary.totalSpent > 0 
+                  ? formatAmount(purchasesSummary.totalSpent, 'EUR')
+                  : '€0.00'
+                }
               </p>
-              <p className="text-sm text-slate-600">{locale === 'de' ? 'Dabei seit' : 'Joined'}</p>
+              <p className="text-sm text-slate-600">{locale === 'de' ? 'Gesamt ausgegeben' : 'Total Spent'}</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-slate-200">
-        {[
-          { id: 'profile', label: locale === 'de' ? 'Profil' : 'Profile', icon: User },
-          { id: 'purchases', label: locale === 'de' ? 'Käufe' : 'Purchases', icon: ShoppingBag },
-          { id: 'security', label: locale === 'de' ? 'Sicherheit' : 'Security', icon: Lock },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as typeof activeTab)}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab.id
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <tab.icon className="h-4 w-4" />
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Profile Tab */}
-      {activeTab === 'profile' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold text-slate-900">
-              {locale === 'de' ? 'Kontoinformationen' : 'Account Information'}
-            </h2>
-            {!editMode ? (
-              <Button variant="outline" size="sm" onClick={() => setEditMode(true)}>
-                <Edit className="h-4 w-4 mr-2" />
-                {locale === 'de' ? 'Bearbeiten' : 'Edit'}
-              </Button>
-            ) : (
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => { setEditMode(false); setEditName(user.name || ''); }}>
-                  <X className="h-4 w-4 mr-2" />
-                  {locale === 'de' ? 'Abbrechen' : 'Cancel'}
-                </Button>
-                <Button size="sm" onClick={handleSaveProfile} disabled={isSaving}>
-                  {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                  {locale === 'de' ? 'Speichern' : 'Save'}
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {saveError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-              {saveError}
-            </div>
-          )}
-          
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50">
-              <User className="h-5 w-5 text-slate-400" />
-              <div className="flex-1">
-                <p className="text-xs text-slate-500 uppercase tracking-wide">{t('auth.name')}</p>
-                {editMode ? (
-                  <Input
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="mt-1"
-                    placeholder={locale === 'de' ? 'Ihr Name' : 'Your name'}
-                  />
-                ) : (
-                  <p className="text-slate-900 font-medium">{user.name || '-'}</p>
-                )}
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50">
-              <Mail className="h-5 w-5 text-slate-400" />
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wide">{t('auth.email')}</p>
-                <p className="text-slate-900 font-medium">{user.email}</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50">
-              <Shield className="h-5 w-5 text-slate-400" />
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wide">
-                  {locale === 'de' ? 'Konto-Status' : 'Account Status'}
-                </p>
-                <p className="text-green-600 font-medium flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-green-500" />
-                  {locale === 'de' ? 'Aktiv' : 'Active'}
-                </p>
-              </div>
+      {/* How It Works Info */}
+      {!msisdn && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">
+          <div className="flex items-start gap-3">
+            <Smartphone className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-blue-900 mb-1">
+                {locale === 'de' ? 'Automatische Identifikation' : 'Automatic Identification'}
+              </h3>
+              <p className="text-sm text-blue-700 mb-3">
+                {locale === 'de' 
+                  ? 'Ihr Konto wird automatisch über Ihre Mobiltelefonnummer identifiziert. Kein Passwort erforderlich!'
+                  : 'Your account is automatically identified via your mobile phone number. No password required!'
+                }
+              </p>
+              <ul className="text-sm text-blue-700 space-y-1 ml-4">
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-500">•</span>
+                  <span>
+                    {locale === 'de' 
+                      ? 'Verwenden Sie mobile Daten (4G/5G) zum Kaufen'
+                      : 'Use mobile data (4G/5G) to make purchases'
+                    }
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-500">•</span>
+                  <span>
+                    {locale === 'de' 
+                      ? 'Ihre Käufe werden automatisch mit Ihrer Nummer verknüpft'
+                      : 'Your purchases are automatically linked to your number'
+                    }
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-500">•</span>
+                  <span>
+                    {locale === 'de' 
+                      ? 'Behalten Sie Zugriff auf alle gekauften Artikel'
+                      : 'Keep access to all purchased articles'
+                    }
+                  </span>
+                </li>
+              </ul>
             </div>
           </div>
         </div>
       )}
 
-      {/* Purchases Tab */}
-      {activeTab === 'purchases' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold text-slate-900">
-              {locale === 'de' ? 'Meine Käufe' : 'My Purchases'}
-            </h2>
-            {purchasesSummary.totalSpent > 0 && (
-              <div className="text-right">
-                <p className="text-sm text-slate-500">{locale === 'de' ? 'Gesamt ausgegeben' : 'Total spent'}</p>
-                <p className="text-xl font-bold text-slate-900">{formatAmount(purchasesSummary.totalSpent, 'EUR')}</p>
-              </div>
-            )}
-          </div>
+      {/* Purchases Section */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+        <h2 className="text-xl font-bold text-slate-900 mb-6">
+          {locale === 'de' ? 'Meine gekauften Artikel' : 'My Purchased Articles'}
+        </h2>
 
-          {loadingPurchases ? (
-            <div className="text-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto text-slate-400" />
-            </div>
-          ) : purchases.length === 0 ? (
-            <div className="text-center py-12">
-              <ShoppingBag className="h-12 w-12 mx-auto text-slate-300 mb-4" />
-              <p className="text-slate-500">{locale === 'de' ? 'Noch keine Käufe' : 'No purchases yet'}</p>
-              <Link href="/" className="text-blue-600 hover:underline mt-2 inline-block">
-                {locale === 'de' ? 'Artikel entdecken' : 'Discover articles'}
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {purchases.map((purchase) => (
-                <div key={purchase.id} className="flex items-center gap-4 p-4 border rounded-lg hover:bg-slate-50 transition-colors">
-                  {purchase.articleThumbnail && (
-                    <img 
-                      src={purchase.articleThumbnail} 
-                      alt="" 
-                      className="w-16 h-16 rounded-lg object-cover"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-slate-900 truncate">{purchase.articleTitle}</h3>
-                    <p className="text-sm text-slate-500">
+        {loadingPurchases ? (
+          <div className="text-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto text-slate-400" />
+          </div>
+        ) : purchases.length === 0 ? (
+          <div className="text-center py-12">
+            <ShoppingBag className="h-16 w-16 mx-auto text-slate-300 mb-4" />
+            <p className="text-lg font-medium text-slate-700 mb-2">
+              {locale === 'de' ? 'Noch keine Käufe' : 'No purchases yet'}
+            </p>
+            <p className="text-slate-500 mb-4">
+              {locale === 'de' 
+                ? 'Entdecken Sie unsere Artikel und kaufen Sie Ihren ersten!'
+                : 'Explore our articles and buy your first one!'
+              }
+            </p>
+            <Link 
+              href="/"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-lg font-medium text-white transition-colors"
+              style={{ backgroundColor: brand.primaryColor }}
+            >
+              {locale === 'de' ? 'Artikel durchstöbern' : 'Browse Articles'}
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {purchases.map((purchase) => (
+              <div 
+                key={purchase.id} 
+                className="flex items-center gap-4 p-4 border border-slate-200 rounded-xl hover:border-slate-300 hover:shadow-sm transition-all"
+              >
+                {purchase.articleThumbnail && (
+                  <img 
+                    src={purchase.articleThumbnail} 
+                    alt="" 
+                    className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-slate-900 mb-1 line-clamp-1">
+                    {purchase.articleTitle}
+                  </h3>
+                  <div className="flex items-center gap-3 text-sm text-slate-500">
+                    <span>
                       {new Date(purchase.purchasedAt).toLocaleDateString(locale, {
                         day: 'numeric',
-                        month: 'long',
+                        month: 'short',
                         year: 'numeric',
                       })}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-slate-900">{formatAmount(purchase.amount, purchase.currency)}</p>
-                    {purchase.articleSlug && (
-                      <Link 
-                        href={`/article/${purchase.articleSlug}`}
-                        className="text-sm text-blue-600 hover:underline flex items-center gap-1 justify-end"
-                      >
-                        {locale === 'de' ? 'Lesen' : 'Read'}
-                        <ExternalLink className="h-3 w-3" />
-                      </Link>
-                    )}
+                    </span>
+                    <span>•</span>
+                    <span className="font-medium text-slate-700">
+                      {formatAmount(purchase.amount, purchase.currency)}
+                    </span>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Security Tab */}
-      {activeTab === 'security' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-          <h2 className="text-lg font-bold text-slate-900 mb-4">
-            {locale === 'de' ? 'Passwort ändern' : 'Change Password'}
-          </h2>
-
-          {passwordSuccess && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
-              {locale === 'de' ? 'Passwort erfolgreich geändert!' : 'Password changed successfully!'}
-            </div>
-          )}
-
-          {passwordError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-              {passwordError}
-            </div>
-          )}
-
-          <div className="space-y-4 max-w-md">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                {locale === 'de' ? 'Aktuelles Passwort' : 'Current Password'}
-              </label>
-              <Input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="••••••••"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                {locale === 'de' ? 'Neues Passwort' : 'New Password'}
-              </label>
-              <Input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="••••••••"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                {locale === 'de' ? 'Mindestens 8 Zeichen' : 'Minimum 8 characters'}
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                {locale === 'de' ? 'Passwort bestätigen' : 'Confirm Password'}
-              </label>
-              <Input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-              />
-            </div>
-
-            <Button 
-              onClick={handleChangePassword} 
-              disabled={isSaving || !currentPassword || !newPassword || !confirmPassword}
-              className="w-full sm:w-auto"
-            >
-              {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
-              {locale === 'de' ? 'Passwort ändern' : 'Change Password'}
-            </Button>
+                {purchase.articleSlug && (
+                  <Link 
+                    href={`/article/${purchase.articleSlug}`}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-white text-sm transition-colors flex-shrink-0"
+                    style={{ backgroundColor: brand.primaryColor }}
+                  >
+                    {locale === 'de' ? 'Lesen' : 'Read'}
+                    <ExternalLink className="h-4 w-4" />
+                  </Link>
+                )}
+              </div>
+            ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

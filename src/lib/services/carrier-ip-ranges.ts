@@ -74,6 +74,35 @@ export const defaultCarrierIpRanges: CarrierInfo[] = [
       '31.164.0.0/14',
     ],
   },
+  // Cyprus
+  {
+    name: 'PrimeTel',
+    code: '280-01',
+    country: 'CY',
+    ipRanges: [
+      '82.102.0.0/16',
+      '82.116.0.0/14',
+      '217.175.0.0/16',  // Additional PrimeTel range
+    ],
+  },
+  {
+    name: 'Cyta',
+    code: '280-02',
+    country: 'CY',
+    ipRanges: [
+      '212.31.64.0/19',
+      '195.14.128.0/19',
+    ],
+  },
+  {
+    name: 'Epic (MTN Cyprus)',
+    code: '280-10',
+    country: 'CY',
+    ipRanges: [
+      '46.198.0.0/16',
+      '109.69.0.0/16',
+    ],
+  },
 ];
 
 /**

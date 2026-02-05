@@ -1,161 +1,118 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTrackingRepository, getCustomerRepository } from '@/lib/db';
-import { getBrandId } from '@/lib/brand/server';
-import { detectMsisdn, extractIpFromRequest, parseUserAgent } from '@/lib/services/msisdn-detection';
+import { getBrandIdSync } from '@/lib/brand/server';
+import { getUserRepository, getCustomerRepository, getTrackingRepository } from '@/lib/db';
+import { extractIpFromRequest } from '@/lib/services/msisdn-detection';
 import { detectNetworkType } from '@/lib/services/carrier-ip-ranges';
+import { normalizePhoneNumber } from '@/lib/utils/phone';
 
+export const dynamic = 'force-dynamic';
+
+/**
+ * POST /api/tracking/identify
+ * 
+ * Track page views for identified users (users with detected MSISDN)
+ * Called automatically by the MsisdnDetector component when navigating
+ */
 export async function POST(request: NextRequest) {
   try {
-    const brandId = await getBrandId();
     const body = await request.json();
-
-    const { sessionId } = body;
-
-    if (!sessionId) {
-      return NextResponse.json(
-        { error: 'sessionId is required' },
-        { status: 400 }
-      );
-    }
-
-    const trackingRepo = getTrackingRepository(brandId);
-    const customerRepo = getCustomerRepository(brandId);
-
-    // Get existing session
-    const session = await trackingRepo.findSession(sessionId);
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Session not found. Create session first.' },
-        { status: 404 }
-      );
-    }
-
-    // If MSISDN already confirmed, return early
-    if (session.msisdnConfidence === 'CONFIRMED') {
-      return NextResponse.json({
-        success: true,
-        detected: true,
-        msisdn: '***' + session.msisdn!.slice(-4),
-        confidence: session.msisdnConfidence,
-        networkType: session.networkType,
-        carrier: session.carrier,
-        alreadyDetected: true,
-      });
-    }
-
-    // Detect network type first
-    const ip = extractIpFromRequest(request);
-    const networkResult = detectNetworkType(ip);
-
-    // Update network type if not already set
-    if (session.networkType === 'UNKNOWN') {
-      await trackingRepo.updateSession(sessionId, {
-        networkType: networkResult.networkType,
-        carrier: networkResult.carrier?.name,
-        carrierCode: networkResult.carrier?.code,
-      });
-    }
-
-    // Attempt MSISDN detection
-    const detectionResult = await detectMsisdn(request, {
+    const { 
+      msisdn,
       sessionId,
-      skipDimocoFallback: false,
-    });
+      page,
+      landingPageSlug,
+      utm,
+    } = body;
 
-    // Update session with detection results
-    await trackingRepo.updateSession(sessionId, {
-      msisdn: detectionResult.msisdn,
-      normalizedMsisdn: detectionResult.normalizedMsisdn,
-      msisdnConfidence: detectionResult.confidence,
-      networkType: detectionResult.networkType,
-      carrier: detectionResult.carrier,
-      carrierCode: detectionResult.carrierCode,
-    });
-
-    // If MSISDN detected, create/update customer and backfill events
-    if (detectionResult.msisdn && detectionResult.normalizedMsisdn) {
-      // Backfill MSISDN on existing events for this session
-      await trackingRepo.backfillMsisdn(
-        sessionId,
-        detectionResult.msisdn,
-        detectionResult.normalizedMsisdn
-      );
-
-      // Upsert customer
-      await customerRepo.upsert({
-        msisdn: detectionResult.msisdn,
-        normalizedMsisdn: detectionResult.normalizedMsisdn,
-        tenantId: brandId,
-        sessionId,
-        landingPageSlug: session.landingPageSlug,
-        campaign: session.utm?.campaign,
-        source: session.utm?.source,
-      });
+    if (!msisdn) {
+      return NextResponse.json({ success: false, error: 'MSISDN required' }, { status: 400 });
     }
 
-    return NextResponse.json({
-      success: true,
-      detected: !!detectionResult.msisdn,
-      msisdn: detectionResult.msisdn ? '***' + detectionResult.msisdn.slice(-4) : null,
-      confidence: detectionResult.confidence,
-      networkType: detectionResult.networkType,
-      carrier: detectionResult.carrier,
-      detectionMethod: detectionResult.detectionMethod,
-      error: detectionResult.error,
-    });
-  } catch (error) {
-    console.error('[Tracking Identify API] Error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
-
-// GET endpoint for checking detection status
-export async function GET(request: NextRequest) {
-  try {
-    const brandId = await getBrandId();
-    const sessionId = request.nextUrl.searchParams.get('sessionId');
-
-    if (!sessionId) {
-      return NextResponse.json(
-        { error: 'sessionId is required' },
-        { status: 400 }
-      );
-    }
-
-    const trackingRepo = getTrackingRepository(brandId);
-    const session = await trackingRepo.findSession(sessionId);
-
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Session not found' },
-        { status: 404 }
-      );
-    }
-
-    // Also return network type detection based on current IP
     const ip = extractIpFromRequest(request);
-    const networkResult = detectNetworkType(ip);
+    const userAgent = request.headers.get('user-agent') || '';
+    const brandId = getBrandIdSync();
+    const normalizedMsisdn = normalizePhoneNumber(msisdn);
 
-    return NextResponse.json({
+    // Detect network type
+    const networkResult = detectNetworkType(ip);
+    const networkType = networkResult.isMobileNetwork ? 'MOBILE_DATA' : 'WIFI';
+    const carrier = networkResult.carrier?.name;
+
+    console.log('[Tracking Identify] Recording visit:', {
+      msisdn: msisdn.substring(0, 6) + '****',
+      sessionId: sessionId?.substring(0, 10) + '...',
+      page: page || landingPageSlug || 'main-site',
+      networkType,
+      carrier,
+    });
+
+    // Update visitor session with MSISDN if we have a sessionId
+    if (sessionId) {
+      try {
+        const trackingRepo = getTrackingRepository(brandId);
+        await trackingRepo.setSessionMsisdn(
+          sessionId,
+          msisdn,
+          normalizedMsisdn,
+          'CONFIRMED',
+          carrier
+        );
+        // Also update network type
+        await trackingRepo.updateSession(sessionId, {
+          networkType,
+          carrier,
+          lastSeenAt: new Date(),
+        });
+      } catch (trackingError) {
+        console.error('[Tracking Identify] Error updating session:', trackingError);
+      }
+    }
+
+    // Update user visit
+    try {
+      const userRepo = getUserRepository(brandId);
+      await userRepo.addVisit(normalizedMsisdn, {
+        ip,
+        userAgent,
+        referrer: request.headers.get('referer') || '',
+        page: page || '/',
+        sessionId: sessionId || '',
+      });
+
+      // If it's a landing page visit, also add to landing page visits
+      if (landingPageSlug) {
+        await userRepo.addLandingPageVisit(normalizedMsisdn, {
+          landingPageSlug,
+          utm,
+        });
+      }
+    } catch (userError) {
+      console.error('[Tracking Identify] Error updating user:', userError);
+    }
+
+    // Update customer visit
+    try {
+      const customerRepo = getCustomerRepository(brandId);
+      await customerRepo.recordVisit(normalizedMsisdn, {
+        sessionId: sessionId || '',
+        landingPageSlug,
+        campaign: utm?.campaign,
+        source: utm?.source,
+      });
+    } catch (customerError) {
+      console.error('[Tracking Identify] Error updating customer:', customerError);
+    }
+
+    return NextResponse.json({ 
       success: true,
-      detected: session.msisdnConfidence === 'CONFIRMED',
-      msisdn: session.msisdn ? '***' + session.msisdn.slice(-4) : null,
-      confidence: session.msisdnConfidence,
-      networkType: session.networkType,
-      carrier: session.carrier,
-      currentNetwork: {
-        type: networkResult.networkType,
-        isMobile: networkResult.isMobileNetwork,
-        carrier: networkResult.carrier?.name,
-      },
+      detected: true,
+      networkType,
+      carrier,
     });
   } catch (error) {
-    console.error('[Tracking Identify API] Error:', error);
+    console.error('[Tracking Identify] Error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { success: false, error: 'Failed to track' },
       { status: 500 }
     );
   }

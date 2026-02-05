@@ -190,16 +190,25 @@ export function AgentConfig() {
           });
         }
         
-        // Load categories
+        // Load categories - ALWAYS sync with Categories Manager as single source of truth
         if (data.settings?.categories && data.settings.categories.length > 0) {
           setCategories(data.settings.categories);
-          // Sync topics with enabled categories
+          // Get enabled category slugs from Categories Manager
           const enabledCategorySlugs = data.settings.categories
             .filter((c: Category) => c.enabled)
             .map((c: Category) => c.slug);
-          if (enabledCategorySlugs.length > 0 && !data.settings.agentConfig?.topics) {
-            setSettings(prev => ({ ...prev, topics: enabledCategorySlugs }));
-          }
+          
+          // Get previously selected topics from agentConfig
+          const savedTopics = data.settings.agentConfig?.topics || [];
+          
+          // Filter saved topics to only include those that are still enabled in Categories Manager
+          // This keeps user's selection but removes any that were disabled
+          const validTopics = savedTopics.filter((t: string) => enabledCategorySlugs.includes(t));
+          
+          // If no valid topics but there are enabled categories, auto-select all enabled
+          const finalTopics = validTopics.length > 0 ? validTopics : enabledCategorySlugs;
+          
+          setSettings(prev => ({ ...prev, topics: finalTopics }));
         }
       }
     } catch (err) {
@@ -887,7 +896,7 @@ export function AgentConfig() {
                 <div>
                   <p className="font-medium">Distribute Evenly</p>
                   <p className="text-sm text-muted-foreground">
-                    Spread {settings.maxArticlesPerRun} articles evenly across {settings.topics.length} enabled categories
+                    Spread {settings.maxArticlesPerRun} articles evenly across {settings.topics.filter(t => enabledCategories.some(c => c.slug === t)).length} selected categories
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">

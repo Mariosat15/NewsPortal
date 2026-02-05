@@ -121,3 +121,8 @@ export function maskPhoneNumber(msisdn: string): string {
 export function areSamePhoneNumber(msisdn1: string, msisdn2: string): boolean {
   return normalizePhoneNumber(msisdn1) === normalizePhoneNumber(msisdn2);
 }
+
+/**
+ * Alias for normalizePhoneNumber - commonly used for MSISDN context
+ */
+export const normalizeMsisdn = normalizePhoneNumber;

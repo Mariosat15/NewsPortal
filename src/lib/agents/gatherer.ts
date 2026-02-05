@@ -5,11 +5,28 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Default RSS feeds for German news
+// Default RSS feeds for German news - updated frequently with fresh content
 const defaultRSSFeeds: RSSFeed[] = [
+  // News - Major German sources with frequent updates
   { url: 'https://www.tagesschau.de/xml/rss2/', name: 'Tagesschau', category: 'news', language: 'de', enabled: true },
-  { url: 'https://www.spiegel.de/schlagzeilen/index.rss', name: 'Spiegel', category: 'news', language: 'de', enabled: true },
+  { url: 'https://rss.sueddeutsche.de/rss/Topthemen', name: 'Süddeutsche', category: 'news', language: 'de', enabled: true },
+  { url: 'https://www.zeit.de/news/index', name: 'Zeit Online', category: 'news', language: 'de', enabled: true },
+  
+  // Technology
   { url: 'https://www.heise.de/rss/heise-top-atom.xml', name: 'Heise', category: 'technology', language: 'de', enabled: true },
+  { url: 'https://www.golem.de/rss.php?feed=RSS2.0', name: 'Golem', category: 'technology', language: 'de', enabled: true },
+  
+  // Finance
+  { url: 'https://www.finanzen.net/rss/analysen', name: 'Finanzen.net', category: 'finance', language: 'de', enabled: true },
+  
+  // Sports
+  { url: 'https://rss.kicker.de/live/bundesliga', name: 'Kicker', category: 'sports', language: 'de', enabled: true },
+  
+  // Health
+  { url: 'https://www.aerzteblatt.de/rss/news.rss', name: 'Ärzteblatt', category: 'health', language: 'de', enabled: true },
+  
+  // Entertainment
+  { url: 'https://www.moviepilot.de/api/rss/news', name: 'Moviepilot', category: 'entertainment', language: 'de', enabled: true },
 ];
 
 // Calculate articles per category for even distribution
@@ -160,7 +177,22 @@ async function fetchRSSFeed(feed: RSSFeed): Promise<GatheredTopic['sources']> {
   }
 }
 
-// Parse RSS XML to extract items
+// Check if a date is within the last N hours
+function isRecentDate(dateStr: string, maxHoursOld: number = 48): boolean {
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return false;
+    
+    const now = new Date();
+    const hoursAgo = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+    
+    return hoursAgo <= maxHoursOld;
+  } catch {
+    return false;
+  }
+}
+
+// Parse RSS XML to extract items - ONLY RECENT ITEMS (last 48 hours)
 function parseRSSXML(xml: string, feed: RSSFeed): GatheredTopic['sources'] {
   const items: GatheredTopic['sources'] = [];
   
@@ -174,6 +206,12 @@ function parseRSSXML(xml: string, feed: RSSFeed): GatheredTopic['sources'] {
     const link = extractTag(itemXml, 'link') || extractTag(itemXml, 'guid');
     const description = extractTag(itemXml, 'description') || extractTag(itemXml, 'content:encoded');
     const pubDate = extractTag(itemXml, 'pubDate') || extractTag(itemXml, 'dc:date');
+    
+    // SKIP OLD ARTICLES - only include items from last 48 hours
+    if (pubDate && !isRecentDate(pubDate, 48)) {
+      console.log(`Skipping old article: "${title?.substring(0, 50)}..." (${pubDate})`);
+      continue;
+    }
     
     if (title && link) {
       // Clean HTML from description
@@ -196,10 +234,11 @@ function parseRSSXML(xml: string, feed: RSSFeed): GatheredTopic['sources'] {
       });
     }
     
-    // Limit to 10 items per feed
+    // Limit to 10 recent items per feed
     if (items.length >= 10) break;
   }
   
+  console.log(`Found ${items.length} recent items (last 48h) from ${feed.name}`);
   return items;
 }
 
@@ -215,58 +254,84 @@ async function generateTrendingTopics(
   topic: string,
   language: 'de' | 'en'
 ): Promise<GatheredTopic['sources']> {
-  const currentDate = new Date().toLocaleDateString(language === 'de' ? 'de-DE' : 'en-US', {
+  const now = new Date();
+  const currentDate = now.toLocaleDateString(language === 'de' ? 'de-DE' : 'en-US', {
+    weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric'
   });
+  const currentYear = now.getFullYear();
+  const currentMonth = now.toLocaleDateString(language === 'de' ? 'de-DE' : 'en-US', { month: 'long' });
 
   const systemPrompt = language === 'de'
-    ? `Du bist ein erfahrener Nachrichtenredakteur bei einer führenden deutschen Nachrichtenagentur (wie dpa, Reuters, AFP).
-       Deine Aufgabe ist es, die aktuellsten und relevantesten Nachrichtenthemen zu identifizieren.
+    ? `Du bist ein erfahrener Nachrichtenredakteur bei einer führenden deutschen Nachrichtenagentur.
        
-       WICHTIG:
-       - Konzentriere dich auf AKTUELLE Ereignisse und Entwicklungen
-       - Jedes Thema muss nachrichtenwürdig und von öffentlichem Interesse sein
-       - Verwende realistische Quellen (etablierte Medien, offizielle Stellen)
-       - Die Informationen sollten faktenbasiert und verifizierbar klingen
-       - Datum heute: ${currentDate}`
-    : `You are an experienced news editor at a leading news agency (like AP, Reuters, AFP).
-       Your task is to identify the most current and relevant news topics.
+       KRITISCH - AKTUALITÄT:
+       - Heute ist ${currentDate} (Jahr ${currentYear})
+       - Du MUSST NUR über Ereignisse schreiben, die HEUTE oder in den LETZTEN 24-48 STUNDEN passiert sind
+       - KEINE alten Nachrichten, KEINE historischen Ereignisse, KEINE zeitlosen Themen
+       - Jede Nachricht muss sich auf ein KONKRETES, AKTUELLES Ereignis beziehen
+       - Verwende Formulierungen wie "heute", "gestern", "am Montag", "diese Woche"
        
-       IMPORTANT:
-       - Focus on CURRENT events and developments
-       - Each topic must be newsworthy and of public interest
-       - Use realistic sources (established media, official sources)
-       - Information should sound fact-based and verifiable
-       - Today's date: ${currentDate}`;
+       BEISPIELE für GUTE aktuelle Themen:
+       - "Bundestag beschließt heute neues Gesetz..."
+       - "DAX erreicht am Dienstag neuen Höchststand..."
+       - "Wissenschaftler veröffentlichen diese Woche Studie..."
+       
+       BEISPIELE für SCHLECHTE/VERALTETE Themen (NICHT VERWENDEN):
+       - Allgemeine Tipps oder Ratgeber
+       - Historische Ereignisse
+       - Zeitlose Analysen ohne aktuellen Bezug`
+    : `You are an experienced news editor at a leading news agency.
+       
+       CRITICAL - FRESHNESS:
+       - Today is ${currentDate} (Year ${currentYear})
+       - You MUST ONLY write about events that happened TODAY or in the LAST 24-48 HOURS
+       - NO old news, NO historical events, NO evergreen topics
+       - Each story must reference a SPECIFIC, CURRENT event
+       - Use phrases like "today", "yesterday", "on Monday", "this week"
+       
+       EXAMPLES of GOOD current topics:
+       - "Congress passes new bill today..."
+       - "Stock market reaches new high on Tuesday..."
+       - "Scientists release study this week..."
+       
+       EXAMPLES of BAD/OUTDATED topics (DO NOT USE):
+       - General tips or guides
+       - Historical events
+       - Timeless analysis without current reference`;
 
   const userPrompt = language === 'de'
-    ? `Generiere 3 aktuelle, relevante Nachrichtenthemen für die Kategorie "${topic}".
+    ? `Generiere 3 BRANDAKTUELLE Nachrichtenthemen für die Kategorie "${topic}".
+       
+       DATUM HEUTE: ${currentDate}
+       
+       STRENGE ANFORDERUNGEN:
+       1. Jedes Thema MUSS ein Ereignis der letzten 24-48 Stunden beschreiben
+       2. Verwende spezifische Zeitangaben (heute, gestern, diese Woche, am ${currentMonth})
+       3. Beziehe dich auf konkrete aktuelle Entwicklungen ${currentYear}
        
        Für jedes Thema liefere:
-       - Einen präzisen Nachrichtentitel (wie bei dpa/Reuters)
-       - Eine faktische Zusammenfassung (80-120 Wörter) mit konkreten Details
-       - Eine glaubwürdige Quelle (Behörde, Institut, Unternehmen)
-       
-       Die Themen sollten:
-       - Aktuell und relevant für deutsche Leser sein
-       - Konkrete Fakten, Zahlen oder Zitate enthalten
-       - Verschiedene Aspekte der Kategorie abdecken
+       - Einen präzisen Nachrichtentitel mit Zeitbezug
+       - Eine faktische Zusammenfassung (80-120 Wörter) mit aktuellen Details
+       - Eine glaubwürdige aktuelle Quelle
        
        Antworte NUR als JSON Array:
        [{"title": "...", "snippet": "...", "source": "..."}]`
-    : `Generate 3 current, relevant news topics for the category "${topic}".
+    : `Generate 3 BREAKING/CURRENT news topics for the category "${topic}".
+       
+       TODAY'S DATE: ${currentDate}
+       
+       STRICT REQUIREMENTS:
+       1. Each topic MUST describe an event from the last 24-48 hours
+       2. Use specific time references (today, yesterday, this week, in ${currentMonth})
+       3. Reference concrete current developments in ${currentYear}
        
        For each topic provide:
-       - A precise news headline (like AP/Reuters style)
-       - A factual summary (80-120 words) with concrete details
-       - A credible source (agency, institute, company)
-       
-       Topics should be:
-       - Current and relevant for readers
-       - Include concrete facts, figures, or quotes
-       - Cover different aspects of the category
+       - A precise news headline with time reference
+       - A factual summary (80-120 words) with current details
+       - A credible current source
        
        Respond ONLY as JSON Array:
        [{"title": "...", "snippet": "...", "source": "..."}]`;
