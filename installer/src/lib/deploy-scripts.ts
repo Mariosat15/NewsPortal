@@ -67,12 +67,13 @@ BETTER_AUTH_URL=https://${config.domain.domain}
 
 # DIMOCO Payment
 DIMOCO_API_URL=${config.payment.dimocoApiUrl}
-DIMOCO_API_KEY=${config.payment.dimocoApiKey}
+DIMOCO_PASSWORD=${config.payment.dimocoApiKey}
 DIMOCO_MERCHANT_ID=${config.payment.dimocoMerchantId}
-DIMOCO_SERVICE_ID=${config.payment.dimocoServiceId}
+DIMOCO_ORDER_ID=${config.payment.dimocoServiceId}
 DIMOCO_CALLBACK_SECRET=${config.payment.dimocoCallbackSecret}
-DIMOCO_SUCCESS_URL=https://${config.domain.domain}/payment/success
-DIMOCO_CANCEL_URL=https://${config.domain.domain}/payment/cancel
+
+# Testing - Enable this to allow WiFi purchases (disable in production!)
+BYPASS_NETWORK_CHECK=false
 
 # Article pricing
 ARTICLE_PRICE_CENTS=${config.payment.articlePriceCents}
