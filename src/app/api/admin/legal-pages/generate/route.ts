@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth/admin';
-import { getBrandConfig } from '@/lib/brand/server';
+import { getServerBrandConfig } from '@/lib/brand/server';
 import OpenAI from 'openai';
 
 // POST /api/admin/legal-pages/generate - Generate legal content with AI
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get brand config for company info
-    const brand = await getBrandConfig();
+    const brand = await getServerBrandConfig();
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {

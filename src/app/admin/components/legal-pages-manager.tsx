@@ -60,11 +60,18 @@ export function LegalPagesManager() {
   const [activeTab, setActiveTab] = useState<'pages' | 'footer' | 'disclaimer'>('pages');
   
   // Form state
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    slug: string;
+    title: { de: string; en: string };
+    content: { de: string; en: string };
+    type: 'legal' | 'disclaimer' | 'info';
+    showInFooter: boolean;
+    isActive: boolean;
+  }>({
     slug: '',
     title: { de: '', en: '' },
     content: { de: '', en: '' },
-    type: 'legal' as const,
+    type: 'legal',
     showInFooter: false,
     isActive: true,
   });
