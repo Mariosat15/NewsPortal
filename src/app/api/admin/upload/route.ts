@@ -3,6 +3,7 @@ import { verifyAdmin } from '@/lib/auth/admin';
 import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
+import { clearSettingsCache } from '@/lib/brand/server';
 
 // POST /api/admin/upload - Upload an image file
 export async function POST(request: NextRequest) {
@@ -61,9 +62,10 @@ export async function POST(request: NextRequest) {
     
     let filename: string;
     if (type === 'logo') {
-      filename = `logo${ext}`;
+      // Add timestamp to logo filename for cache busting
+      filename = `logo_${timestamp}${ext}`;
     } else if (type === 'favicon') {
-      filename = `favicon${ext}`;
+      filename = `favicon_${timestamp}${ext}`;
     } else {
       filename = `${safeName}_${timestamp}${ext}`;
     }
@@ -76,8 +78,11 @@ export async function POST(request: NextRequest) {
     const filePath = path.join(uploadDir, filename);
     await writeFile(filePath, buffer);
 
-    // Return public URL
+    // Return public URL with cache buster
     const publicUrl = `/images/uploads/${filename}`;
+    
+    // Clear settings cache so the new logo URL is loaded immediately
+    clearSettingsCache();
     
     console.log(`[Upload] File saved: ${filePath} -> ${publicUrl}`);
 

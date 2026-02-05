@@ -465,6 +465,14 @@ export function BrandingSettings() {
                           const data = await res.json();
                           if (data.success) {
                             updateSetting('logoUrl', data.url);
+                            // Auto-save the logo URL to database so it takes effect immediately
+                            await fetch('/api/admin/settings', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ logoUrl: data.url }),
+                            });
+                            setSaved(true);
+                            setTimeout(() => setSaved(false), 2000);
                           } else {
                             alert(data.error || 'Upload failed');
                           }
@@ -481,11 +489,11 @@ export function BrandingSettings() {
                   </label>
                 </div>
                 {settings.logoUrl && (
-                  <div className="p-4 bg-gray-100 rounded-lg flex items-center justify-center">
+                  <div className="p-6 bg-gray-100 rounded-lg flex items-center justify-center">
                     <img 
                       src={settings.logoUrl} 
                       alt="Logo preview" 
-                      className="h-16 object-contain"
+                      className="h-24 max-w-full object-contain"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = '/images/logo.png';
                       }}

@@ -167,7 +167,7 @@ export function Header() {
               <img
                 src={brand.logoUrl}
                 alt={brand.name}
-                className="h-9 w-auto max-w-[180px] object-contain"
+                className="h-12 w-auto max-w-[220px] object-contain"
                 onError={(e) => {
                   // If logo fails to load, hide it and show text instead
                   (e.target as HTMLImageElement).style.display = 'none';
