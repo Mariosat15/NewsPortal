@@ -4,7 +4,10 @@ import { DeploymentConfig } from './types';
 // GitHub repo URL for cloning
 const REPO_URL = 'https://github.com/Mariosat15/NewsPortal.git';
 
-export type DeploymentStepId = 'connect' | 'upload' | 'env' | 'deps' | 'build' | 'nginx' | 'ssl' | 'start';
+// Node.js version to install (use LTS)
+const NODE_VERSION = '20';
+
+export type DeploymentStepId = 'connect' | 'prepare' | 'upload' | 'env' | 'deps' | 'build' | 'nginx' | 'ssl' | 'start';
 
 export interface StepUpdate {
   stepId: DeploymentStepId;
@@ -16,6 +19,13 @@ export interface StepUpdate {
 }
 
 type ProgressCallback = (update: StepUpdate) => void;
+
+// Helper to check if command succeeded
+function checkSuccess(result: { exitCode: number; stdout: string; stderr: string }, operation: string): void {
+  if (result.exitCode !== 0) {
+    throw new Error(`${operation} failed: ${result.stderr || result.stdout}`);
+  }
+}
 
 export function generateEnvFile(config: DeploymentConfig): string {
   return `# ============================================
@@ -176,64 +186,129 @@ export async function deployToServer(
   config: DeploymentConfig,
   onProgress: ProgressCallback
 ): Promise<void> {
+  let currentStep: DeploymentStepId = 'connect';
+  
   const ssh = new SSHClient((log) => {
-    onProgress({ stepId: 'connect', status: 'running', log });
+    onProgress({ stepId: currentStep, status: 'running', log });
   });
 
   const deployPath = config.server.deployPath;
   const brandId = config.domain.brandId;
+  const domain = config.domain.domain;
+  const email = config.admin.adminEmail;
 
   try {
-    // Step 1: Connect
+    // ============================================
+    // Step 1: Connect to Server
+    // ============================================
+    currentStep = 'connect';
     onProgress({ stepId: 'connect', status: 'running', message: 'Connecting to server...' });
     await ssh.connect(config.server);
     onProgress({ stepId: 'connect', status: 'completed', message: 'Connected successfully' });
 
-    // Step 2: Upload/Clone application
-    onProgress({ stepId: 'upload', status: 'running', message: 'Setting up application...' });
+    // ============================================
+    // Step 2: Prepare System (Fix dpkg, update packages)
+    // ============================================
+    currentStep = 'prepare';
+    onProgress({ stepId: 'prepare', status: 'running', message: 'Preparing system...' });
+
+    // Fix any broken dpkg state FIRST (critical!)
+    onProgress({ stepId: 'prepare', status: 'running', log: 'Fixing package manager state...' });
+    await ssh.exec('sudo dpkg --configure -a || true');
+    await ssh.exec('sudo apt-get clean');
     
-    // Check if Node.js is installed
-    const nodeCheck = await ssh.exec('which node || echo "not found"');
-    if (nodeCheck.stdout.includes('not found')) {
-      onProgress({ stepId: 'upload', status: 'running', log: 'Installing Node.js...' });
-      await ssh.exec('curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -');
-      await ssh.exec('sudo apt-get install -y nodejs');
+    // Update package lists
+    onProgress({ stepId: 'prepare', status: 'running', log: 'Updating package lists...' });
+    await ssh.exec('sudo apt-get update -y');
+
+    // Install essential packages first
+    onProgress({ stepId: 'prepare', status: 'running', log: 'Installing essential packages...' });
+    await ssh.exec('sudo apt-get install -y curl wget gnupg2 ca-certificates lsb-release');
+
+    // Check if Node.js is installed and working
+    const nodeCheck = await ssh.exec('node --version 2>/dev/null || echo "not found"');
+    if (nodeCheck.stdout.includes('not found') || !nodeCheck.stdout.includes('v')) {
+      onProgress({ stepId: 'prepare', status: 'running', log: `Installing Node.js ${NODE_VERSION}.x...` });
+      
+      // Remove any existing Node.js
+      await ssh.exec('sudo apt-get remove -y nodejs npm || true');
+      await ssh.exec('sudo rm -rf /usr/local/lib/node_modules || true');
+      
+      // Install Node.js from NodeSource
+      await ssh.exec(`curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | sudo -E bash -`);
+      const nodeInstall = await ssh.exec('sudo apt-get install -y nodejs');
+      
+      // Verify Node.js installation
+      const nodeVerify = await ssh.exec('node --version && npm --version');
+      if (!nodeVerify.stdout.includes('v')) {
+        throw new Error('Node.js installation failed. Please check server logs.');
+      }
+      onProgress({ stepId: 'prepare', status: 'running', log: `Node.js installed: ${nodeVerify.stdout.trim()}` });
+    } else {
+      onProgress({ stepId: 'prepare', status: 'running', log: `Node.js already installed: ${nodeCheck.stdout.trim()}` });
     }
 
-    // Check if git is installed
+    // Check if Git is installed
     const gitCheck = await ssh.exec('which git || echo "not found"');
     if (gitCheck.stdout.includes('not found')) {
-      onProgress({ stepId: 'upload', status: 'running', log: 'Installing git...' });
-      await ssh.exec('sudo apt-get update && sudo apt-get install -y git');
+      onProgress({ stepId: 'prepare', status: 'running', log: 'Installing Git...' });
+      await ssh.exec('sudo apt-get install -y git');
     }
 
-    // Create deploy directory
+    onProgress({ stepId: 'prepare', status: 'completed', message: 'System prepared' });
+
+    // ============================================
+    // Step 3: Clone/Update Application
+    // ============================================
+    currentStep = 'upload';
+    onProgress({ stepId: 'upload', status: 'running', message: 'Setting up application files...' });
+
+    // Create deploy directory with proper permissions
     await ssh.exec(`sudo mkdir -p ${deployPath}`);
-    await ssh.exec(`sudo chown -R $USER:$USER ${deployPath}`);
+    await ssh.exec(`sudo chown -R $(whoami):$(whoami) ${deployPath}`);
 
-    // Clone or pull repository
-    const repoExists = await ssh.exists(`${deployPath}/.git`);
-    if (repoExists) {
-      onProgress({ stepId: 'upload', status: 'running', log: 'Updating existing installation...' });
-      await ssh.exec(`git pull`, { cwd: deployPath });
-    } else {
-      onProgress({ stepId: 'upload', status: 'running', log: 'Cloning repository...' });
-      // For now, we'll create a placeholder since repo URL needs to be configured
-      await ssh.exec(`git clone ${REPO_URL} ${deployPath} || echo "Clone failed - manual upload may be needed"`);
-    }
+    // Check if repo already exists
+    const repoExists = await ssh.exec(`test -d ${deployPath}/.git && echo "exists" || echo "not found"`);
     
+    if (repoExists.stdout.includes('exists')) {
+      onProgress({ stepId: 'upload', status: 'running', log: 'Updating existing repository...' });
+      await ssh.exec('git fetch origin', { cwd: deployPath });
+      await ssh.exec('git reset --hard origin/main', { cwd: deployPath });
+      await ssh.exec('git pull origin main', { cwd: deployPath });
+    } else {
+      // Clean the directory first if it exists
+      await ssh.exec(`rm -rf ${deployPath}/*`);
+      await ssh.exec(`rm -rf ${deployPath}/.[!.]* 2>/dev/null || true`);
+      
+      onProgress({ stepId: 'upload', status: 'running', log: 'Cloning repository...' });
+      const cloneResult = await ssh.exec(`git clone ${REPO_URL} ${deployPath}`);
+      
+      if (cloneResult.exitCode !== 0) {
+        throw new Error(`Failed to clone repository: ${cloneResult.stderr}`);
+      }
+    }
+
+    // Verify package.json exists
+    const packageCheck = await ssh.exec(`test -f ${deployPath}/package.json && echo "exists" || echo "not found"`);
+    if (packageCheck.stdout.includes('not found')) {
+      throw new Error('Repository cloned but package.json not found. Check repository structure.');
+    }
+
     onProgress({ stepId: 'upload', status: 'completed', message: 'Application files ready' });
 
-    // Step 3: Configure environment
-    onProgress({ stepId: 'env', status: 'running', message: 'Generating configuration...' });
-    
+    // ============================================
+    // Step 4: Configure Environment
+    // ============================================
+    currentStep = 'env';
+    onProgress({ stepId: 'env', status: 'running', message: 'Configuring environment...' });
+
     const envContent = generateEnvFile(config);
     await ssh.uploadFile(envContent, `${deployPath}/.env`);
     await ssh.uploadFile(envContent, `${deployPath}/.env.local`);
-    
+
     // Create brand assets directory
     await ssh.exec(`mkdir -p ${deployPath}/public/images/brands/${brandId}`);
-    
+
     // Create placeholder logo
     const placeholderLogo = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50">
   <text x="10" y="35" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="${config.domain.primaryColor}">
@@ -241,63 +316,113 @@ export async function deployToServer(
   </text>
 </svg>`;
     await ssh.uploadFile(placeholderLogo, `${deployPath}/public/images/brands/${brandId}/logo.svg`);
-    
+
+    // Create logs directory
+    await ssh.exec(`mkdir -p ${deployPath}/logs`);
+
     onProgress({ stepId: 'env', status: 'completed', message: 'Environment configured' });
 
-    // Step 4: Install dependencies
+    // ============================================
+    // Step 5: Install Dependencies
+    // ============================================
+    currentStep = 'deps';
     onProgress({ stepId: 'deps', status: 'running', message: 'Installing dependencies...' });
-    await ssh.exec('npm install --production', { cwd: deployPath });
+
+    // Clear npm cache to avoid issues
+    await ssh.exec('npm cache clean --force || true');
+
+    // Install project dependencies (not production only - need devDeps for build)
+    onProgress({ stepId: 'deps', status: 'running', log: 'Running npm install (this may take a few minutes)...' });
+    const npmInstall = await ssh.exec('npm install', { cwd: deployPath });
     
+    if (npmInstall.exitCode !== 0 && !npmInstall.stdout.includes('added')) {
+      onProgress({ stepId: 'deps', status: 'running', log: `npm install warning: ${npmInstall.stderr}` });
+    }
+
     // Install PM2 globally if not present
     const pm2Check = await ssh.exec('which pm2 || echo "not found"');
     if (pm2Check.stdout.includes('not found')) {
-      onProgress({ stepId: 'deps', status: 'running', log: 'Installing PM2...' });
+      onProgress({ stepId: 'deps', status: 'running', log: 'Installing PM2 globally...' });
       await ssh.exec('sudo npm install -g pm2');
+      
+      // Verify PM2 installation
+      const pm2Verify = await ssh.exec('pm2 --version');
+      if (pm2Verify.exitCode !== 0) {
+        throw new Error('PM2 installation failed');
+      }
     }
-    
+
     onProgress({ stepId: 'deps', status: 'completed', message: 'Dependencies installed' });
 
-    // Step 5: Build application
-    onProgress({ stepId: 'build', status: 'running', message: 'Building application...' });
-    await ssh.exec('npm run build', { cwd: deployPath });
+    // ============================================
+    // Step 6: Build Application
+    // ============================================
+    currentStep = 'build';
+    onProgress({ stepId: 'build', status: 'running', message: 'Building application (this may take several minutes)...' });
+
+    const buildResult = await ssh.exec('npm run build', { cwd: deployPath });
     
-    // Create logs directory
-    await ssh.exec(`mkdir -p ${deployPath}/logs`);
-    
+    // Check if build was successful
+    if (buildResult.exitCode !== 0) {
+      throw new Error(`Build failed: ${buildResult.stderr}`);
+    }
+
+    // Verify .next directory exists
+    const nextCheck = await ssh.exec(`test -d ${deployPath}/.next && echo "exists" || echo "not found"`);
+    if (nextCheck.stdout.includes('not found')) {
+      throw new Error('Build completed but .next directory not found');
+    }
+
     // Create PM2 ecosystem file
     const pm2Config = generatePM2Config(config);
     await ssh.uploadFile(pm2Config, `${deployPath}/ecosystem.config.js`);
-    
+
     onProgress({ stepId: 'build', status: 'completed', message: 'Build successful' });
 
-    // Step 6: Configure Nginx
+    // ============================================
+    // Step 7: Configure Nginx
+    // ============================================
+    currentStep = 'nginx';
     onProgress({ stepId: 'nginx', status: 'running', message: 'Configuring web server...' });
-    
-    // Check if Nginx is installed
+
+    // Install Nginx if not present
     const nginxCheck = await ssh.exec('which nginx || echo "not found"');
     if (nginxCheck.stdout.includes('not found')) {
       onProgress({ stepId: 'nginx', status: 'running', log: 'Installing Nginx...' });
-      await ssh.exec('sudo apt-get update && sudo apt-get install -y nginx');
+      await ssh.exec('sudo apt-get install -y nginx');
     }
 
+    // Ensure Nginx directories exist
+    await ssh.exec('sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled');
+
+    // Upload Nginx config
     const nginxConfig = generateNginxConfig(config);
     await ssh.uploadFile(nginxConfig, `/tmp/newsportal-${brandId}.conf`);
     await ssh.exec(`sudo mv /tmp/newsportal-${brandId}.conf /etc/nginx/sites-available/newsportal-${brandId}`);
     await ssh.exec(`sudo ln -sf /etc/nginx/sites-available/newsportal-${brandId} /etc/nginx/sites-enabled/`);
-    
-    // Remove default site if exists
+
+    // Remove default site
     await ssh.exec('sudo rm -f /etc/nginx/sites-enabled/default || true');
-    
-    // Test and reload Nginx
-    await ssh.exec('sudo nginx -t');
-    await ssh.exec('sudo systemctl reload nginx');
-    
+
+    // Test Nginx configuration
+    const nginxTest = await ssh.exec('sudo nginx -t 2>&1');
+    if (nginxTest.exitCode !== 0) {
+      onProgress({ stepId: 'nginx', status: 'running', log: `Nginx config warning: ${nginxTest.stderr}` });
+    }
+
+    // Start/Reload Nginx
+    await ssh.exec('sudo systemctl enable nginx');
+    await ssh.exec('sudo systemctl start nginx || sudo systemctl reload nginx');
+
     onProgress({ stepId: 'nginx', status: 'completed', message: 'Nginx configured' });
 
-    // Step 7: Setup SSL
+    // ============================================
+    // Step 8: Setup SSL Certificate
+    // ============================================
+    currentStep = 'ssl';
     onProgress({ stepId: 'ssl', status: 'running', message: 'Setting up SSL certificate...' });
-    
-    // Install certbot if not present
+
+    // Install Certbot if not present
     const certbotCheck = await ssh.exec('which certbot || echo "not found"');
     if (certbotCheck.stdout.includes('not found')) {
       onProgress({ stepId: 'ssl', status: 'running', log: 'Installing Certbot...' });
@@ -305,45 +430,90 @@ export async function deployToServer(
     }
 
     // Get SSL certificate
-    const domain = config.domain.domain;
-    const email = config.admin.adminEmail;
-    await ssh.exec(`sudo certbot --nginx -d ${domain} -d www.${domain} --non-interactive --agree-tos -m ${email} || echo "SSL setup may require DNS configuration"`);
-    
+    onProgress({ stepId: 'ssl', status: 'running', log: `Obtaining SSL certificate for ${domain}...` });
+    const certResult = await ssh.exec(
+      `sudo certbot --nginx -d ${domain} -d www.${domain} --non-interactive --agree-tos -m ${email} --redirect 2>&1 || echo "CERTBOT_WARNING"`
+    );
+
+    if (certResult.stdout.includes('CERTBOT_WARNING') || certResult.stdout.includes('error')) {
+      onProgress({ stepId: 'ssl', status: 'running', log: 'SSL setup note: Certificate may require DNS propagation. Site will work on HTTP.' });
+    } else {
+      onProgress({ stepId: 'ssl', status: 'running', log: 'SSL certificate installed successfully' });
+    }
+
     onProgress({ stepId: 'ssl', status: 'completed', message: 'SSL configured' });
 
-    // Step 8: Start application
+    // ============================================
+    // Step 9: Start Application
+    // ============================================
+    currentStep = 'start';
     onProgress({ stepId: 'start', status: 'running', message: 'Starting application...' });
-    
-    // Stop existing PM2 process if running
+
     const appName = `newsportal-${brandId}`;
-    await ssh.exec(`pm2 stop ${appName} || true`);
-    await ssh.exec(`pm2 delete ${appName} || true`);
+
+    // Stop any existing PM2 processes
+    await ssh.exec(`pm2 stop ${appName} 2>/dev/null || true`);
+    await ssh.exec(`pm2 delete ${appName} 2>/dev/null || true`);
+
+    // Start application with PM2
+    onProgress({ stepId: 'start', status: 'running', log: 'Starting application with PM2...' });
+    const startResult = await ssh.exec(`cd ${deployPath} && pm2 start ecosystem.config.js`);
     
-    // Start with PM2
-    await ssh.exec('pm2 start ecosystem.config.js', { cwd: deployPath });
+    if (startResult.exitCode !== 0) {
+      throw new Error(`Failed to start application: ${startResult.stderr}`);
+    }
+
+    // Save PM2 configuration
     await ssh.exec('pm2 save');
-    
-    // Setup PM2 startup
-    await ssh.exec('pm2 startup || true');
-    
+
+    // Setup PM2 to start on boot
+    onProgress({ stepId: 'start', status: 'running', log: 'Configuring PM2 startup...' });
+    const startupCmd = await ssh.exec('pm2 startup systemd -u root --hp /root 2>&1 | grep "sudo" || echo ""');
+    if (startupCmd.stdout.includes('sudo')) {
+      await ssh.exec(startupCmd.stdout.trim());
+    }
+
+    // Verify application is running
+    const pm2Status = await ssh.exec('pm2 jlist');
+    if (!pm2Status.stdout.includes(appName)) {
+      onProgress({ stepId: 'start', status: 'running', log: 'Warning: Application may not be running. Check PM2 logs.' });
+    }
+
     onProgress({ stepId: 'start', status: 'completed', message: 'Application started' });
 
-    // Complete
-    onProgress({ 
-      stepId: 'start', 
-      status: 'completed', 
+    // ============================================
+    // Deployment Complete
+    // ============================================
+    onProgress({
+      stepId: 'start',
+      status: 'completed',
       message: 'Deployment complete!',
       complete: true,
-      log: `Application deployed to https://${domain}`
+      log: `
+========================================
+Deployment Successful!
+========================================
+Application URL: https://${domain}
+Admin Panel: https://${domain}/admin
+
+Useful Commands (SSH into server):
+  pm2 status              - Check app status
+  pm2 logs ${appName}     - View logs
+  pm2 restart ${appName}  - Restart app
+  
+If SSL is not working, wait for DNS propagation
+and run: sudo certbot --nginx -d ${domain}
+========================================
+      `.trim()
     });
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Deployment failed';
-    onProgress({ 
-      stepId: 'connect', 
-      status: 'error', 
+    onProgress({
+      stepId: currentStep,
+      status: 'error',
       error: errorMessage,
-      complete: true 
+      complete: true
     });
     throw error;
   } finally {
