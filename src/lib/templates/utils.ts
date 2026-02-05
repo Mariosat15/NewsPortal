@@ -216,15 +216,14 @@ export function getBorderRadius(template: ResolvedTemplate, size: 'sm' | 'md' | 
   if (cornerSetting === 'none') return '0';
   if (cornerSetting === 'full') return '9999px';
   
-  const radiusMap: Record<typeof cornerSetting, Record<typeof size, string>> = {
+  // cornerSetting is guaranteed to be 'sm' | 'md' | 'lg' here due to early returns above
+  const radiusMap: Record<'sm' | 'md' | 'lg', Record<typeof size, string>> = {
     sm: { sm: '2px', md: '4px', lg: '6px', xl: '8px', full: '9999px' },
     md: { sm: '4px', md: '8px', lg: '12px', xl: '16px', full: '9999px' },
     lg: { sm: '8px', md: '12px', lg: '16px', xl: '24px', full: '9999px' },
-    none: { sm: '0', md: '0', lg: '0', xl: '0', full: '0' },
-    full: { sm: '9999px', md: '9999px', lg: '9999px', xl: '9999px', full: '9999px' },
   };
   
-  return radiusMap[cornerSetting][size];
+  return radiusMap[cornerSetting as 'sm' | 'md' | 'lg'][size];
 }
 
 // =============================================================================
