@@ -18,5 +18,5 @@ export * from './category';
 export * from './home';
 
 // Re-export old templates for backwards compatibility
-export { DarkProTemplate } from './dark-pro';
-export { DarkPortalTemplate } from './dark-portal';
+export { DarkProTemplate } from './dark-pro-template';
+export { DarkPortalTemplate } from './dark-portal-template';
