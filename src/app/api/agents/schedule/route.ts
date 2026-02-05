@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getSchedulerConfig, describeSchedule } from '@/lib/agents/scheduler';
-import { getWorkerStatus, triggerManualRun, updateSchedule } from '@/lib/agents/worker';
+import { getWorkerStatus, triggerManualRun, updateSchedule, ensureWorkerRunning } from '@/lib/agents/worker';
 
 // Verify admin authentication
 async function verifyAdmin(request: NextRequest): Promise<boolean> {
@@ -22,12 +22,20 @@ async function verifyAdmin(request: NextRequest): Promise<boolean> {
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const triggerRun = searchParams.get('trigger') === 'true';
+  const startWorker = searchParams.get('start') === 'true';
   const secret = searchParams.get('secret');
   const brandId = getBrandIdSync();
   
   try {
     const config = await getSchedulerConfig(brandId);
-    const workerStatus = getWorkerStatus();
+    let workerStatus = getWorkerStatus();
+    
+    // If start parameter is set, ensure worker is running
+    if (startWorker) {
+      const result = await ensureWorkerRunning();
+      console.log('[API] Worker start requested:', result);
+      workerStatus = getWorkerStatus();
+    }
     
     // If trigger parameter is set with valid secret, trigger a manual run
     if (triggerRun && secret === process.env.ADMIN_SECRET) {

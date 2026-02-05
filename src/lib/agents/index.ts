@@ -26,4 +26,5 @@ export {
   getWorkerStatus,
   triggerManualRun,
   updateSchedule,
+  ensureWorkerRunning,
 } from './worker';

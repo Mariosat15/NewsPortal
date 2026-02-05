@@ -24,11 +24,12 @@ function WorkerStatusCard({ schedule }: { schedule: string }) {
     lastResult: { success: boolean; articlesPublished: number; error?: string } | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activating, setActivating] = useState(false);
 
   useEffect(() => {
     fetchStatus();
-    // Refresh status every 30 seconds
-    const interval = setInterval(fetchStatus, 30000);
+    // Refresh status every 10 seconds
+    const interval = setInterval(fetchStatus, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -46,6 +47,21 @@ function WorkerStatusCard({ schedule }: { schedule: string }) {
     }
   }
 
+  async function activateWorker() {
+    setActivating(true);
+    try {
+      const res = await fetch('/api/agents/schedule?start=true');
+      await res.json();
+      // Wait a bit and refresh status
+      await new Promise(r => setTimeout(r, 1000));
+      await fetchStatus();
+    } catch (error) {
+      console.error('Failed to activate worker:', error);
+    } finally {
+      setActivating(false);
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -54,7 +70,7 @@ function WorkerStatusCard({ schedule }: { schedule: string }) {
           Automatic Scheduling
         </CardTitle>
         <CardDescription>
-          Internal worker runs automatically
+          Internal worker runs automatically based on schedule
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -66,16 +82,29 @@ function WorkerStatusCard({ schedule }: { schedule: string }) {
         ) : status ? (
           <>
             {/* Worker Status */}
-            <div className={`p-4 rounded-lg border ${status.isActive ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
-              <div className="flex items-center gap-2 mb-2">
-                <span className={`w-3 h-3 rounded-full ${status.isActive ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`} />
-                <p className={`font-medium ${status.isActive ? 'text-green-800' : 'text-yellow-800'}`}>
-                  {status.isActive ? 'Worker Active' : 'Worker Inactive'}
-                </p>
+            <div className={`p-4 rounded-lg border ${status.isActive ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className={`w-3 h-3 rounded-full ${status.isActive ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                  <p className={`font-medium ${status.isActive ? 'text-green-800' : 'text-red-800'}`}>
+                    {status.isActive ? 'Worker Active' : 'Worker Inactive'}
+                  </p>
+                </div>
+                {!status.isActive && (
+                  <Button size="sm" onClick={activateWorker} disabled={activating}>
+                    {activating ? (
+                      <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Starting...</>
+                    ) : (
+                      <><Play className="h-3 w-3 mr-1" /> Activate</>
+                    )}
+                  </Button>
+                )}
               </div>
-              <p className="text-sm text-green-700">
-                Schedule: <strong>{status.scheduleDescription || schedule}</strong>
-              </p>
+              {status.isActive && (
+                <p className="text-sm text-green-700">
+                  Schedule: <strong>{status.scheduleDescription || schedule}</strong>
+                </p>
+              )}
               {status.isRunning && (
                 <p className="text-sm text-blue-600 mt-1 flex items-center gap-1">
                   <Loader2 className="h-3 w-3 animate-spin" />
@@ -104,15 +133,22 @@ function WorkerStatusCard({ schedule }: { schedule: string }) {
 
             {/* Schedule Info */}
             <div className="text-sm text-muted-foreground">
-              <p>Configure the schedule in the <strong>Topics</strong> tab.</p>
-              <p className="mt-1 font-mono text-xs">Cron: {schedule}</p>
+              <p>Configure the schedule in the <strong>Topics</strong> tab below.</p>
+              <p className="mt-1 font-mono text-xs bg-gray-100 px-2 py-1 rounded">Cron: {status.currentSchedule || schedule}</p>
             </div>
           </>
         ) : (
           <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-            <p className="text-sm text-yellow-700">
-              Worker status unavailable. The worker starts automatically when the app runs.
+            <p className="text-sm text-yellow-700 mb-3">
+              Worker status unavailable. Click below to start it.
             </p>
+            <Button size="sm" onClick={activateWorker} disabled={activating}>
+              {activating ? (
+                <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Starting...</>
+              ) : (
+                <><Play className="h-3 w-3 mr-1" /> Start Worker</>
+              )}
+            </Button>
           </div>
         )}
       </CardContent>

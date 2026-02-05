@@ -210,6 +210,19 @@ export function getWorkerStatus() {
   };
 }
 
+// Ensure worker is running (can be called from API)
+export async function ensureWorkerRunning() {
+  if (scheduledTask !== null) {
+    return { started: false, message: 'Worker already running' };
+  }
+  
+  console.log('[Worker] Starting worker via API...');
+  const schedule = await loadScheduleFromDB();
+  startWorker(schedule);
+  
+  return { started: true, message: 'Worker started', schedule };
+}
+
 // Trigger a manual run
 export async function triggerManualRun() {
   await runPipeline();
