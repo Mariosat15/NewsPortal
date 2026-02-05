@@ -25,7 +25,7 @@ export function MinimalHeader({ template, categories, locale, brandName, logoUrl
         {/* Logo */}
         <Link href={`/${locale}`} className="flex items-center">
           {logoUrl ? (
-            <Image src={logoUrl} alt={brandName} width={120} height={32} className="h-6 w-auto" />
+            <img src={logoUrl} alt={brandName} style={{ height: '44px', width: 'auto', maxWidth: '200px' }} />
           ) : (
             <span 
               className="text-lg tracking-tight"

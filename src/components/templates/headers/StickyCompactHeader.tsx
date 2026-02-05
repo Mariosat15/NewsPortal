@@ -84,12 +84,10 @@ export function StickyCompactHeader({ template, categories, locale, brandName, l
           {/* Logo */}
           <Link href={`/${locale}`} className="flex items-center shrink-0">
             {logoUrl ? (
-              <Image 
+              <img 
                 src={logoUrl} 
                 alt={brandName} 
-                width={120} 
-                height={32} 
-                className="h-6 w-auto"
+                style={{ height: '40px', width: 'auto', maxWidth: '180px' }}
               />
             ) : (
               <span 

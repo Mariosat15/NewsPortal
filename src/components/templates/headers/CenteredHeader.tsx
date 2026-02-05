@@ -36,7 +36,7 @@ export function CenteredHeader({ template, categories, locale, brandName, logoUr
       <div className="py-8 text-center">
         <Link href={`/${locale}`}>
           {logoUrl ? (
-            <Image src={logoUrl} alt={brandName} width={200} height={60} className="h-12 w-auto mx-auto" />
+            <img src={logoUrl} alt={brandName} style={{ height: '56px', width: 'auto', maxWidth: '280px', margin: '0 auto' }} />
           ) : (
             <h1 
               style={{ 

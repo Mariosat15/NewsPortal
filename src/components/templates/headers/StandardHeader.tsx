@@ -27,7 +27,7 @@ export function StandardHeader({ template, categories, locale, brandName, logoUr
         {/* Logo */}
         <Link href={`/${locale}`} className="flex items-center shrink-0">
           {logoUrl ? (
-            <Image src={logoUrl} alt={brandName} width={140} height={40} className="h-8 w-auto" />
+            <img src={logoUrl} alt={brandName} style={{ height: '48px', width: 'auto', maxWidth: '220px' }} />
           ) : (
             <span 
               className="text-xl font-bold"

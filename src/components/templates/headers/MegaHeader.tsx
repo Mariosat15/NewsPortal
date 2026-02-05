@@ -46,7 +46,7 @@ export function MegaHeader({ template, categories, locale, brandName, logoUrl }:
           {/* Logo */}
           <Link href={`/${locale}`} className="flex items-center">
             {logoUrl ? (
-              <Image src={logoUrl} alt={brandName} width={180} height={50} className="h-12 w-auto" />
+              <img src={logoUrl} alt={brandName} style={{ height: '52px', width: 'auto', maxWidth: '260px' }} />
             ) : (
               <span 
                 className="text-3xl"

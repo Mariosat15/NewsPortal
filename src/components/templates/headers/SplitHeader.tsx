@@ -52,7 +52,7 @@ export function SplitHeader({ template, categories, locale, brandName, logoUrl }
             className="flex items-center justify-center shrink-0 px-8"
           >
             {logoUrl ? (
-              <Image src={logoUrl} alt={brandName} width={160} height={48} className="h-10 w-auto" />
+              <img src={logoUrl} alt={brandName} style={{ height: '50px', width: 'auto', maxWidth: '240px' }} />
             ) : (
               <span 
                 className="text-2xl"
