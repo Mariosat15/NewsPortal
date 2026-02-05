@@ -16,8 +16,8 @@ export const mediumTemplate: TemplateDefinition = {
   },
   
   typography: {
-    headingFont: '"Libre Baskerville", "Georgia", serif',
-    bodyFont: '"Source Serif Pro", "Georgia", serif',
+    headingFont: 'var(--font-lora), Georgia, serif',
+    bodyFont: 'var(--font-source-serif), Georgia, serif',
     headingWeight: 700,
     scale: 'spacious',
   },

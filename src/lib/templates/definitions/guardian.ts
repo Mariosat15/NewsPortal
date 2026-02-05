@@ -16,8 +16,8 @@ export const guardianTemplate: TemplateDefinition = {
   },
   
   typography: {
-    headingFont: '"Georgia", "Times New Roman", serif',
-    bodyFont: '"Georgia", "Times New Roman", serif',
+    headingFont: 'var(--font-merriweather), Georgia, serif',
+    bodyFont: 'var(--font-merriweather), Georgia, serif',
     headingWeight: 700,
     scale: 'normal',
   },

@@ -16,8 +16,8 @@ export const axiosTemplate: TemplateDefinition = {
   },
   
   typography: {
-    headingFont: '"IBM Plex Sans", "Roboto", sans-serif',
-    bodyFont: '"IBM Plex Sans", "Roboto", sans-serif',
+    headingFont: 'var(--font-dm-sans), system-ui, sans-serif',
+    bodyFont: 'var(--font-dm-sans), system-ui, sans-serif',
     headingWeight: 600,
     scale: 'compact',
   },

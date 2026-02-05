@@ -16,8 +16,8 @@ export const voxTemplate: TemplateDefinition = {
   },
   
   typography: {
-    headingFont: '"Balto", "Helvetica Neue", Arial, sans-serif',
-    bodyFont: '"Publico Text", "Georgia", serif',
+    headingFont: 'var(--font-dm-sans), system-ui, sans-serif',
+    bodyFont: 'var(--font-source-serif), Georgia, serif',
     headingWeight: 800,
     scale: 'normal',
   },

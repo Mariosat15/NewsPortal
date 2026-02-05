@@ -16,8 +16,8 @@ export const bloombergTemplate: TemplateDefinition = {
   },
   
   typography: {
-    headingFont: '"Inter", system-ui, sans-serif',
-    bodyFont: '"Inter", system-ui, sans-serif',
+    headingFont: 'var(--font-inter), system-ui, sans-serif',
+    bodyFont: 'var(--font-inter), system-ui, sans-serif',
     headingWeight: 600,
     scale: 'compact',
   },
@@ -67,8 +67,8 @@ export const bloombergTemplate: TemplateDefinition = {
   
   spacing: {
     containerMax: '1400px',
-    sectionGap: '1.5rem',
-    cardGap: '1px',
-    headerHeight: '48px',
+    sectionGap: '2rem',
+    cardGap: '1rem',
+    headerHeight: '56px',
   },
 };

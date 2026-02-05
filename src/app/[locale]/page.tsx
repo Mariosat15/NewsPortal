@@ -209,10 +209,20 @@ export default async function HomePage({
     // Get brand config for header
     const brandConfig = await getServerBrandConfig();
 
+    // Build inline style from CSS variables
+    const templateStyles: React.CSSProperties = {
+      ...Object.fromEntries(
+        Object.entries(resolvedTemplate.cssVariables).map(([key, value]) => [key, value])
+      ),
+      backgroundColor: resolvedTemplate.activeColors.background,
+      color: resolvedTemplate.activeColors.text,
+      fontFamily: resolvedTemplate.typography.bodyFont,
+    } as React.CSSProperties;
+
     return (
       <div 
         className="min-h-screen flex flex-col"
-        style={{ backgroundColor: resolvedTemplate.activeColors.background }}
+        style={templateStyles}
       >
         {/* Template Header */}
         <HeaderComponent

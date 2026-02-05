@@ -16,8 +16,8 @@ export const wiredTemplate: TemplateDefinition = {
   },
   
   typography: {
-    headingFont: '"Space Grotesk", "Roboto", sans-serif',
-    bodyFont: '"Source Sans Pro", "Roboto", sans-serif',
+    headingFont: 'var(--font-space-grotesk), system-ui, sans-serif',
+    bodyFont: 'var(--font-source-sans), system-ui, sans-serif',
     headingWeight: 700,
     scale: 'normal',
   },
@@ -67,8 +67,8 @@ export const wiredTemplate: TemplateDefinition = {
   
   spacing: {
     containerMax: '1400px',
-    sectionGap: '2rem',
-    cardGap: '0.5rem',
-    headerHeight: '56px',
+    sectionGap: '2.5rem',
+    cardGap: '1.25rem',
+    headerHeight: '60px',
   },
 };

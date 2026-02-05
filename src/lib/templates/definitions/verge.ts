@@ -16,8 +16,8 @@ export const vergeTemplate: TemplateDefinition = {
   },
   
   typography: {
-    headingFont: '"Pathway Extreme", "Inter", system-ui, sans-serif',
-    bodyFont: '"Inter", system-ui, sans-serif',
+    headingFont: 'var(--font-space-grotesk), system-ui, sans-serif',
+    bodyFont: 'var(--font-inter), system-ui, sans-serif',
     headingWeight: 800,
     scale: 'spacious',
   },

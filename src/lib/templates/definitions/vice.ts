@@ -16,8 +16,8 @@ export const viceTemplate: TemplateDefinition = {
   },
   
   typography: {
-    headingFont: '"Oswald", "Impact", sans-serif',
-    bodyFont: '"Lato", "Helvetica Neue", sans-serif',
+    headingFont: 'var(--font-dm-sans), system-ui, sans-serif',
+    bodyFont: 'var(--font-inter), system-ui, sans-serif',
     headingWeight: 700,
     scale: 'spacious',
   },
@@ -66,9 +66,9 @@ export const viceTemplate: TemplateDefinition = {
   },
   
   spacing: {
-    containerMax: '1600px',
-    sectionGap: '0',
-    cardGap: '0.25rem',
-    headerHeight: '80px',
+    containerMax: '1400px',
+    sectionGap: '2rem',
+    cardGap: '1rem',
+    headerHeight: '70px',
   },
 };

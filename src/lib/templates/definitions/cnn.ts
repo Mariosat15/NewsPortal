@@ -16,8 +16,8 @@ export const cnnTemplate: TemplateDefinition = {
   },
   
   typography: {
-    headingFont: '"CNN Sans", "Helvetica Neue", Arial, sans-serif',
-    bodyFont: '"CNN Sans", "Helvetica Neue", Arial, sans-serif',
+    headingFont: 'var(--font-inter), system-ui, sans-serif',
+    bodyFont: 'var(--font-inter), system-ui, sans-serif',
     headingWeight: 700,
     scale: 'normal',
   },

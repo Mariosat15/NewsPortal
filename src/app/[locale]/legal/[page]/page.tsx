@@ -3,11 +3,10 @@ import { getTranslations } from 'next-intl/server';
 import { getServerBrandConfig, getBrandId } from '@/lib/brand/server';
 import { getLegalPageRepository } from '@/lib/db';
 
-const defaultLegalPages = ['hilfe', 'kundenportal', 'widerrufsbelehrung', 'impressum', 'kuendigung', 'agb', 'datenschutz'];
+// Force dynamic rendering to avoid static generation errors
+export const dynamic = 'force-dynamic';
 
-export async function generateStaticParams() {
-  return defaultLegalPages.map((page) => ({ page }));
-}
+const defaultLegalPages = ['hilfe', 'kundenportal', 'widerrufsbelehrung', 'impressum', 'kuendigung', 'agb', 'datenschutz'];
 
 export async function generateMetadata({
   params,

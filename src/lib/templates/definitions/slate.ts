@@ -16,8 +16,8 @@ export const slateTemplate: TemplateDefinition = {
   },
   
   typography: {
-    headingFont: '"Mercury Display", "Georgia", serif',
-    bodyFont: '"Freight Text Pro", "Georgia", serif',
+    headingFont: 'var(--font-playfair), Georgia, serif',
+    bodyFont: 'var(--font-source-serif), Georgia, serif',
     headingWeight: 700,
     scale: 'normal',
   },

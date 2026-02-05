@@ -16,8 +16,8 @@ export const economistTemplate: TemplateDefinition = {
   },
   
   typography: {
-    headingFont: '"Econ Sans", "Georgia", serif',
-    bodyFont: '"Econ Sans", "Georgia", serif',
+    headingFont: 'var(--font-playfair), Georgia, serif',
+    bodyFont: 'var(--font-source-serif), Georgia, serif',
     headingWeight: 700,
     scale: 'normal',
   },
