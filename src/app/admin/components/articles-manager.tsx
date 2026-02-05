@@ -19,6 +19,7 @@ interface Article {
   tags: string[];
   status: 'draft' | 'scheduled' | 'published' | 'archived';
   publishDate: string;
+  createdAt?: string;
   viewCount: number;
   unlockCount: number;
   agentGenerated: boolean;
@@ -178,7 +179,7 @@ export function ArticlesManager() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-medium truncate">{article.title}</h3>
+                      <h3 className="text-sm font-normal truncate max-w-md">{article.title}</h3>
                       {article.agentGenerated && (
                         <Badge variant="secondary" className="text-xs">AI</Badge>
                       )}
@@ -186,9 +187,15 @@ export function ArticlesManager() {
                         {article.language.toUpperCase()}
                       </Badge>
                     </div>
-                    <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      <span className="font-mono bg-gray-100 px-1 rounded" title="Article ID">
+                        {article._id.slice(-8)}
+                      </span>
+                      <span className="font-mono text-blue-600 truncate max-w-[200px]" title={`Slug: ${article.slug}`}>
+                        /{article.slug}
+                      </span>
                       <span className="capitalize">{article.category}</span>
-                      <Badge variant={article.status === 'published' ? 'default' : 'outline'}>
+                      <Badge variant={article.status === 'published' ? 'default' : 'outline'} className="text-xs">
                         {article.status}
                       </Badge>
                       <span>{new Date(article.publishDate).toLocaleDateString()}</span>

@@ -13,6 +13,7 @@ import {
 
 interface Article {
   _id?: string;
+  slug?: string;
   title: string;
   teaser: string;
   content: string;
@@ -237,6 +238,26 @@ export function ArticleEditor({ article, onSave, onCancel }: ArticleEditorProps)
           {errors.submit && (
             <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
               {errors.submit}
+            </div>
+          )}
+
+          {/* Article ID and Slug (shown when editing) */}
+          {article?._id && (
+            <div className="p-3 bg-gray-50 border rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Article ID:</span>
+                  <span className="ml-2 font-mono bg-white px-2 py-0.5 rounded border select-all">
+                    {article._id}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Slug:</span>
+                  <span className="ml-2 font-mono text-blue-600 bg-white px-2 py-0.5 rounded border select-all">
+                    {article.slug || 'auto-generated'}
+                  </span>
+                </div>
+              </div>
             </div>
           )}
 
