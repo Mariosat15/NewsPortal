@@ -361,6 +361,13 @@ interface Category {
   order: number;
 }
 
+interface VideoSettings {
+  enabled: boolean;
+  includeYouTube: boolean;
+  includeTikTok: boolean;
+  categoriesWithVideos: string[];
+}
+
 interface AgentSettings {
   enabled: boolean;
   topics: string[];
@@ -380,6 +387,9 @@ interface AgentSettings {
   minWordCount: number;
   maxWordCount: number;
   minQualityScore: number;
+  
+  // Video Settings
+  videoSettings: VideoSettings;
   
   // Distribution settings
   distributeEvenly: boolean; // Distribute articles evenly across categories
@@ -414,6 +424,13 @@ const defaultArticleStyle: ArticleStyle = {
   includeSources: true,
 };
 
+const defaultVideoSettings: VideoSettings = {
+  enabled: false,
+  includeYouTube: true,
+  includeTikTok: false,
+  categoriesWithVideos: [], // Empty = all categories with videos when enabled
+};
+
 const defaultSettings: AgentSettings = {
   enabled: true,
   topics: ['news', 'lifestyle', 'technology', 'sports', 'health', 'finance'],
@@ -424,6 +441,7 @@ const defaultSettings: AgentSettings = {
   useRSSFeeds: true,
   aiModel: defaultAIModel,
   articleStyle: defaultArticleStyle,
+  videoSettings: defaultVideoSettings,
   minWordCount: 500,
   maxWordCount: 1200,
   minQualityScore: 7,
@@ -540,6 +558,7 @@ export function AgentConfig() {
             rssFeeds: data.settings.agentConfig.rssFeeds || defaultRSSFeeds,
             aiModel: { ...defaultAIModel, ...(data.settings.agentConfig.aiModel || {}) },
             articleStyle: { ...defaultArticleStyle, ...articleStyle },
+            videoSettings: { ...defaultVideoSettings, ...(data.settings.agentConfig.videoSettings || {}) },
           });
         }
         
@@ -1268,6 +1287,142 @@ export function AgentConfig() {
                     </label>
                   </div>
                 ))}
+              </CardContent>
+            </Card>
+
+            {/* Video Settings Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Play className="h-5 w-5" />
+                  Video Integration
+                </CardTitle>
+                <CardDescription>
+                  Automatically fetch and embed videos from YouTube/TikTok in articles (requires Bright Data)
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Enable Videos Toggle */}
+                <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg border border-purple-200">
+                  <div>
+                    <p className="font-medium">Enable Video Fetching</p>
+                    <p className="text-sm text-muted-foreground">
+                      Search and embed relevant videos in generated articles
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.videoSettings?.enabled || false}
+                      onChange={(e) => setSettings({
+                        ...settings,
+                        videoSettings: { ...defaultVideoSettings, ...settings.videoSettings, enabled: e.target.checked }
+                      })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                  </label>
+                </div>
+
+                {settings.videoSettings?.enabled && (
+                  <>
+                    {/* Platform Selection */}
+                    <div className="space-y-3">
+                      <p className="font-medium text-sm">Video Platforms</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div 
+                          onClick={() => setSettings({
+                            ...settings,
+                            videoSettings: { 
+                              ...defaultVideoSettings, 
+                              ...settings.videoSettings, 
+                              includeYouTube: !settings.videoSettings?.includeYouTube 
+                            }
+                          })}
+                          className={`p-4 border rounded-lg cursor-pointer transition-all ${
+                            settings.videoSettings?.includeYouTube 
+                              ? 'border-red-500 bg-red-50' 
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center">
+                              <Play className="w-4 h-4 text-white" />
+                            </div>
+                            <div>
+                              <p className="font-medium">YouTube</p>
+                              <p className="text-xs text-muted-foreground">Video embeds</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div 
+                          onClick={() => setSettings({
+                            ...settings,
+                            videoSettings: { 
+                              ...defaultVideoSettings, 
+                              ...settings.videoSettings, 
+                              includeTikTok: !settings.videoSettings?.includeTikTok 
+                            }
+                          })}
+                          className={`p-4 border rounded-lg cursor-pointer transition-all ${
+                            settings.videoSettings?.includeTikTok 
+                              ? 'border-black bg-gray-100' 
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-black rounded flex items-center justify-center">
+                              <span className="text-white text-xs font-bold">TT</span>
+                            </div>
+                            <div>
+                              <p className="font-medium">TikTok</p>
+                              <p className="text-xs text-muted-foreground">Short videos</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Categories for Videos */}
+                    <div className="space-y-3">
+                      <p className="font-medium text-sm">Categories with Videos</p>
+                      <p className="text-xs text-muted-foreground">
+                        Select specific categories for video content, or leave empty to add videos to all articles
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {enabledCategories.map((cat) => {
+                          const isSelected = settings.videoSettings?.categoriesWithVideos?.includes(cat.slug);
+                          return (
+                            <Badge
+                              key={cat.slug}
+                              variant={isSelected ? "default" : "outline"}
+                              className="cursor-pointer"
+                              onClick={() => {
+                                const current = settings.videoSettings?.categoriesWithVideos || [];
+                                const updated = isSelected
+                                  ? current.filter(c => c !== cat.slug)
+                                  : [...current, cat.slug];
+                                setSettings({
+                                  ...settings,
+                                  videoSettings: { 
+                                    ...defaultVideoSettings, 
+                                    ...settings.videoSettings, 
+                                    categoriesWithVideos: updated 
+                                  }
+                                });
+                              }}
+                            >
+                              {cat.name}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                      {(!settings.videoSettings?.categoriesWithVideos?.length) && (
+                        <p className="text-xs text-green-600">✓ Videos will be added to all article categories</p>
+                      )}
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </div>

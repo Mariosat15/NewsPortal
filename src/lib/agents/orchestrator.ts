@@ -176,15 +176,20 @@ export async function runAgentPipeline(brandId: string, customSettings?: Partial
     updateProgress('drafting', 2, `Creating ${agentConfig.maxArticlesPerRun} drafts with AI (${agentConfig.aiModel?.model || 'gpt-4o'})...`);
     const aiConfig = agentConfig.aiModel || defaultAIConfig;
     const articleStyle = agentConfig.articleStyle || agentConfig.defaultArticleStyle || defaultArticleStyle;
+    const videoSettings = agentConfig.videoSettings;
     
     console.log(`Using AI model: ${aiConfig.model}, Types: ${articleStyle.types?.join(', ') || 'news'}, Tone: ${articleStyle.tone}`);
+    if (videoSettings?.enabled) {
+      console.log(`Video fetching enabled: YouTube=${videoSettings.includeYouTube}, TikTok=${videoSettings.includeTikTok}`);
+    }
     
     const draftResult = await createDrafts(
       gatheredTopics,
       agentConfig.defaultLanguage,
       agentConfig.maxArticlesPerRun,
       aiConfig,
-      articleStyle
+      articleStyle,
+      videoSettings
     );
 
     if (!draftResult.success || !draftResult.data) {

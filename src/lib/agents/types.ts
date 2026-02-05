@@ -17,6 +17,13 @@ export interface AIModelConfig {
 
 export type ArticleType = 'news' | 'analysis' | 'opinion' | 'summary' | 'investigative' | 'guide' | 'recipe' | 'review' | 'listicle' | 'profile';
 
+export interface VideoSettings {
+  enabled: boolean;
+  includeYouTube: boolean;
+  includeTikTok: boolean;
+  categoriesWithVideos: string[]; // Categories that should fetch videos (empty = all)
+}
+
 export interface ArticleStyle {
   type?: ArticleType; // Deprecated - use types
   types: ArticleType[]; // Multiple types supported
@@ -25,6 +32,7 @@ export interface ArticleStyle {
   includeImages: boolean;
   includeQuotes: boolean;
   includeSources: boolean;
+  includeVideos?: boolean; // Per-style video override
 }
 
 export interface AgentConfig {
@@ -48,6 +56,9 @@ export interface AgentConfig {
   defaultArticleStyle?: ArticleStyle;
   minWordCount: number;
   maxWordCount: number;
+  
+  // Video Settings
+  videoSettings?: VideoSettings;
   
   // Quality Settings
   minQualityScore: number;

@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
-import { AgentResult, DraftArticle, GatheredTopic, ArticleStyle, AIModelConfig, ArticleType } from './types';
+import { AgentResult, DraftArticle, GatheredTopic, ArticleStyle, AIModelConfig, ArticleType, VideoSettings } from './types';
+import { getVideoForArticle } from './video-fetcher';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -121,13 +122,22 @@ const categoryImages: Record<string, string[]> = {
   ],
 };
 
+// Default video settings
+const defaultVideoSettings: VideoSettings = {
+  enabled: false,
+  includeYouTube: true,
+  includeTikTok: false,
+  categoriesWithVideos: [],
+};
+
 // Create draft articles from gathered topics
 export async function createDrafts(
   topics: GatheredTopic[],
   language: 'de' | 'en',
   maxArticles: number = 5,
   aiConfig: AIModelConfig = defaultAIConfig,
-  articleStyle: ArticleStyle = defaultArticleStyle
+  articleStyle: ArticleStyle = defaultArticleStyle,
+  videoSettings: VideoSettings = defaultVideoSettings
 ): Promise<AgentResult<DraftArticle[]>> {
   const startTime = Date.now();
   const drafts: DraftArticle[] = [];
@@ -137,7 +147,7 @@ export async function createDrafts(
 
     for (const topic of topicsToProcess) {
       try {
-        const draft = await createDraftFromTopic(topic, language, aiConfig, articleStyle);
+        const draft = await createDraftFromTopic(topic, language, aiConfig, articleStyle, videoSettings);
         if (draft) {
           drafts.push(draft);
         }
@@ -165,7 +175,8 @@ async function createDraftFromTopic(
   topic: GatheredTopic,
   language: 'de' | 'en',
   aiConfig: AIModelConfig,
-  articleStyle: ArticleStyle
+  articleStyle: ArticleStyle,
+  videoSettings: VideoSettings = defaultVideoSettings
 ): Promise<DraftArticle | null> {
   const sourcesText = topic.sources
     .map((s) => `- ${s.title}\n  ${s.snippet}\n  Quelle: ${s.source}`)
@@ -173,6 +184,31 @@ async function createDraftFromTopic(
 
   const images = categoryImages[topic.category] || categoryImages.news;
   const randomImages = images.sort(() => Math.random() - 0.5).slice(0, 3);
+  
+  // Check if we should fetch video for this category
+  let videoEmbed = '';
+  if (videoSettings.enabled) {
+    const shouldFetchVideo = videoSettings.categoriesWithVideos.length === 0 ||
+      videoSettings.categoriesWithVideos.includes(topic.category);
+    
+    if (shouldFetchVideo) {
+      console.log(`[Drafter] Fetching video for topic: ${topic.topic} in category: ${topic.category}`);
+      try {
+        const { embedHtml } = await getVideoForArticle(
+          topic.topic,
+          topic.category,
+          videoSettings.includeYouTube,
+          videoSettings.includeTikTok
+        );
+        if (embedHtml) {
+          videoEmbed = embedHtml;
+          console.log(`[Drafter] Video embed found for: ${topic.topic}`);
+        }
+      } catch (error) {
+        console.error('[Drafter] Error fetching video:', error);
+      }
+    }
+  }
 
   // Select the article type based on style and category
   const selectedType = selectArticleType(articleStyle, topic.category);
@@ -320,13 +356,28 @@ Respond ONLY as JSON (no markdown code blocks):
     if (!jsonMatch) return null;
 
     const articleData = JSON.parse(jsonMatch[0]);
+    
+    // Insert video embed at the beginning of content if available
+    let finalContent = articleData.content;
+    if (videoEmbed) {
+      // Add video after first paragraph for better article flow
+      const firstParagraphEnd = finalContent.indexOf('</p>');
+      if (firstParagraphEnd > -1) {
+        finalContent = finalContent.slice(0, firstParagraphEnd + 4) + 
+          '\n' + videoEmbed + '\n' + 
+          finalContent.slice(firstParagraphEnd + 4);
+      } else {
+        // If no paragraph found, prepend video
+        finalContent = videoEmbed + '\n' + finalContent;
+      }
+    }
 
     return {
       id: `draft-${Date.now()}-${Math.random().toString(36).substring(7)}`,
       topicId: topic.id,
       title: articleData.title,
       teaser: articleData.teaser,
-      content: articleData.content,
+      content: finalContent,
       category: topic.category,
       tags: articleData.tags || [],
       sources: topic.sources.map((s) => s.url),
