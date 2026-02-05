@@ -189,6 +189,7 @@ export default async function HomePage({
       }));
 
     // Convert articles for template components
+    // Keep original category slug for grouping, layouts will handle display names
     const templateArticles: ArticleForCard[] = articles.map(a => ({
       slug: a.slug,
       title: a.title,
@@ -196,7 +197,7 @@ export default async function HomePage({
       teaser: a.teaser,
       image: a.thumbnail,
       thumbnail: a.thumbnail,
-      category: currentLabels[a.category] || a.category,
+      category: a.category, // Keep original slug for category grouping
       date: new Date(a.publishDate).toLocaleDateString(locale === 'de' ? 'de-DE' : 'en-US'),
       publishDate: a.publishDate,
     }));

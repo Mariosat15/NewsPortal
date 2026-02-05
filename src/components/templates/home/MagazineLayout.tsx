@@ -64,7 +64,7 @@ export function MagazineLayout({ template, articles, categories, locale }: HomeL
         {/* Category Sections */}
         {Object.entries(articlesByCategory).slice(0, 3).map(([categorySlug, catArticles]) => {
           const category = categories.find(c => c.slug === categorySlug);
-          const displayName = category?.displayName[locale as 'de' | 'en'] || categorySlug;
+          const displayName = category?.displayName?.[locale as 'de' | 'en'] || category?.displayName?.de || categorySlug;
           
           return (
             <section key={categorySlug} className="mb-12">
