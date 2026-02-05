@@ -29,8 +29,17 @@ const defaultRSSFeeds: RSSFeed[] = [
   { url: 'https://www.moviepilot.de/api/rss/news', name: 'Moviepilot', category: 'entertainment', language: 'de', enabled: true },
 ];
 
-// Calculate articles per category for even distribution
-function calculateDistribution(maxArticles: number, categories: string[], distributeEvenly: boolean): Map<string, number> {
+// Track rotation state in memory (persisted to DB for reliability)
+let lastCategoryOffset = 0;
+
+// Calculate articles per category for even distribution with rotation
+// When maxArticles < categories, we rotate through categories each run
+function calculateDistribution(
+  maxArticles: number, 
+  categories: string[], 
+  distributeEvenly: boolean,
+  rotationOffset: number = 0
+): Map<string, number> {
   const distribution = new Map<string, number>();
   
   if (!distributeEvenly || categories.length === 0) {
@@ -42,32 +51,68 @@ function calculateDistribution(maxArticles: number, categories: string[], distri
   const baseCount = Math.floor(maxArticles / categories.length);
   const remainder = maxArticles % categories.length;
   
+  // Rotate the categories so different ones get priority each run
   categories.forEach((cat, index) => {
-    // First 'remainder' categories get one extra article
-    distribution.set(cat, baseCount + (index < remainder ? 1 : 0));
+    // Calculate rotated index - which categories get the remainder articles
+    const rotatedIndex = (index - rotationOffset + categories.length) % categories.length;
+    distribution.set(cat, baseCount + (rotatedIndex < remainder ? 1 : 0));
   });
   
   return distribution;
+}
+
+// Get current rotation offset from database
+async function getRotationOffset(brandId: string): Promise<number> {
+  try {
+    const { getCollection } = await import('@/lib/db/mongodb');
+    const collection = await getCollection(brandId, 'settings');
+    const doc = await collection.findOne({ key: 'categoryRotationOffset' });
+    return doc?.value || 0;
+  } catch {
+    return lastCategoryOffset;
+  }
+}
+
+// Save rotation offset to database
+async function saveRotationOffset(brandId: string, offset: number): Promise<void> {
+  try {
+    const { getCollection } = await import('@/lib/db/mongodb');
+    const collection = await getCollection(brandId, 'settings');
+    await collection.updateOne(
+      { key: 'categoryRotationOffset' },
+      { $set: { key: 'categoryRotationOffset', value: offset, updatedAt: new Date() } },
+      { upsert: true }
+    );
+    lastCategoryOffset = offset;
+  } catch (error) {
+    console.error('Failed to save rotation offset:', error);
+  }
 }
 
 // Gather topics from RSS feeds and web sources
 export async function gatherTopics(config: AgentConfig): Promise<AgentResult<GatheredTopic[]>> {
   const startTime = Date.now();
   const gatheredTopics: GatheredTopic[] = [];
+  const brandId = config.brandId || process.env.BRAND_ID || 'default';
 
   try {
     const useRSS = config.useRSSFeeds !== false;
     const rssFeeds = config.rssFeeds?.filter(f => f.enabled) || defaultRSSFeeds;
     const distributeEvenly = config.distributeEvenly !== false;
     
-    // Calculate how many articles per category
+    // Get current rotation offset for fair category distribution
+    const rotationOffset = await getRotationOffset(brandId);
+    
+    // Calculate how many articles per category with rotation
     const categoryDistribution = calculateDistribution(
       config.maxArticlesPerRun || 5,
       config.topics,
-      distributeEvenly
+      distributeEvenly,
+      rotationOffset
     );
     
     console.log(`Gathering topics - RSS enabled: ${useRSS}, Feeds: ${rssFeeds.length}`);
+    console.log(`Rotation offset: ${rotationOffset}, Categories: ${config.topics.length}`);
     console.log(`Distribution: ${JSON.stringify(Object.fromEntries(categoryDistribution))}`);
 
     // Track gathered counts per category
@@ -134,6 +179,12 @@ export async function gatherTopics(config: AgentConfig): Promise<AgentResult<Gat
 
     console.log(`Gathered ${gatheredTopics.length} topic groups with ${gatheredTopics.reduce((sum, t) => sum + t.sources.length, 0)} total sources`);
     console.log(`Final counts: ${JSON.stringify(Object.fromEntries(gatheredCounts))}`);
+
+    // Update rotation offset for next run - advance by the number of articles generated
+    // This ensures fair distribution across categories over multiple runs
+    const newOffset = (rotationOffset + (config.maxArticlesPerRun || 1)) % config.topics.length;
+    await saveRotationOffset(brandId, newOffset);
+    console.log(`Updated rotation offset: ${rotationOffset} -> ${newOffset}`);
 
     return {
       success: true,

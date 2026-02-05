@@ -122,6 +122,7 @@ export async function runAgentPipeline(brandId: string, customSettings?: Partial
       defaultLanguage: brandConfig.agentConfig.defaultLanguage,
       maxArticlesPerRun: brandConfig.agentConfig.maxArticlesPerRun,
       cronSchedule: brandConfig.agentConfig.cronSchedule,
+      brandId, // Pass brandId for rotation tracking
       rssFeeds: brandConfig.agentConfig.rssFeeds || [],
       useRSSFeeds: brandConfig.agentConfig.useRSSFeeds ?? true,
       aiModel: brandConfig.agentConfig.aiModel || defaultAIConfig,

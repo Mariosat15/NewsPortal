@@ -33,6 +33,7 @@ export interface AgentConfig {
   defaultLanguage: 'de' | 'en';
   maxArticlesPerRun: number;
   cronSchedule: string;
+  brandId?: string; // For rotation tracking
   
   // RSS Feeds
   rssFeeds: RSSFeed[];
