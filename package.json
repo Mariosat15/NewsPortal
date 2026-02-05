@@ -25,6 +25,7 @@
     "clsx": "^2.1.1",
     "lucide-react": "^0.469.0",
     "mongodb": "^6.12.0",
+    "node-cron": "^3.0.3",
     "next": "15.1.7",
     "next-intl": "^3.26.3",
     "openai": "^4.77.0",
