@@ -5,13 +5,14 @@ import { ServerConfig } from './types';
 export interface SSHExecResult {
   stdout: string;
   stderr: string;
-  code: number;
+  exitCode: number;
 }
 
 export class SSHClient {
   private client: Client | null = null;
   private config: ConnectConfig | null = null;
   private onLog: (message: string) => void;
+  private isConnected: boolean = false;
 
   constructor(onLog?: (message: string) => void) {
     this.onLog = onLog || console.log;
@@ -34,26 +35,37 @@ export class SSHClient {
           : { privateKey: serverConfig.privateKey }),
         readyTimeout: 30000,
         keepaliveInterval: 10000,
+        keepaliveCountMax: 30, // Allow up to 5 minutes of no response during builds
       };
 
       this.log(`Connecting to ${serverConfig.host}:${serverConfig.port}...`);
 
       this.client
         .on('ready', () => {
+          this.isConnected = true;
           this.log(`Connected to ${serverConfig.host}`);
           resolve();
         })
         .on('error', (err) => {
+          this.isConnected = false;
           this.log(`Connection error: ${err.message}`);
           reject(err);
+        })
+        .on('end', () => {
+          this.isConnected = false;
+          this.log('SSH connection ended');
+        })
+        .on('close', () => {
+          this.isConnected = false;
+          this.log('SSH connection closed');
         })
         .connect(this.config);
     });
   }
 
   async exec(command: string, options?: { cwd?: string }): Promise<SSHExecResult> {
-    if (!this.client) {
-      throw new Error('Not connected');
+    if (!this.client || !this.isConnected) {
+      throw new Error('SSH connection lost - please retry deployment');
     }
 
     const fullCommand = options?.cwd 
@@ -65,7 +77,7 @@ export class SSHClient {
     return new Promise((resolve, reject) => {
       this.client!.exec(fullCommand, (err, stream) => {
         if (err) {
-          reject(err);
+          reject(new Error(`SSH exec failed: ${err.message}`));
           return;
         }
 
@@ -74,7 +86,10 @@ export class SSHClient {
 
         stream
           .on('close', (code: number) => {
-            resolve({ stdout, stderr, code });
+            resolve({ stdout, stderr, exitCode: code });
+          })
+          .on('error', (streamErr: Error) => {
+            reject(new Error(`SSH stream error: ${streamErr.message}`));
           })
           .on('data', (data: Buffer) => {
             const text = data.toString();
@@ -168,6 +183,7 @@ export class SSHClient {
 
   disconnect(): void {
     if (this.client) {
+      this.isConnected = false;
       this.client.end();
       this.client = null;
       this.log('Disconnected from server');
