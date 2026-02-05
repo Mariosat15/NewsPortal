@@ -444,6 +444,7 @@ async function processCallback(body: Record<string, unknown>) {
       metadata: {
         userId,
         userEmail,
+        sessionId: deviceMetadata.sessionId, // For cross-browser verification
         operator: body.operator,
         browser: deviceMetadata.browser,
         browserVersion: deviceMetadata.browserVersion,

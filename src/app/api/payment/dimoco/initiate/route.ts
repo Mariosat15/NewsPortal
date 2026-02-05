@@ -76,6 +76,9 @@ export async function GET(request: NextRequest) {
 
     // Get IP address from request headers (supports Cloudflare, standard proxies)
     const ipAddress = extractIpFromRequest(request) || 'unknown';
+    
+    // Get session ID from cookie for linking purchases
+    const sessionId = request.cookies.get('news_session')?.value;
 
     // VALIDATE NETWORK TYPE - Block WiFi purchases
     // Only bypass if explicitly set in .env (for local testing when needed)
@@ -137,6 +140,7 @@ export async function GET(request: NextRequest) {
       metadata: {
         ...deviceInfo,
         ipAddress,
+        sessionId, // For cross-browser unlock verification
         userAgent: request.headers.get('user-agent') || 'unknown',
       },
     };

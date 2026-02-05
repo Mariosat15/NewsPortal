@@ -146,10 +146,11 @@ export default async function ArticlePage({
       // Check if unlocked (only if pricing is enabled)
       if (pricingEnabled) {
         const cookieStore = await cookies();
+        const unlocksCollection = await getCollection(brandId, 'unlocks');
         
-        // Check MSISDN-based unlock (primary method for DCB)
+        // Method 1: Check MSISDN-based unlock (primary method for DCB)
         const msisdn = cookieStore.get('user_msisdn')?.value;
-        if (msisdn) {
+        if (msisdn && !isUnlocked) {
           // Try repository check first
           isUnlocked = await unlockRepo.hasUnlocked(msisdn, found._id!);
           console.log('[Article Access] MSISDN repo check:', { 
@@ -158,10 +159,8 @@ export default async function ArticlePage({
             isUnlocked 
           });
           
-          // If not found, try direct database query with multiple matching strategies
+          // If not found, try direct database query with multiple MSISDN formats
           if (!isUnlocked) {
-            const unlocksCollection = await getCollection(brandId, 'unlocks');
-            // Normalize MSISDN for comparison
             const cleanMsisdn = msisdn.replace(/\D/g, '');
             
             const userUnlock = await unlocksCollection.findOne({
@@ -171,38 +170,66 @@ export default async function ArticlePage({
                 { msisdn: msisdn },
                 { msisdn: `+${cleanMsisdn}` },
                 { normalizedMsisdn: cleanMsisdn },
-                // Also check without leading country code variations
                 { normalizedMsisdn: cleanMsisdn.replace(/^49/, '') },
               ],
             });
             
             if (userUnlock) {
               isUnlocked = true;
-              console.log('[Article Access] Found via direct query:', userUnlock.transactionId);
+              console.log('[Article Access] Found via MSISDN direct query');
             }
           }
         }
         
-        // Also check by article ID directly (for URL unlocked=true flow)
-        if (!isUnlocked) {
-          const unlocksCollection = await getCollection(brandId, 'unlocks');
-          const recentUnlock = await unlocksCollection.findOne({
+        // Method 2: Check by session ID (helps when MSISDN cookie is lost but same browser)
+        const sessionId = cookieStore.get('news_session')?.value;
+        if (!isUnlocked && sessionId) {
+          // Check if any unlock was made from this session
+          const sessionUnlock = await unlocksCollection.findOne({
             articleId: found._id,
             status: 'completed',
-          }, { sort: { unlockedAt: -1 } });
+            'metadata.sessionId': sessionId,
+          });
           
-          // If there's a recent unlock for this article and user has same session, allow
-          if (recentUnlock && msisdn) {
-            const cleanMsisdn = msisdn.replace(/\D/g, '');
-            const unlockCleanMsisdn = recentUnlock.normalizedMsisdn || recentUnlock.msisdn?.replace(/\D/g, '');
-            if (cleanMsisdn === unlockCleanMsisdn) {
-              isUnlocked = true;
-              console.log('[Article Access] Matched via session MSISDN');
+          if (sessionUnlock) {
+            isUnlocked = true;
+            console.log('[Article Access] Found via session ID');
+            
+            // Restore MSISDN cookie from the unlock record
+            if (sessionUnlock.msisdn) {
+              console.log('[Article Access] Restoring MSISDN cookie from unlock record');
             }
           }
         }
         
-        console.log('[Article Access] Final status:', { isUnlocked, hasMsisdn: !!msisdn });
+        // Method 3: SANDBOX ONLY - Check by DIMOCO sandbox MSISDN
+        // In sandbox, all purchases are made with MSISDN 436763602302
+        // This allows testing without real carrier billing
+        const isSandbox = process.env.DIMOCO_API_URL?.includes('sandbox');
+        if (!isUnlocked && isSandbox) {
+          const sandboxMsisdn = '436763602302'; // DIMOCO sandbox test MSISDN
+          const sandboxUnlock = await unlocksCollection.findOne({
+            articleId: found._id,
+            status: 'completed',
+            $or: [
+              { msisdn: sandboxMsisdn },
+              { msisdn: `+${sandboxMsisdn}` },
+              { normalizedMsisdn: sandboxMsisdn },
+            ],
+          });
+          
+          if (sandboxUnlock) {
+            isUnlocked = true;
+            console.log('[Article Access] SANDBOX MODE - Article unlocked via sandbox MSISDN');
+          }
+        }
+        
+        console.log('[Article Access] Final status:', { 
+          isUnlocked, 
+          hasMsisdn: !!msisdn,
+          hasSession: !!sessionId,
+          isSandbox: !!isSandbox,
+        });
       } else {
         // Pricing disabled - all articles are free
         isUnlocked = true;
