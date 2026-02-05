@@ -13,7 +13,7 @@ export interface UserVisit {
 }
 
 export type AuthProvider = 'email' | 'msisdn';
-export type MsisdnSource = 'header_enrichment' | 'dimoco_identify' | 'payment' | 'manual';
+export type MsisdnSource = 'header_enrichment' | 'dimoco_identify' | 'payment' | 'manual' | 'billing_import';
 export type UserStatus = 'visitor' | 'identified' | 'customer';
 
 export interface User {
