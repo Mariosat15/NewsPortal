@@ -179,7 +179,7 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full bg-white shadow-sm">
       {/* Main Header Row */}
       <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-20">
           {/* Left - Mobile Menu Button (hidden on desktop) */}
           <button
             className="lg:hidden p-2 text-gray-600 hover:text-[#e91e8c] transition-colors"
@@ -198,7 +198,7 @@ export function Header() {
               <img
                 src={logoUrl}
                 alt={brand.name}
-                className="h-14 md:h-16 w-auto max-w-[280px] object-contain"
+                style={{ height: '50px', width: 'auto', maxWidth: '320px', objectFit: 'contain' }}
                 onError={(e) => {
                   // If logo fails to load, hide it and show text instead
                   (e.target as HTMLImageElement).style.display = 'none';
