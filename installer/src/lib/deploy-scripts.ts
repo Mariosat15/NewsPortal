@@ -211,7 +211,7 @@ export async function deployToServer(
   const deployPath = config.server.deployPath;
   const brandId = config.domain.brandId;
   const domain = config.domain.domain;
-  const email = config.admin.adminEmail;
+  const sslEmail = config.domain.sslEmail || config.admin.adminEmail;
 
   try {
     // ============================================
@@ -503,7 +503,7 @@ export async function deployToServer(
     // Get SSL certificate
     onProgress({ stepId: 'ssl', status: 'running', log: `Obtaining SSL certificate for ${domain}...` });
     const certResult = await ssh.exec(
-      `sudo certbot --nginx -d ${domain} -d www.${domain} --non-interactive --agree-tos -m ${email} --redirect 2>&1 || echo "CERTBOT_WARNING"`
+      `sudo certbot --nginx -d ${domain} -d www.${domain} --non-interactive --agree-tos -m ${sslEmail} --redirect 2>&1 || echo "CERTBOT_WARNING"`
     );
 
     if (certResult.stdout.includes('CERTBOT_WARNING') || certResult.stdout.includes('error')) {

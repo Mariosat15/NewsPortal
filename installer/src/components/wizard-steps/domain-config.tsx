@@ -71,6 +71,20 @@ export function DomainConfigStep({ config, onChange }: DomainConfigStepProps) {
         </p>
       </div>
 
+      <div className="space-y-2">
+        <Label htmlFor="sslEmail">SSL Certificate Email</Label>
+        <Input
+          id="sslEmail"
+          type="email"
+          placeholder="admin@example.com"
+          value={config.sslEmail}
+          onChange={(e) => onChange({ ...config, sslEmail: e.target.value })}
+        />
+        <p className="text-xs text-muted-foreground">
+          Email for Let&apos;s Encrypt SSL certificate notifications (expiry warnings, etc.)
+        </p>
+      </div>
+
       <div className="space-y-4 pt-4 border-t">
         <div className="flex items-center gap-2">
           <Palette className="h-4 w-4 text-muted-foreground" />

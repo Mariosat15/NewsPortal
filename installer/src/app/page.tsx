@@ -56,6 +56,7 @@ const initialConfig: DeploymentConfig = {
     domain: '',
     primaryColor: '#1a73e8',
     secondaryColor: '#4285f4',
+    sslEmail: '',
   },
   database: {
     mongodbUri: '',
@@ -121,6 +122,7 @@ export default function InstallerPage() {
         domain: envVars.BRAND_DOMAIN || config.domain.domain,
         primaryColor: envVars.BRAND_PRIMARY_COLOR || config.domain.primaryColor,
         secondaryColor: envVars.BRAND_SECONDARY_COLOR || config.domain.secondaryColor,
+        sslEmail: envVars.SSL_EMAIL || envVars.ADMIN_EMAIL || config.domain.sslEmail,
       },
       database: {
         mongodbUri: envVars.MONGODB_URI || config.database.mongodbUri,

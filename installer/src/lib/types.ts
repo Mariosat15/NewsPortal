@@ -15,6 +15,7 @@ export interface DomainConfig {
   domain: string;
   primaryColor: string;
   secondaryColor: string;
+  sslEmail: string;  // Email for SSL certificate notifications
 }
 
 export interface DatabaseConfig {
