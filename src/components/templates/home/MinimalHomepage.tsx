@@ -81,7 +81,7 @@ export function MinimalHomepage({ template, articles, categories, locale }: Home
           >
             {locale === 'de' ? 'Alle' : 'All'}
           </Link>
-          {categories.filter(c => c.enabled).slice(0, 6).map((cat) => (
+          {categories.filter(c => c.enabled).slice(0, 12).map((cat) => (
             <Link
               key={cat.slug}
               href={`/${locale}/categories/${cat.slug}`}

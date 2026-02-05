@@ -71,7 +71,7 @@ export function GridHomepage({ template, articles, categories, locale }: HomeLay
               >
                 {locale === 'de' ? 'Alle' : 'All'}
               </button>
-              {categories.filter(c => c.enabled).slice(0, 10).map((cat) => (
+              {categories.filter(c => c.enabled).slice(0, 20).map((cat) => (
                 <button
                   key={cat.slug}
                   onClick={() => setActiveCategory(cat.slug)}

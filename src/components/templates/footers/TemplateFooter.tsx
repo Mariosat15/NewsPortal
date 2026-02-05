@@ -55,7 +55,11 @@ export function TemplateFooter({ template, categories, locale, brandName }: Temp
   ];
 
   const links = footerLinks.length > 0 ? footerLinks : defaultLinks;
-  const enabledCategories = categories.filter(c => c.enabled).slice(0, 6);
+  const enabledCategories = categories.filter(c => c.enabled);
+  // Split categories into two columns for footer
+  const halfPoint = Math.ceil(enabledCategories.length / 2);
+  const leftCategories = enabledCategories.slice(0, Math.min(10, halfPoint));
+  const rightCategories = enabledCategories.slice(halfPoint, Math.min(20, enabledCategories.length));
 
   return (
     <footer 
@@ -86,7 +90,7 @@ export function TemplateFooter({ template, categories, locale, brandName }: Temp
             </p>
           </div>
 
-          {/* Categories */}
+          {/* Categories - Left */}
           <div>
             <h4 
               className="text-xs font-bold uppercase tracking-wider mb-4"
@@ -95,7 +99,7 @@ export function TemplateFooter({ template, categories, locale, brandName }: Temp
               {locale === 'de' ? 'Kategorien' : 'Categories'}
             </h4>
             <ul className="space-y-2">
-              {enabledCategories.slice(0, 4).map((cat) => (
+              {leftCategories.map((cat) => (
                 <li key={cat.slug}>
                   <Link 
                     href={`/${locale}/categories/${cat.slug}`}
@@ -109,36 +113,51 @@ export function TemplateFooter({ template, categories, locale, brandName }: Temp
             </ul>
           </div>
 
-          {/* Quick Links */}
+          {/* Categories - Right (if more than 10 categories) */}
           <div>
-            <h4 
-              className="text-xs font-bold uppercase tracking-wider mb-4"
-              style={{ color: colors.textMuted }}
-            >
-              {locale === 'de' ? 'Links' : 'Links'}
-            </h4>
-            <ul className="space-y-2">
-              <li>
-                <Link 
-                  href={`/${locale}`} 
-                  className="text-sm transition-colors hover:opacity-80"
+            {rightCategories.length > 0 ? (
+              <>
+                <h4 
+                  className="text-xs font-bold uppercase tracking-wider mb-4"
                   style={{ color: colors.textMuted }}
                 >
-                  {locale === 'de' ? 'Startseite' : 'Home'}
-                </Link>
-              </li>
-              {enabledCategories.slice(4, 6).map((cat) => (
-                <li key={cat.slug}>
-                  <Link 
-                    href={`/${locale}/categories/${cat.slug}`}
-                    className="text-sm transition-colors hover:opacity-80"
-                    style={{ color: colors.textMuted }}
-                  >
-                    {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+                  {locale === 'de' ? 'Mehr Kategorien' : 'More Categories'}
+                </h4>
+                <ul className="space-y-2">
+                  {rightCategories.map((cat) => (
+                    <li key={cat.slug}>
+                      <Link 
+                        href={`/${locale}/categories/${cat.slug}`}
+                        className="text-sm transition-colors hover:opacity-80"
+                        style={{ color: colors.textMuted }}
+                      >
+                        {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <>
+                <h4 
+                  className="text-xs font-bold uppercase tracking-wider mb-4"
+                  style={{ color: colors.textMuted }}
+                >
+                  {locale === 'de' ? 'Links' : 'Links'}
+                </h4>
+                <ul className="space-y-2">
+                  <li>
+                    <Link 
+                      href={`/${locale}`} 
+                      className="text-sm transition-colors hover:opacity-80"
+                      style={{ color: colors.textMuted }}
+                    >
+                      {locale === 'de' ? 'Startseite' : 'Home'}
+                    </Link>
+                  </li>
+                </ul>
+              </>
+            )}
           </div>
 
           {/* Legal */}

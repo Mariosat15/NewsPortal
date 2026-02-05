@@ -1,15 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { useState, useEffect } from 'react';
-import { Menu, X, Search, TrendingUp, Clock } from 'lucide-react';
+import { Menu, X, Search, TrendingUp, Clock, ChevronDown } from 'lucide-react';
 import { HeaderProps } from '@/lib/templates/types';
 
 export function StickyCompactHeader({ template, categories, locale, brandName, logoUrl }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const colors = template.activeColors;
+
+  const enabledCategories = categories.filter(c => c.enabled);
+  const visibleCount = 10;
+  const visibleCategories = enabledCategories.slice(0, visibleCount);
+  const moreCategories = enabledCategories.slice(visibleCount);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -103,12 +108,12 @@ export function StickyCompactHeader({ template, categories, locale, brandName, l
           </Link>
 
           {/* Compact Navigation */}
-          <nav className="hidden lg:flex items-center">
-            {categories.filter(c => c.enabled).slice(0, 8).map((cat, i) => (
+          <nav className="hidden lg:flex items-center flex-wrap">
+            {visibleCategories.map((cat, i) => (
               <Link
                 key={cat.slug}
                 href={`/${locale}/categories/${cat.slug}`}
-                className="px-3 py-1 text-xs font-medium uppercase tracking-wider transition-colors border-r last:border-r-0"
+                className="px-2 py-1 text-xs font-medium uppercase tracking-wider transition-colors border-r whitespace-nowrap"
                 style={{ 
                   color: colors.text,
                   borderColor: colors.border,
@@ -118,6 +123,36 @@ export function StickyCompactHeader({ template, categories, locale, brandName, l
                 {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </Link>
             ))}
+            {moreCategories.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => setMoreOpen(!moreOpen)}
+                  onBlur={() => setTimeout(() => setMoreOpen(false), 150)}
+                  className="px-2 py-1 text-xs font-medium uppercase tracking-wider flex items-center gap-1"
+                  style={{ color: colors.text }}
+                >
+                  {locale === 'de' ? 'Mehr' : 'More'}
+                  <ChevronDown className={`w-3 h-3 transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {moreOpen && (
+                  <div 
+                    className="absolute top-full right-0 mt-1 py-2 rounded-lg shadow-lg min-w-[140px] z-50"
+                    style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
+                  >
+                    {moreCategories.map((cat) => (
+                      <Link
+                        key={cat.slug}
+                        href={`/${locale}/categories/${cat.slug}`}
+                        className="block px-3 py-2 text-xs font-medium uppercase tracking-wider transition-colors hover:bg-black/5"
+                        style={{ color: colors.text }}
+                      >
+                        {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </nav>
 
           {/* Actions */}

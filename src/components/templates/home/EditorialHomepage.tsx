@@ -67,11 +67,11 @@ export function EditorialHomepage({ template, articles, categories, locale }: Ho
             </span>
           </div>
           <div className="flex items-center gap-6">
-            {categories.filter(c => c.enabled).slice(0, 5).map((cat) => (
+            {categories.filter(c => c.enabled).slice(0, 8).map((cat) => (
               <Link
                 key={cat.slug}
                 href={`/${locale}/categories/${cat.slug}`}
-                className="text-xs font-medium uppercase tracking-wider hover:underline hidden md:block"
+                className="text-xs font-medium uppercase tracking-wider hover:underline hidden lg:block"
                 style={{ color: colors.textMuted }}
               >
                 {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
@@ -500,7 +500,7 @@ export function EditorialHomepage({ template, articles, categories, locale }: Ho
                 {locale === 'de' ? 'Kategorien' : 'Categories'}
               </h3>
               <div className="flex flex-wrap" style={{ gap: spacing.xs }}>
-                {categories.filter(c => c.enabled).slice(0, 10).map((cat) => (
+                {categories.filter(c => c.enabled).slice(0, 20).map((cat) => (
                   <Link
                     key={cat.slug}
                     href={`/${locale}/categories/${cat.slug}`}

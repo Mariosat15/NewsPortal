@@ -108,54 +108,94 @@ export function MegaHeader({ template, categories, locale, brandName, logoUrl }:
         style={{ backgroundColor: colors.background, borderColor: colors.border }}
       >
         <div 
-          className="mx-auto px-4 flex items-center"
+          className="mx-auto px-4 flex items-center flex-wrap"
           style={{ maxWidth: template.spacing.containerMax }}
         >
-          {categories.filter(c => c.enabled).slice(0, 8).map((cat) => (
-            <div 
-              key={cat.slug}
-              className="relative"
-              onMouseEnter={() => setActiveDropdown(cat.slug)}
-              onMouseLeave={() => setActiveDropdown(null)}
-            >
-              <Link
-                href={`/${locale}/categories/${cat.slug}`}
-                className="flex items-center gap-1 px-4 py-3 text-sm font-semibold uppercase tracking-wide transition-colors border-b-2"
-                style={{ 
-                  color: activeDropdown === cat.slug ? colors.accent : colors.text,
-                  borderColor: activeDropdown === cat.slug ? colors.accent : 'transparent',
-                  fontFamily: template.typography.bodyFont,
-                }}
-              >
-                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
-                <ChevronDown className="w-3 h-3" />
-              </Link>
-              
-              {/* Dropdown */}
-              {activeDropdown === cat.slug && (
-                <div 
-                  className="absolute top-full left-0 w-64 py-2 shadow-lg rounded-b-lg z-50"
-                  style={{ backgroundColor: colors.surface }}
-                >
-                  {cat.aliases?.map((alias) => (
+          {(() => {
+            const enabledCats = categories.filter(c => c.enabled);
+            const visibleCount = 12;
+            const visibleCats = enabledCats.slice(0, visibleCount);
+            const moreCats = enabledCats.slice(visibleCount);
+            
+            return (
+              <>
+                {visibleCats.map((cat) => (
+                  <div 
+                    key={cat.slug}
+                    className="relative"
+                    onMouseEnter={() => setActiveDropdown(cat.slug)}
+                    onMouseLeave={() => setActiveDropdown(null)}
+                  >
                     <Link
-                      key={alias}
-                      href={`/${locale}/categories/${alias}`}
-                      className="block px-4 py-2 text-sm transition-colors"
-                      style={{ color: colors.text }}
+                      href={`/${locale}/categories/${cat.slug}`}
+                      className="flex items-center gap-1 px-3 py-3 text-xs font-semibold uppercase tracking-wide transition-colors border-b-2"
+                      style={{ 
+                        color: activeDropdown === cat.slug ? colors.accent : colors.text,
+                        borderColor: activeDropdown === cat.slug ? colors.accent : 'transparent',
+                        fontFamily: template.typography.bodyFont,
+                      }}
                     >
-                      {alias.charAt(0).toUpperCase() + alias.slice(1)}
+                      {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
                     </Link>
-                  ))}
-                  {(!cat.aliases || cat.aliases.length === 0) && (
-                    <span className="block px-4 py-2 text-sm" style={{ color: colors.textMuted }}>
-                      {locale === 'de' ? 'Alle Artikel anzeigen' : 'View all articles'}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+                    
+                    {/* Dropdown */}
+                    {activeDropdown === cat.slug && cat.aliases && cat.aliases.length > 0 && (
+                      <div 
+                        className="absolute top-full left-0 w-48 py-2 shadow-lg rounded-b-lg z-50"
+                        style={{ backgroundColor: colors.surface }}
+                      >
+                        {cat.aliases.map((alias) => (
+                          <Link
+                            key={alias}
+                            href={`/${locale}/categories/${alias}`}
+                            className="block px-4 py-2 text-sm transition-colors hover:bg-black/5"
+                            style={{ color: colors.text }}
+                          >
+                            {alias.charAt(0).toUpperCase() + alias.slice(1)}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {moreCats.length > 0 && (
+                  <div 
+                    className="relative"
+                    onMouseEnter={() => setActiveDropdown('more')}
+                    onMouseLeave={() => setActiveDropdown(null)}
+                  >
+                    <button
+                      className="flex items-center gap-1 px-3 py-3 text-xs font-semibold uppercase tracking-wide transition-colors border-b-2"
+                      style={{ 
+                        color: activeDropdown === 'more' ? colors.accent : colors.text,
+                        borderColor: activeDropdown === 'more' ? colors.accent : 'transparent',
+                      }}
+                    >
+                      {locale === 'de' ? 'Mehr' : 'More'}
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                    {activeDropdown === 'more' && (
+                      <div 
+                        className="absolute top-full right-0 w-48 py-2 shadow-lg rounded-b-lg z-50"
+                        style={{ backgroundColor: colors.surface }}
+                      >
+                        {moreCats.map((cat) => (
+                          <Link
+                            key={cat.slug}
+                            href={`/${locale}/categories/${cat.slug}`}
+                            className="block px-4 py-2 text-sm transition-colors hover:bg-black/5"
+                            style={{ color: colors.text }}
+                          >
+                            {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       </nav>
 

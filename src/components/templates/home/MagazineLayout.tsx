@@ -391,7 +391,7 @@ export function MagazineLayout({ template, articles, categories, locale }: HomeL
                   {locale === 'de' ? 'Kategorien' : 'Categories'}
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.xs }}>
-                  {categories.filter(c => c.enabled).slice(0, 10).map((cat) => (
+                  {categories.filter(c => c.enabled).slice(0, 20).map((cat) => (
                     <Link
                       key={cat.slug}
                       href={`/${locale}/categories/${cat.slug}`}

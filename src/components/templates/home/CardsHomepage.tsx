@@ -408,7 +408,7 @@ export function CardsHomepage({ template, articles, categories, locale }: HomeLa
               </div>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.xs }}>
-                {categories.filter(c => c.enabled).slice(0, 10).map((cat) => (
+                {categories.filter(c => c.enabled).slice(0, 20).map((cat) => (
                   <Link
                     key={cat.slug}
                     href={`/${locale}/categories/${cat.slug}`}

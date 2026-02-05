@@ -1,17 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { useState } from 'react';
-import { Menu, X, Search, Bell } from 'lucide-react';
+import { Menu, X, Search, ChevronDown } from 'lucide-react';
 import { HeaderProps } from '@/lib/templates/types';
 
 export function SplitHeader({ template, categories, locale, brandName, logoUrl }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const colors = template.activeColors;
 
-  const leftCategories = categories.filter(c => c.enabled).slice(0, 4);
-  const rightCategories = categories.filter(c => c.enabled).slice(4, 8);
+  const enabledCategories = categories.filter(c => c.enabled);
+  const halfCount = Math.min(6, Math.ceil(enabledCategories.length / 2));
+  const leftCategories = enabledCategories.slice(0, halfCount);
+  const rightCategories = enabledCategories.slice(halfCount, halfCount * 2);
+  const moreCategories = enabledCategories.slice(halfCount * 2);
 
   return (
     <header 
@@ -73,7 +76,7 @@ export function SplitHeader({ template, categories, locale, brandName, logoUrl }
               <Link
                 key={cat.slug}
                 href={`/${locale}/categories/${cat.slug}`}
-                className="px-3 py-2 text-sm font-medium transition-colors"
+                className="px-2 py-2 text-sm font-medium transition-colors whitespace-nowrap"
                 style={{ 
                   color: colors.text,
                   fontFamily: template.typography.bodyFont,
@@ -82,6 +85,36 @@ export function SplitHeader({ template, categories, locale, brandName, logoUrl }
                 {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </Link>
             ))}
+            {moreCategories.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => setMoreOpen(!moreOpen)}
+                  onBlur={() => setTimeout(() => setMoreOpen(false), 150)}
+                  className="px-2 py-2 text-sm font-medium flex items-center gap-1"
+                  style={{ color: colors.text }}
+                >
+                  {locale === 'de' ? 'Mehr' : 'More'}
+                  <ChevronDown className={`w-4 h-4 transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {moreOpen && (
+                  <div 
+                    className="absolute top-full right-0 mt-1 py-2 rounded-lg shadow-lg min-w-[160px] z-50"
+                    style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
+                  >
+                    {moreCategories.map((cat) => (
+                      <Link
+                        key={cat.slug}
+                        href={`/${locale}/categories/${cat.slug}`}
+                        className="block px-4 py-2 text-sm transition-colors hover:bg-black/5"
+                        style={{ color: colors.text }}
+                      >
+                        {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <button 
               className="ml-2 p-2 rounded-full transition-colors"
               style={{ color: colors.textMuted }}

@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { useState } from 'react';
 import { Menu, X, Search, ChevronDown } from 'lucide-react';
 import { HeaderProps } from '@/lib/templates/types';
@@ -9,7 +8,13 @@ import { HeaderProps } from '@/lib/templates/types';
 export function StandardHeader({ template, categories, locale, brandName, logoUrl }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const colors = template.activeColors;
+
+  const enabledCategories = categories.filter(c => c.enabled);
+  const visibleCount = 10; // Show up to 10 in main nav
+  const visibleCategories = enabledCategories.slice(0, visibleCount);
+  const moreCategories = enabledCategories.slice(visibleCount);
 
   return (
     <header 
@@ -43,12 +48,12 @@ export function StandardHeader({ template, categories, locale, brandName, logoUr
         </Link>
 
         {/* Desktop Navigation */}
-        <nav className="hidden lg:flex items-center gap-1">
-          {categories.filter(c => c.enabled).slice(0, 7).map((cat) => (
+        <nav className="hidden lg:flex items-center gap-1 flex-wrap">
+          {visibleCategories.map((cat) => (
             <Link
               key={cat.slug}
               href={`/${locale}/categories/${cat.slug}`}
-              className="px-3 py-2 text-sm font-medium transition-colors rounded-md hover:bg-black/5"
+              className="px-2 py-2 text-sm font-medium transition-colors rounded-md hover:bg-black/5 whitespace-nowrap"
               style={{ 
                 color: colors.text,
                 fontFamily: template.typography.bodyFont,
@@ -57,6 +62,36 @@ export function StandardHeader({ template, categories, locale, brandName, logoUr
               {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
             </Link>
           ))}
+          {moreCategories.length > 0 && (
+            <div className="relative">
+              <button
+                onClick={() => setMoreOpen(!moreOpen)}
+                onBlur={() => setTimeout(() => setMoreOpen(false), 150)}
+                className="px-2 py-2 text-sm font-medium transition-colors rounded-md hover:bg-black/5 flex items-center gap-1"
+                style={{ color: colors.text }}
+              >
+                {locale === 'de' ? 'Mehr' : 'More'}
+                <ChevronDown className={`w-4 h-4 transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {moreOpen && (
+                <div 
+                  className="absolute top-full right-0 mt-1 py-2 rounded-lg shadow-lg min-w-[180px] z-50"
+                  style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
+                >
+                  {moreCategories.map((cat) => (
+                    <Link
+                      key={cat.slug}
+                      href={`/${locale}/categories/${cat.slug}`}
+                      className="block px-4 py-2 text-sm transition-colors hover:bg-black/5"
+                      style={{ color: colors.text }}
+                    >
+                      {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </nav>
 
         {/* Actions */}
