@@ -302,4 +302,4 @@ export async function runAllBrandPipelines(): Promise<AgentRunLog[]> {
   return logs;
 }
 
-export { gatherTopics, createDrafts, editDrafts, publishArticles, getPipelineProgress };
+export { gatherTopics, createDrafts, editDrafts, publishArticles };
