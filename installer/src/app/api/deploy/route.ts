@@ -28,9 +28,17 @@ export async function POST(request: NextRequest) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
+        let isClosed = false;
+        
         const sendUpdate = (update: StepUpdate) => {
-          const data = `data: ${JSON.stringify(update)}\n\n`;
-          controller.enqueue(encoder.encode(data));
+          if (isClosed) return; // Don't send after stream is closed
+          try {
+            const data = `data: ${JSON.stringify(update)}\n\n`;
+            controller.enqueue(encoder.encode(data));
+          } catch {
+            // Controller may have been closed by client disconnect
+            isClosed = true;
+          }
         };
 
         try {
@@ -43,6 +51,7 @@ export async function POST(request: NextRequest) {
             complete: true,
           });
         } finally {
+          isClosed = true;
           controller.close();
         }
       },
