@@ -3,6 +3,10 @@ import { cookies } from 'next/headers';
 import { runAgentPipeline } from '@/lib/agents';
 import { getBrandIdSync } from '@/lib/brand/server';
 
+// Extend timeout for this route - pipeline can take several minutes
+export const maxDuration = 300; // 5 minutes max
+export const dynamic = 'force-dynamic';
+
 // Verify admin authentication
 async function verifyAdmin(request: NextRequest): Promise<boolean> {
   // Check cookie
@@ -21,9 +25,12 @@ async function verifyAdmin(request: NextRequest): Promise<boolean> {
 
 // POST /api/agents/run - Trigger agent pipeline manually
 export async function POST(request: NextRequest) {
+  console.log('[API] Agent pipeline POST request received');
+  
   try {
     // Verify admin authorization
     if (!(await verifyAdmin(request))) {
+      console.log('[API] Unauthorized request');
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -31,6 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     const brandId = getBrandIdSync();
+    console.log(`[API] Brand ID: ${brandId}`);
     
     // Parse settings from request body if provided
     let customSettings;
@@ -38,16 +46,29 @@ export async function POST(request: NextRequest) {
       const body = await request.json();
       if (body.settings) {
         customSettings = body.settings;
-        console.log('Using custom settings from request');
+        console.log('[API] Using custom settings from request');
       }
     } catch {
       // No body or invalid JSON, use defaults
+      console.log('[API] Using default settings');
     }
     
-    console.log(`Manually triggering agent pipeline for brand: ${brandId}`);
+    console.log(`[API] Starting agent pipeline for brand: ${brandId}`);
     
-    const log = await runAgentPipeline(brandId, customSettings);
+    let log;
+    try {
+      log = await runAgentPipeline(brandId, customSettings);
+    } catch (pipelineError) {
+      console.error('[API] Pipeline execution error:', pipelineError);
+      return NextResponse.json({
+        success: false,
+        error: pipelineError instanceof Error ? pipelineError.message : 'Pipeline execution failed',
+        details: pipelineError instanceof Error ? pipelineError.stack : undefined,
+      }, { status: 500 });
+    }
 
+    console.log(`[API] Pipeline completed: ${log.status}`);
+    
     return NextResponse.json({
       success: true,
       data: {
@@ -63,11 +84,12 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Agent run error:', error);
+    console.error('[API] Unexpected error:', error);
     return NextResponse.json(
       { 
         success: false, 
-        error: error instanceof Error ? error.message : 'Failed to run agents' 
+        error: error instanceof Error ? error.message : 'Failed to run agents',
+        type: 'unexpected_error'
       },
       { status: 500 }
     );
