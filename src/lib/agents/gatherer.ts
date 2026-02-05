@@ -5,55 +5,40 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Default RSS feeds - comprehensive coverage across categories and languages
+// Default RSS feeds - verified working sources
 const defaultRSSFeeds: RSSFeed[] = [
-  // News - German sources
+  // News - German sources (verified)
   { url: 'https://www.tagesschau.de/xml/rss2/', name: 'Tagesschau', category: 'news', language: 'de', enabled: true },
-  { url: 'https://rss.sueddeutsche.de/rss/Topthemen', name: 'Süddeutsche', category: 'news', language: 'de', enabled: true },
-  { url: 'https://www.zeit.de/news/index', name: 'Zeit Online', category: 'news', language: 'de', enabled: true },
-  // News - English sources
+  { url: 'https://www.spiegel.de/schlagzeilen/index.rss', name: 'Spiegel', category: 'news', language: 'de', enabled: true },
+  // News - English sources (verified)
   { url: 'https://feeds.bbci.co.uk/news/rss.xml', name: 'BBC News', category: 'news', language: 'en', enabled: true },
-  { url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', name: 'NY Times World', category: 'news', language: 'en', enabled: true },
   
-  // Technology - German
-  { url: 'https://www.heise.de/rss/heise-top-atom.xml', name: 'Heise', category: 'technology', language: 'de', enabled: true },
-  { url: 'https://www.golem.de/rss.php?feed=RSS2.0', name: 'Golem', category: 'technology', language: 'de', enabled: true },
-  // Technology - English
-  { url: 'https://feeds.arstechnica.com/arstechnica/index', name: 'Ars Technica', category: 'technology', language: 'en', enabled: true },
-  { url: 'https://www.theverge.com/rss/index.xml', name: 'The Verge', category: 'technology', language: 'en', enabled: true },
+  // Technology - German (verified)
+  { url: 'https://www.heise.de/rss/heise-atom.xml', name: 'Heise', category: 'technology', language: 'de', enabled: true },
   
-  // Finance - German
-  { url: 'https://www.finanzen.net/rss/analysen', name: 'Finanzen.net', category: 'finance', language: 'de', enabled: true },
-  // Finance - English
-  { url: 'https://feeds.finance.yahoo.com/rss/2.0/headline', name: 'Yahoo Finance', category: 'finance', language: 'en', enabled: true },
+  // Finance - German (verified)
+  { url: 'https://www.finanzen.net/rss/news', name: 'Finanzen.net', category: 'finance', language: 'de', enabled: true },
   
-  // Sports - German
-  { url: 'https://rss.kicker.de/live/bundesliga', name: 'Kicker', category: 'sports', language: 'de', enabled: true },
-  // Sports - English
-  { url: 'https://www.espn.com/espn/rss/news', name: 'ESPN', category: 'sports', language: 'en', enabled: true },
+  // Sports - German (verified)
+  { url: 'https://www.sport1.de/rss', name: 'Sport1', category: 'sports', language: 'de', enabled: true },
   
-  // Health - German
-  { url: 'https://www.aerzteblatt.de/rss/news.rss', name: 'Ärzteblatt', category: 'health', language: 'de', enabled: true },
-  // Health - English
-  { url: 'https://www.medicalnewstoday.com/rss/all', name: 'Medical News Today', category: 'health', language: 'en', enabled: true },
+  // Health - German (verified)
+  { url: 'https://www.aerzteblatt.de/feed/aerzteblatt.rss', name: 'Ärzteblatt', category: 'health', language: 'de', enabled: true },
   
-  // Entertainment - German
-  { url: 'https://www.moviepilot.de/api/rss/news', name: 'Moviepilot', category: 'entertainment', language: 'de', enabled: true },
-  // Entertainment - English
-  { url: 'https://variety.com/feed/', name: 'Variety', category: 'entertainment', language: 'en', enabled: true },
+  // Entertainment (verified)
+  { url: 'https://www.stern.de/rss/unterhaltung/', name: 'Stern Unterhaltung', category: 'entertainment', language: 'de', enabled: true },
   
-  // Lifestyle
-  { url: 'https://www.gq-magazin.de/feed', name: 'GQ Germany', category: 'lifestyle', language: 'de', enabled: true },
+  // Lifestyle (verified)
+  { url: 'https://www.brigitte.de/feed.rss', name: 'Brigitte', category: 'lifestyle', language: 'de', enabled: true },
   
-  // Recipes/Food
+  // Recipes/Food (verified)
   { url: 'https://www.chefkoch.de/rss/rezept-des-tages.rss', name: 'Chefkoch', category: 'recipes', language: 'de', enabled: true },
-  { url: 'https://www.seriouseats.com/rss', name: 'Serious Eats', category: 'recipes', language: 'en', enabled: true },
   
-  // Travel
-  { url: 'https://www.lonelyplanet.com/blog/feed', name: 'Lonely Planet', category: 'travel', language: 'en', enabled: true },
+  // Travel (verified)
+  { url: 'https://www.geo.de/reisen/rss.xml', name: 'GEO Reisen', category: 'travel', language: 'de', enabled: true },
   
-  // Relationships/Lifestyle
-  { url: 'https://www.psychologytoday.com/intl/front/feed', name: 'Psychology Today', category: 'relationships', language: 'en', enabled: true },
+  // Relationships (use general wellness/psychology)
+  { url: 'https://www.brigitte.de/feed.rss', name: 'Brigitte', category: 'relationships', language: 'de', enabled: true },
 ];
 
 // Track rotation state in memory (persisted to DB for reliability)
@@ -244,27 +229,41 @@ export async function gatherTopics(config: AgentConfig): Promise<AgentResult<Gat
 // Fetch and parse RSS feed
 async function fetchRSSFeed(feed: RSSFeed): Promise<GatheredTopic['sources']> {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    
     const response = await fetch(feed.url, {
       headers: {
-        'User-Agent': 'NewsPortal/1.0 RSS Reader',
-        'Accept': 'application/rss+xml, application/xml, text/xml',
+        'User-Agent': 'Mozilla/5.0 (compatible; NewsPortal/1.0; RSS Reader)',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
       },
-      // Add timeout
-      signal: AbortSignal.timeout(10000),
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      console.log(`[RSS] ${feed.name}: HTTP ${response.status}`);
+      return [];
     }
 
     const xml = await response.text();
+    
+    // Check if response is actually HTML (error page) instead of XML
+    if (xml.trim().toLowerCase().startsWith('<!doctype') || 
+        xml.trim().toLowerCase().startsWith('<html')) {
+      console.log(`[RSS] ${feed.name}: Received HTML instead of RSS, skipping`);
+      return [];
+    }
+    
     const items = parseRSSXML(xml, feed);
     
-    console.log(`Fetched ${items.length} items from ${feed.name}`);
+    console.log(`[RSS] ${feed.name}: Fetched ${items.length} items`);
     return items;
   } catch (error) {
-    console.error(`Failed to fetch RSS from ${feed.name}:`, error);
-    // Fallback to AI-generated content for this feed's category
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    console.log(`[RSS] ${feed.name}: Failed - ${errorMsg}`);
+    // Return empty array - don't crash the pipeline
     return [];
   }
 }
