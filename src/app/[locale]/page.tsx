@@ -8,6 +8,7 @@ import { getTemplateById } from '@/lib/templates';
 import { resolveTemplate } from '@/lib/templates/server';
 import { getHomeLayoutComponent } from '@/components/templates/home';
 import { getHeaderComponent } from '@/components/templates/headers';
+import { TemplateFooter } from '@/components/templates/footers';
 import { ArrowRight, Flame, Clock, Star } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -244,18 +245,12 @@ export default async function HomePage({
         </main>
         
         {/* Template Footer */}
-        <footer 
-          className="py-8 px-4 text-center"
-          style={{ 
-            backgroundColor: resolvedTemplate.activeColors.surface,
-            borderTop: `1px solid ${resolvedTemplate.activeColors.border}`,
-            color: resolvedTemplate.activeColors.textMuted,
-          }}
-        >
-          <p className="text-sm">
-            &copy; {new Date().getFullYear()} {brandConfig.name}. {locale === 'de' ? 'Alle Rechte vorbehalten.' : 'All rights reserved.'}
-          </p>
-        </footer>
+        <TemplateFooter
+          template={resolvedTemplate}
+          categories={templateCategories}
+          locale={locale}
+          brandName={brandConfig.name}
+        />
       </div>
     );
   }
