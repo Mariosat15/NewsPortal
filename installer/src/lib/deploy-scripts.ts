@@ -384,11 +384,13 @@ export async function deployToServer(
       onProgress({ stepId: 'deps', status: 'running', log: 'Installing PM2 globally...' });
       await ssh.exec('sudo npm install -g pm2');
       
-      // Verify PM2 installation
-      const pm2Verify = await ssh.exec('pm2 --version');
-      if (pm2Verify.exitCode !== 0) {
-        throw new Error('PM2 installation failed');
+      // Verify PM2 installation - check for version number in output (PM2 prints banner + version)
+      const pm2Verify = await ssh.exec('pm2 --version 2>&1 | tail -1');
+      // PM2 outputs a lot of ASCII art, then the version number on the last line
+      if (!pm2Verify.stdout.match(/\d+\.\d+\.\d+/)) {
+        throw new Error('PM2 installation failed - could not verify version');
       }
+      onProgress({ stepId: 'deps', status: 'running', log: `PM2 installed: v${pm2Verify.stdout.trim()}` });
     }
 
     onProgress({ stepId: 'deps', status: 'completed', message: 'Dependencies installed' });
