@@ -212,6 +212,31 @@ export async function deployToServer(
     currentStep = 'prepare';
     onProgress({ stepId: 'prepare', status: 'running', message: 'Preparing system...' });
 
+    // Wait for any existing apt/dpkg processes to finish (common on fresh installs)
+    onProgress({ stepId: 'prepare', status: 'running', log: 'Checking for running package managers...' });
+    
+    // Check if unattended-upgrades is running and wait/stop it
+    const aptRunning = await ssh.exec('pgrep -f "apt|dpkg|unattended" || echo "none"');
+    if (!aptRunning.stdout.includes('none')) {
+      onProgress({ stepId: 'prepare', status: 'running', log: 'Waiting for automatic updates to complete (this may take a few minutes)...' });
+      
+      // Try to stop unattended-upgrades gracefully
+      await ssh.exec('sudo systemctl stop unattended-upgrades 2>/dev/null || true');
+      
+      // Wait for any apt/dpkg processes to finish (max 5 minutes)
+      for (let i = 0; i < 60; i++) {
+        const stillRunning = await ssh.exec('pgrep -f "apt-get|dpkg" || echo "done"');
+        if (stillRunning.stdout.includes('done')) {
+          break;
+        }
+        onProgress({ stepId: 'prepare', status: 'running', log: `Waiting for package manager... (${i * 5}s)` });
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+      
+      // Kill any remaining stuck processes
+      await ssh.exec('sudo killall apt apt-get 2>/dev/null || true');
+    }
+
     // Fix any broken dpkg state FIRST (critical!)
     onProgress({ stepId: 'prepare', status: 'running', log: 'Fixing package manager state...' });
     await ssh.exec('sudo dpkg --configure -a || true');
@@ -276,16 +301,30 @@ export async function deployToServer(
       await ssh.exec('git reset --hard origin/main', { cwd: deployPath });
       await ssh.exec('git pull origin main', { cwd: deployPath });
     } else {
-      // Clean the directory first if it exists
-      await ssh.exec(`rm -rf ${deployPath}/*`);
-      await ssh.exec(`rm -rf ${deployPath}/.[!.]* 2>/dev/null || true`);
+      // Completely remove and recreate the directory to ensure clean clone
+      onProgress({ stepId: 'upload', status: 'running', log: 'Preparing clean directory...' });
+      await ssh.exec(`sudo rm -rf ${deployPath}`);
+      await ssh.exec(`sudo mkdir -p ${deployPath}`);
+      await ssh.exec(`sudo chown -R $(whoami):$(whoami) ${deployPath}`);
       
-      onProgress({ stepId: 'upload', status: 'running', log: 'Cloning repository...' });
-      const cloneResult = await ssh.exec(`git clone ${REPO_URL} ${deployPath}`);
+      onProgress({ stepId: 'upload', status: 'running', log: `Cloning from ${REPO_URL}...` });
       
-      if (cloneResult.exitCode !== 0) {
-        throw new Error(`Failed to clone repository: ${cloneResult.stderr}`);
+      // Git writes progress to stderr, so we check exit code and look for actual errors
+      const cloneResult = await ssh.exec(`git clone --progress ${REPO_URL} ${deployPath} 2>&1`);
+      
+      // Check for actual failure indicators
+      const hasError = cloneResult.exitCode !== 0 || 
+                       cloneResult.stdout.includes('fatal:') || 
+                       cloneResult.stdout.includes('error:');
+      
+      if (hasError) {
+        // Extract the actual error message
+        const errorMatch = cloneResult.stdout.match(/fatal:.*|error:.*/i);
+        const errorMsg = errorMatch ? errorMatch[0] : cloneResult.stdout.slice(-200);
+        throw new Error(`Git clone failed: ${errorMsg}`);
       }
+      
+      onProgress({ stepId: 'upload', status: 'running', log: 'Repository cloned successfully' });
     }
 
     // Verify package.json exists
