@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
-  ChevronLeft, ChevronRight, Rocket, 
+  ChevronLeft, ChevronRight, Rocket, Upload,
   Server, Globe, Database, CreditCard, Key, Shield, CheckCircle
 } from 'lucide-react';
 
@@ -88,6 +88,95 @@ export default function InstallerPage() {
   const [config, setConfig] = useState<DeploymentConfig>(initialConfig);
   const [isDeploying, setIsDeploying] = useState(false);
   const [deploymentProgress, setDeploymentProgress] = useState<DeploymentProgress | null>(null);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Parse .env file content and update config
+  const parseEnvFile = (content: string): Partial<DeploymentConfig> => {
+    const lines = content.split('\n');
+    const envVars: Record<string, string> = {};
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      
+      const match = trimmed.match(/^([^=]+)=(.*)$/);
+      if (match) {
+        const key = match[1].trim();
+        let value = match[2].trim();
+        // Remove quotes if present
+        if ((value.startsWith('"') && value.endsWith('"')) || 
+            (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1);
+        }
+        envVars[key] = value;
+      }
+    }
+
+    // Map env vars to config
+    return {
+      domain: {
+        brandId: envVars.BRAND_ID || config.domain.brandId,
+        brandName: envVars.BRAND_NAME || config.domain.brandName,
+        domain: envVars.BRAND_DOMAIN || config.domain.domain,
+        primaryColor: envVars.BRAND_PRIMARY_COLOR || config.domain.primaryColor,
+        secondaryColor: envVars.BRAND_SECONDARY_COLOR || config.domain.secondaryColor,
+      },
+      database: {
+        mongodbUri: envVars.MONGODB_URI || config.database.mongodbUri,
+        useAtlas: (envVars.MONGODB_URI || '').includes('mongodb+srv'),
+      },
+      payment: {
+        dimocoApiUrl: envVars.DIMOCO_API_URL || config.payment.dimocoApiUrl,
+        dimocoMerchantId: envVars.DIMOCO_MERCHANT_ID || config.payment.dimocoMerchantId,
+        dimocoServiceId: envVars.DIMOCO_ORDER_ID || envVars.DIMOCO_SERVICE_ID || config.payment.dimocoServiceId,
+        dimocoApiKey: envVars.DIMOCO_PASSWORD || envVars.DIMOCO_API_KEY || config.payment.dimocoApiKey,
+        dimocoCallbackSecret: envVars.DIMOCO_CALLBACK_SECRET || config.payment.dimocoCallbackSecret || generateSecureSecret(),
+        articlePriceCents: parseInt(envVars.ARTICLE_PRICE_CENTS || '99') || 99,
+        useSandbox: (envVars.DIMOCO_API_URL || '').includes('sandbox'),
+      },
+      apiKeys: {
+        openaiApiKey: envVars.OPENAI_API_KEY || config.apiKeys.openaiApiKey,
+        brightdataToken: envVars.BRIGHTDATA_API_TOKEN || config.apiKeys.brightdataToken,
+        brightdataZone: envVars.BRIGHTDATA_ZONE || config.apiKeys.brightdataZone,
+      },
+      admin: {
+        adminEmail: envVars.ADMIN_EMAIL || config.admin.adminEmail,
+        adminPassword: envVars.ADMIN_PASSWORD || config.admin.adminPassword,
+        adminSecret: envVars.ADMIN_SECRET || config.admin.adminSecret || generateSecureSecret(),
+        authSecret: envVars.BETTER_AUTH_SECRET || config.admin.authSecret || generateSecureSecret(),
+      },
+    };
+  };
+
+  const handleImportEnv = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      const parsed = parseEnvFile(content);
+      
+      setConfig(prev => ({
+        ...prev,
+        domain: { ...prev.domain, ...parsed.domain },
+        database: { ...prev.database, ...parsed.database },
+        payment: { ...prev.payment, ...parsed.payment },
+        apiKeys: { ...prev.apiKeys, ...parsed.apiKeys },
+        admin: { ...prev.admin, ...parsed.admin },
+      }));
+      
+      setImportMessage('Configuration imported! Review and fill in server details.');
+      setTimeout(() => setImportMessage(null), 5000);
+    };
+    reader.readAsText(file);
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleNext = () => {
     if (currentStep < STEPS.length - 1) {
@@ -281,10 +370,33 @@ export default function InstallerPage() {
                 <p className="text-sm text-muted-foreground">Plug & Play Deployment Wizard</p>
               </div>
             </div>
-            <Badge variant="outline" className="text-xs">
-              Step {currentStep + 1} of {STEPS.length}
-            </Badge>
+            <div className="flex items-center gap-3">
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept=".env,.env.local,.env.example"
+                onChange={handleImportEnv}
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-2"
+              >
+                <Upload className="h-4 w-4" />
+                Import .env
+              </Button>
+              <Badge variant="outline" className="text-xs">
+                Step {currentStep + 1} of {STEPS.length}
+              </Badge>
+            </div>
           </div>
+          {importMessage && (
+            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md text-sm text-green-700">
+              {importMessage}
+            </div>
+          )}
         </div>
       </header>
 
