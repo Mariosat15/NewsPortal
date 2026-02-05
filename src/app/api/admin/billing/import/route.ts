@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBrandId } from '@/lib/brand/server';
-import { getBillingRepository, getCustomerRepository } from '@/lib/db';
+import { getBillingRepository, getCustomerRepository, getUnlockRepository, getUserRepository } from '@/lib/db';
+import { getCollection } from '@/lib/db/mongodb';
 import { verifyAdmin } from '@/lib/auth/admin';
 import { normalizePhoneNumber, isValidPhoneNumber } from '@/lib/utils/phone';
 import { ImportSource } from '@/lib/db/models/import-batch';
@@ -55,8 +56,11 @@ export async function POST(request: NextRequest) {
       currency: findColumn(['currency', 'waehrung', 'curr']),
       status: findColumn(['status', 'state']),
       date: findColumn(['date', 'time', 'datum', 'timestamp', 'created']),
-      productCode: findColumn(['product', 'service', 'article', 'produkt']),
+      productCode: findColumn(['product', 'service', 'produkt']),
       description: findColumn(['description', 'desc', 'beschreibung', 'name']),
+      // Article fields for creating unlocks
+      articleId: findColumn(['article_id', 'articleid', 'article']),
+      articleSlug: findColumn(['article_slug', 'articleslug', 'slug']),
     };
 
     if (columnIndices.msisdn === -1) {
@@ -69,6 +73,9 @@ export async function POST(request: NextRequest) {
     const brandId = await getBrandId();
     const billingRepo = getBillingRepository(brandId);
     const customerRepo = getCustomerRepository(brandId);
+    const unlockRepo = getUnlockRepository(brandId);
+    const userRepo = getUserRepository(brandId);
+    const transactionsCollection = await getCollection(brandId, 'transactions');
 
     // Create import batch
     const batch = await billingRepo.createImportBatch({
@@ -121,6 +128,9 @@ export async function POST(request: NextRequest) {
         const rawTransactionId = columnIndices.transactionId !== -1 ? values[columnIndices.transactionId] : '';
         const rawProductCode = columnIndices.productCode !== -1 ? values[columnIndices.productCode] : '';
         const rawDescription = columnIndices.description !== -1 ? values[columnIndices.description] : '';
+        // Article fields for creating unlocks
+        const rawArticleId = columnIndices.articleId !== -1 ? values[columnIndices.articleId] : '';
+        const rawArticleSlug = columnIndices.articleSlug !== -1 ? values[columnIndices.articleSlug] : '';
 
         // Validate MSISDN
         if (!rawMsisdn) {
@@ -174,10 +184,14 @@ export async function POST(request: NextRequest) {
           rawRowJson[h] = values[idx] || '';
         });
 
+        // Generate transaction ID if not provided
+        const transactionId = rawTransactionId || `import_${Date.now()}_${i}`;
+        const isPaid = status === 'billed' || status === 'completed';
+
         // Create billing event
         try {
           await billingRepo.createBillingEvent({
-            billingEventId: rawTransactionId || undefined, // Will be generated if not provided
+            billingEventId: transactionId,
             msisdn: rawMsisdn,
             normalizedMsisdn,
             tenantId: brandId,
@@ -190,8 +204,24 @@ export async function POST(request: NextRequest) {
             status,
             rawRowJson,
             importBatchId: batchId,
-            transactionId: rawTransactionId || undefined,
+            transactionId,
+            articleId: rawArticleId || undefined,
+            articleSlug: rawArticleSlug || undefined,
           });
+
+          // Create/update user record
+          const existingUser = await userRepo.findByMsisdn(normalizedMsisdn);
+          if (!existingUser) {
+            // Create new user with MSISDN
+            await userRepo.createMsisdnUser({
+              msisdn: rawMsisdn,
+              ip: 'imported',
+              userAgent: 'billing-import',
+              page: '/',
+              msisdnSource: 'billing_import',
+            });
+            console.log(`[Billing Import] Created new user for MSISDN: ${normalizedMsisdn.substring(0, 6)}****`);
+          }
 
           // Upsert customer
           await customerRepo.upsert({
@@ -200,9 +230,67 @@ export async function POST(request: NextRequest) {
             tenantId: brandId,
           });
           
-          // Add billing amount to customer
-          if (status === 'billed' || status === 'completed') {
+          // Add billing amount to customer and convert to customer status if paid
+          if (isPaid) {
             await customerRepo.addBillingAmount(normalizedMsisdn, amount);
+            await customerRepo.convertToCustomer(normalizedMsisdn, amount);
+          }
+
+          // Create transaction record (merges with online transactions)
+          try {
+            await transactionsCollection.insertOne({
+              transactionId,
+              msisdn: rawMsisdn,
+              normalizedMsisdn,
+              amount,
+              currency: rawCurrency || 'EUR',
+              status: isPaid ? 'completed' : status,
+              articleId: rawArticleId || null,
+              articleSlug: rawArticleSlug || null,
+              paymentProvider: 'import',
+              importBatchId: batchId,
+              createdAt: eventTime,
+              processedAt: eventTime,
+              metadata: {
+                source: 'billing_import',
+                originalRow: rawRowJson,
+              },
+            });
+          } catch (txnError: unknown) {
+            // Duplicate transaction is OK - it means we already have this transaction
+            if ((txnError as { code?: number }).code !== 11000) {
+              console.error('[Billing Import] Error creating transaction:', txnError);
+            }
+          }
+
+          // Create unlock record if article info is provided and payment is successful
+          if (isPaid && (rawArticleId || rawArticleSlug)) {
+            try {
+              const existingUnlock = await unlockRepo.findByTransactionId(transactionId);
+              if (!existingUnlock) {
+                await unlockRepo.create({
+                  msisdn: rawMsisdn,
+                  articleId: rawArticleId || rawArticleSlug, // Use slug as fallback ID
+                  transactionId,
+                  amount,
+                  currency: rawCurrency || 'EUR',
+                  status: 'completed',
+                  paymentProvider: 'import',
+                  metadata: {
+                    source: 'billing_import',
+                    articleSlug: rawArticleSlug,
+                    importBatchId: batchId.toString(),
+                    importedAt: new Date().toISOString(),
+                  },
+                });
+                console.log(`[Billing Import] Created unlock for article ${rawArticleId || rawArticleSlug}`);
+              }
+            } catch (unlockError: unknown) {
+              // Duplicate unlock is OK
+              if ((unlockError as { code?: number }).code !== 11000) {
+                console.error('[Billing Import] Error creating unlock:', unlockError);
+              }
+            }
           }
 
           results.accepted++;

@@ -167,7 +167,7 @@ export function BillingImport() {
                 <tbody>
                   <tr className="border-b">
                     <td className="py-2 font-mono">msisdn</td>
-                    <td className="py-2">Phone number</td>
+                    <td className="py-2">Phone number (MSISDN)</td>
                     <td className="py-2">Yes</td>
                   </tr>
                   <tr className="border-b">
@@ -185,20 +185,46 @@ export function BillingImport() {
                     <td className="py-2">paid, refunded, failed</td>
                     <td className="py-2">Yes</td>
                   </tr>
-                  <tr>
+                  <tr className="border-b">
                     <td className="py-2 font-mono">date</td>
                     <td className="py-2">Transaction date</td>
+                    <td className="py-2">No</td>
+                  </tr>
+                  <tr className="border-b">
+                    <td className="py-2 font-mono">article_id</td>
+                    <td className="py-2">Article ID (for unlocks)</td>
+                    <td className="py-2">No</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 font-mono">article_slug</td>
+                    <td className="py-2">Article slug (for unlocks)</td>
                     <td className="py-2">No</td>
                   </tr>
                 </tbody>
               </table>
 
+              <div className="p-3 bg-blue-50 rounded-lg mb-3">
+                <p className="font-medium text-blue-800 mb-1">How it works:</p>
+                <ul className="text-xs text-blue-700 space-y-1">
+                  <li>- Creates transaction record (merges with online transactions)</li>
+                  <li>- If MSISDN exists: adds billing to that user</li>
+                  <li>- If MSISDN is new: creates new user automatically</li>
+                  <li>- If article_id/slug provided: grants article access</li>
+                </ul>
+              </div>
+
               <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="font-medium mb-2">Example:</p>
-                <code className="text-xs block whitespace-pre overflow-x-auto">
+                <p className="font-medium mb-2">Example (basic):</p>
+                <code className="text-xs block whitespace-pre overflow-x-auto mb-3">
 {`msisdn,transaction_id,amount,status,date
 +491721234567,TXN-001,0.99,paid,2026-01-15
 +491729876543,TXN-002,0.99,paid,2026-01-15`}
+                </code>
+                <p className="font-medium mb-2">Example (with article unlock):</p>
+                <code className="text-xs block whitespace-pre overflow-x-auto">
+{`msisdn,transaction_id,amount,status,date,article_id,article_slug
++491721234567,TXN-001,0.99,paid,2026-01-15,abc123,my-article-title
++491729876543,TXN-002,0.99,paid,2026-01-15,def456,another-article`}
                 </code>
               </div>
             </div>
