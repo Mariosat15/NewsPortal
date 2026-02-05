@@ -108,109 +108,68 @@ export async function gatherTopics(config: AgentConfig): Promise<AgentResult<Gat
   const brandId = config.brandId || process.env.BRAND_ID || 'default';
 
   try {
-    const useRSS = config.useRSSFeeds !== false;
-    const distributeEvenly = config.distributeEvenly !== false;
+    const maxArticles = config.maxArticlesPerRun || 5;
+    const categories = config.topics || ['news'];
     
-    // Merge user RSS feeds with defaults - user feeds take priority
-    // Also include default feeds for categories that don't have user feeds
-    const userFeeds = config.rssFeeds?.filter(f => f.enabled) || [];
-    const userFeedCategories = new Set(userFeeds.map(f => f.category));
+    console.log(`[Gatherer] Starting - Max articles: ${maxArticles}, Categories: ${categories.join(', ')}`);
     
-    // Get default feeds for categories not covered by user feeds
-    const additionalDefaultFeeds = defaultRSSFeeds.filter(
-      f => f.enabled && !userFeedCategories.has(f.category) && config.topics.includes(f.category)
-    );
-    
-    // Combine user feeds (priority) + default feeds for missing categories
-    const rssFeeds = [...userFeeds, ...additionalDefaultFeeds];
-    
-    console.log(`[Gatherer] User feeds: ${userFeeds.length}, Default feeds added: ${additionalDefaultFeeds.length}`);
-    
-    // Get current rotation offset for fair category distribution
+    // Get rotation offset to determine which categories get articles this run
     const rotationOffset = await getRotationOffset(brandId);
     
-    // Calculate how many articles per category with rotation
-    const categoryDistribution = calculateDistribution(
-      config.maxArticlesPerRun || 5,
-      config.topics,
-      distributeEvenly,
-      rotationOffset
-    );
+    // Create a rotated category list so different categories get priority each run
+    const rotatedCategories = [
+      ...categories.slice(rotationOffset % categories.length),
+      ...categories.slice(0, rotationOffset % categories.length)
+    ];
     
-    console.log(`Gathering topics - RSS enabled: ${useRSS}, Feeds: ${rssFeeds.length}`);
-    console.log(`Rotation offset: ${rotationOffset}, Categories: ${config.topics.length}`);
-    console.log(`Distribution: ${JSON.stringify(Object.fromEntries(categoryDistribution))}`);
-
-    // Track gathered counts per category
-    const gatheredCounts = new Map<string, number>();
-    config.topics.forEach(t => gatheredCounts.set(t, 0));
-
-    // Step 1: Fetch from RSS feeds if enabled
-    if (useRSS && rssFeeds.length > 0) {
-      for (const feed of rssFeeds) {
-        try {
-          // Filter feeds by configured topics
-          if (!config.topics.includes(feed.category)) continue;
-          
-          // Check if we need more for this category
-          const targetCount = categoryDistribution.get(feed.category) || 1;
-          const currentCount = gatheredCounts.get(feed.category) || 0;
-          if (currentCount >= targetCount) continue;
-          
-          const items = await fetchRSSFeed(feed);
-          if (items.length > 0) {
-            gatheredTopics.push({
-              id: `rss-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-              topic: feed.category,
-              category: feed.category,
-              sources: items.slice(0, 5), // Limit items per feed
-              gatheredAt: new Date(),
-            });
-            gatheredCounts.set(feed.category, currentCount + 1);
-          }
-        } catch (error) {
-          console.error(`Error fetching RSS feed ${feed.name}:`, error);
-        }
-      }
-    }
-
-    // Step 2: Generate additional trending topics with AI for each category
-    for (const topic of config.topics) {
-      const targetCount = categoryDistribution.get(topic) || 1;
-      const currentCount = gatheredCounts.get(topic) || 0;
+    console.log(`[Gatherer] Rotation offset: ${rotationOffset}, Order: ${rotatedCategories.join(', ')}`);
+    
+    // Generate exactly maxArticles topics, cycling through categories
+    for (let i = 0; i < maxArticles; i++) {
+      const category = rotatedCategories[i % rotatedCategories.length];
       
-      // Generate enough topics to meet the target
-      while ((gatheredCounts.get(topic) || 0) < targetCount) {
-        try {
-          const aiTopics = await generateTrendingTopics(topic, config.defaultLanguage);
-          if (aiTopics.length > 0) {
-            gatheredTopics.push({
-              id: `ai-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-              topic,
-              category: topic,
-              sources: aiTopics,
-              gatheredAt: new Date(),
-            });
-            gatheredCounts.set(topic, (gatheredCounts.get(topic) || 0) + 1);
-          } else {
-            // If AI returns nothing, break to avoid infinite loop
-            break;
-          }
-        } catch (error) {
-          console.error(`Error generating AI topics for ${topic}:`, error);
-          break;
+      console.log(`[Gatherer] Generating topic ${i + 1}/${maxArticles} for category: ${category}`);
+      
+      try {
+        // Try RSS first for this category
+        let topicSources = await tryRSSForCategory(category, config);
+        
+        // If RSS didn't work, use AI to generate topic
+        if (topicSources.length === 0) {
+          console.log(`[Gatherer] No RSS for ${category}, using AI generation`);
+          topicSources = await generateTrendingTopics(category, config.defaultLanguage);
         }
+        
+        if (topicSources.length > 0) {
+          gatheredTopics.push({
+            id: `topic-${Date.now()}-${i}-${Math.random().toString(36).substring(7)}`,
+            topic: category,
+            category: category, // IMPORTANT: Explicitly set the category
+            sources: topicSources.slice(0, 5),
+            gatheredAt: new Date(),
+          });
+          console.log(`[Gatherer] ✓ Created topic for ${category} with ${topicSources.length} sources`);
+        } else {
+          console.log(`[Gatherer] ✗ No sources found for ${category}`);
+        }
+      } catch (error) {
+        console.error(`[Gatherer] Error for ${category}:`, error);
       }
     }
 
-    console.log(`Gathered ${gatheredTopics.length} topic groups with ${gatheredTopics.reduce((sum, t) => sum + t.sources.length, 0)} total sources`);
-    console.log(`Final counts: ${JSON.stringify(Object.fromEntries(gatheredCounts))}`);
+    console.log(`[Gatherer] Complete - ${gatheredTopics.length} topics gathered`);
+    
+    // Log category distribution
+    const categoryCounts: Record<string, number> = {};
+    gatheredTopics.forEach(t => {
+      categoryCounts[t.category] = (categoryCounts[t.category] || 0) + 1;
+    });
+    console.log(`[Gatherer] Distribution: ${JSON.stringify(categoryCounts)}`);
 
-    // Update rotation offset for next run - advance by the number of articles generated
-    // This ensures fair distribution across categories over multiple runs
-    const newOffset = (rotationOffset + (config.maxArticlesPerRun || 1)) % config.topics.length;
+    // Update rotation offset for next run
+    const newOffset = (rotationOffset + maxArticles) % categories.length;
     await saveRotationOffset(brandId, newOffset);
-    console.log(`Updated rotation offset: ${rotationOffset} -> ${newOffset}`);
+    console.log(`[Gatherer] Updated rotation: ${rotationOffset} -> ${newOffset}`);
 
     return {
       success: true,
@@ -218,12 +177,36 @@ export async function gatherTopics(config: AgentConfig): Promise<AgentResult<Gat
       duration: Date.now() - startTime,
     };
   } catch (error) {
+    console.error('[Gatherer] Fatal error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
       duration: Date.now() - startTime,
     };
   }
+}
+
+// Try to get RSS content for a specific category
+async function tryRSSForCategory(category: string, config: AgentConfig): Promise<GatheredTopic['sources']> {
+  if (config.useRSSFeeds === false) return [];
+  
+  // Get feeds for this category
+  const userFeeds = config.rssFeeds?.filter(f => f.enabled && f.category === category) || [];
+  const defaultFeeds = defaultRSSFeeds.filter(f => f.enabled && f.category === category);
+  const feeds = userFeeds.length > 0 ? userFeeds : defaultFeeds;
+  
+  for (const feed of feeds) {
+    try {
+      const items = await fetchRSSFeed(feed);
+      if (items.length > 0) {
+        return items;
+      }
+    } catch {
+      // Continue to next feed
+    }
+  }
+  
+  return [];
 }
 
 // Fetch and parse RSS feed

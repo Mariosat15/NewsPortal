@@ -25,37 +25,56 @@ const defaultArticleStyle: ArticleStyle = {
   includeSources: true,
 };
 
-// Select a random type from the configured types
+// Select article type based on category - STRICT mapping
 function selectArticleType(style: ArticleStyle, category: string): ArticleType {
-  // Get types from style, falling back to deprecated 'type' field or default
   const types = style.types || (style.type ? [style.type] : ['news']);
+  const cat = category.toLowerCase();
   
-  // If multiple types, select randomly based on category preference
-  if (types.length === 1) return types[0];
-  
-  // Some categories prefer certain types
-  const categoryPreferences: Record<string, ArticleType[]> = {
-    'recipes': ['recipe', 'guide', 'listicle'],
-    'health': ['guide', 'news', 'listicle'],
-    'finance': ['analysis', 'news', 'guide'],
-    'technology': ['news', 'review', 'guide'],
-    'lifestyle': ['guide', 'listicle', 'review'],
-    'entertainment': ['news', 'review', 'profile'],
-    'relationships': ['guide', 'analysis', 'listicle'],
-    'travel': ['guide', 'listicle', 'review'],
+  // STRICT category-to-type mapping (primary type for each category)
+  const categoryPrimaryType: Record<string, ArticleType> = {
+    'recipes': 'recipe',
+    'health': 'guide',
+    'finance': 'analysis',
+    'technology': 'review',
+    'lifestyle': 'guide',
+    'entertainment': 'review',
+    'relationships': 'guide',
+    'travel': 'guide',
+    'sports': 'news',
+    'news': 'news',
   };
   
-  // Filter types to those that match category preferences (if any)
-  const preferred = categoryPreferences[category.toLowerCase()];
-  if (preferred) {
-    const matching = types.filter(t => preferred.includes(t));
-    if (matching.length > 0) {
-      return matching[Math.floor(Math.random() * matching.length)];
+  // If category has a strict mapping and that type is enabled, use it
+  const primaryType = categoryPrimaryType[cat];
+  if (primaryType && types.includes(primaryType)) {
+    console.log(`[Drafter] Category "${category}" -> Type "${primaryType}" (strict mapping)`);
+    return primaryType;
+  }
+  
+  // Secondary preferences if primary not available
+  const categorySecondary: Record<string, ArticleType[]> = {
+    'recipes': ['guide', 'listicle'],
+    'health': ['news', 'listicle', 'analysis'],
+    'finance': ['news', 'guide'],
+    'technology': ['news', 'guide', 'analysis'],
+    'lifestyle': ['listicle', 'review'],
+    'entertainment': ['news', 'profile'],
+    'relationships': ['analysis', 'listicle'],
+    'travel': ['listicle', 'review'],
+  };
+  
+  const secondary = categorySecondary[cat] || [];
+  for (const t of secondary) {
+    if (types.includes(t)) {
+      console.log(`[Drafter] Category "${category}" -> Type "${t}" (secondary)`);
+      return t;
     }
   }
   
-  // Otherwise, random selection
-  return types[Math.floor(Math.random() * types.length)];
+  // Fallback to first available type
+  const selected = types[Math.floor(Math.random() * types.length)];
+  console.log(`[Drafter] Category "${category}" -> Type "${selected}" (fallback)`);
+  return selected;
 }
 
 // Curated Unsplash images by category
@@ -83,6 +102,18 @@ const categoryImages: Record<string, string[]> = {
   lifestyle: [
     '1441986300917-64674bd600d8', '1506905925346-21bda4d32df4', '1493612276216-ee3925520721',
     '1529156069898-49953e39b3ac', '1500530855697-b586d89ba3ee'
+  ],
+  recipes: [
+    '1504674900247-0877df9cc836', '1556909114-f6e7ad7d3136', '1567620905732-2d1ec7ab7445',
+    '1476224203421-9ac39bcb3327', '1540189549336-e6e99c3679fe'
+  ],
+  travel: [
+    '1488085061387-422e29b40080', '1507525428034-b723cf961d3e', '1476514525535-07fb3b4ae5f1',
+    '1530521954074-e64f6810b32d', '1469854523086-cc02fe5d8800'
+  ],
+  relationships: [
+    '1516589178581-6cd7833ae3b2', '1529156069898-49953e39b3ac', '1511988617509-a57c8a288659',
+    '1543807535-eceef0bc6599', '1522673607200-164d1b6ce486'
   ],
   entertainment: [
     '1489599849927-2ee91cede3ba', '1524368535928-5b5e00ddc76b', '1470229722913-7c0e2dbbafd3',
