@@ -9,9 +9,12 @@ import { Upload, FileText, Check, AlertCircle } from 'lucide-react';
 
 interface ImportResult {
   total: number;
-  imported: number;
-  skipped: number;
-  errors: string[];
+  imported?: number;
+  accepted?: number;
+  skipped?: number;
+  rejected?: number;
+  duplicates?: number;
+  errors: Array<string | { row: number; error: string }>;
 }
 
 export function BillingImport() {
@@ -121,16 +124,17 @@ export function BillingImport() {
                 </div>
                 <div className="text-sm space-y-1">
                   <p>Total rows: {result.total}</p>
-                  <p>Imported: {result.imported}</p>
-                  <p>Skipped: {result.skipped}</p>
-                  {result.errors.length > 0 && (
+                  <p>Imported: {result.imported ?? result.accepted ?? 0}</p>
+                  <p>Skipped: {result.skipped ?? result.rejected ?? 0}</p>
+                  {result.duplicates ? <p>Duplicates: {result.duplicates}</p> : null}
+                  {result.errors && result.errors.length > 0 && (
                     <details className="mt-2">
                       <summary className="cursor-pointer text-red-600">
                         {result.errors.length} errors
                       </summary>
                       <ul className="mt-1 text-xs text-red-600">
                         {result.errors.slice(0, 10).map((err, i) => (
-                          <li key={i}>{err}</li>
+                          <li key={i}>{typeof err === 'string' ? err : `Row ${err.row}: ${err.error}`}</li>
                         ))}
                         {result.errors.length > 10 && (
                           <li>...and {result.errors.length - 10} more</li>
