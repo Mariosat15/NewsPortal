@@ -10,7 +10,7 @@ import {
   Plus, X, Save, Loader2, AlertCircle, CheckCircle, Trash2,
   FolderOpen, Edit2, GripVertical, Palette, FileText, Utensils,
   Heart, DollarSign, Users, Newspaper, Laptop, Trophy, Sparkles,
-  Globe, Briefcase, Plane, Music, Film, BookOpen, Lightbulb
+  Globe, Briefcase, Plane, Music, Film, BookOpen, Lightbulb, Tags, Link2
 } from 'lucide-react';
 
 // Icon mapping for categories
@@ -69,23 +69,186 @@ export interface Category {
   enabled: boolean;
   contentTypes: string[]; // Which content types this category supports
   order: number;
+  aliases?: string[]; // Alternative slugs that map to this category
+  displayName?: { de: string; en: string }; // Localized display names
 }
 
 interface CategoriesManagerProps {
   onCategoriesChange?: (categories: Category[]) => void;
 }
 
+interface EditCategoryFormProps {
+  editingCategory: Category;
+  setEditingCategory: (cat: Category | null) => void;
+  handleUpdateCategory: (cat: Category) => void;
+  addAliasToEditing: (alias: string) => void;
+  removeAliasFromEditing: (alias: string) => void;
+}
+
+function EditCategoryForm({ 
+  editingCategory, 
+  setEditingCategory, 
+  handleUpdateCategory,
+  addAliasToEditing,
+  removeAliasFromEditing,
+}: EditCategoryFormProps) {
+  const [aliasInput, setAliasInput] = useState('');
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label>Name</Label>
+          <Input
+            value={editingCategory.name}
+            onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Description</Label>
+          <Input
+            value={editingCategory.description}
+            onChange={(e) => setEditingCategory({ ...editingCategory, description: e.target.value })}
+          />
+        </div>
+      </div>
+
+      {/* Display Names */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label className="text-xs">Display Name (DE)</Label>
+          <Input
+            value={editingCategory.displayName?.de || editingCategory.name}
+            onChange={(e) => setEditingCategory({ 
+              ...editingCategory, 
+              displayName: { 
+                de: e.target.value, 
+                en: editingCategory.displayName?.en || editingCategory.name 
+              } 
+            })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs">Display Name (EN)</Label>
+          <Input
+            value={editingCategory.displayName?.en || editingCategory.name}
+            onChange={(e) => setEditingCategory({ 
+              ...editingCategory, 
+              displayName: { 
+                de: editingCategory.displayName?.de || editingCategory.name, 
+                en: e.target.value 
+              } 
+            })}
+          />
+        </div>
+      </div>
+      
+      <div className="space-y-2">
+        <Label>Color</Label>
+        <div className="flex gap-2 flex-wrap">
+          {CATEGORY_COLORS.map(color => (
+            <button
+              key={color.value}
+              onClick={() => setEditingCategory({ ...editingCategory, color: color.value })}
+              className={`w-6 h-6 rounded-full border-2 ${
+                editingCategory.color === color.value ? 'border-gray-900' : 'border-transparent'
+              }`}
+              style={{ backgroundColor: color.value }}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Content Types</Label>
+        <div className="flex gap-2 flex-wrap">
+          {CONTENT_TYPES.map(type => (
+            <Badge
+              key={type.id}
+              variant={editingCategory.contentTypes.includes(type.id) ? 'default' : 'outline'}
+              className="cursor-pointer"
+              onClick={() => {
+                const types = editingCategory.contentTypes.includes(type.id)
+                  ? editingCategory.contentTypes.filter(t => t !== type.id)
+                  : [...editingCategory.contentTypes, type.id];
+                setEditingCategory({ ...editingCategory, contentTypes: types.length > 0 ? types : ['news'] });
+              }}
+            >
+              <type.icon className="h-3 w-3 mr-1" />
+              {type.label}
+            </Badge>
+          ))}
+        </div>
+      </div>
+
+      {/* Aliases */}
+      <div className="space-y-2">
+        <Label className="flex items-center gap-2">
+          <Link2 className="h-4 w-4" />
+          URL Aliases
+        </Label>
+        <div className="flex gap-2">
+          <Input
+            value={aliasInput}
+            onChange={(e) => setAliasInput(e.target.value)}
+            placeholder="Add alias"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addAliasToEditing(aliasInput);
+                setAliasInput('');
+              }
+            }}
+          />
+          <Button 
+            type="button" 
+            variant="outline" 
+            size="sm"
+            onClick={() => {
+              addAliasToEditing(aliasInput);
+              setAliasInput('');
+            }}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+        {editingCategory.aliases && editingCategory.aliases.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {editingCategory.aliases.map(alias => (
+              <Badge key={alias} variant="secondary" className="gap-1">
+                {alias}
+                <button onClick={() => removeAliasFromEditing(alias)} className="hover:text-red-500">
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <Button size="sm" onClick={() => handleUpdateCategory(editingCategory)}>
+          Save
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => setEditingCategory(null)}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 const DEFAULT_CATEGORIES: Category[] = [
-  { id: '1', name: 'News', slug: 'news', description: 'Breaking news and current events', color: '#3b82f6', icon: 'news', enabled: true, contentTypes: ['news', 'analysis'], order: 0 },
-  { id: '2', name: 'Technology', slug: 'technology', description: 'Tech news, gadgets, and innovations', color: '#8b5cf6', icon: 'technology', enabled: true, contentTypes: ['news', 'review', 'guide'], order: 1 },
-  { id: '3', name: 'Health', slug: 'health', description: 'Health tips, wellness, and medical news', color: '#22c55e', icon: 'health', enabled: true, contentTypes: ['news', 'guide', 'listicle'], order: 2 },
-  { id: '4', name: 'Finance', slug: 'finance', description: 'Financial news, investing, and money tips', color: '#f97316', icon: 'finance', enabled: true, contentTypes: ['news', 'analysis', 'guide'], order: 3 },
-  { id: '5', name: 'Sports', slug: 'sports', description: 'Sports news, scores, and highlights', color: '#ef4444', icon: 'sports', enabled: true, contentTypes: ['news', 'analysis'], order: 4 },
-  { id: '6', name: 'Lifestyle', slug: 'lifestyle', description: 'Lifestyle, trends, and living tips', color: '#ec4899', icon: 'lifestyle', enabled: true, contentTypes: ['guide', 'listicle', 'review'], order: 5 },
-  { id: '7', name: 'Entertainment', slug: 'entertainment', description: 'Movies, music, and celebrity news', color: '#6366f1', icon: 'entertainment', enabled: true, contentTypes: ['news', 'review', 'interview'], order: 6 },
-  { id: '8', name: 'Recipes', slug: 'recipes', description: 'Delicious recipes and cooking guides', color: '#f59e0b', icon: 'recipes', enabled: false, contentTypes: ['recipe', 'guide', 'listicle'], order: 7 },
-  { id: '9', name: 'Relationships', slug: 'relationships', description: 'Dating, relationships, and advice', color: '#ec4899', icon: 'relationships', enabled: false, contentTypes: ['guide', 'analysis', 'listicle'], order: 8 },
-  { id: '10', name: 'Travel', slug: 'travel', description: 'Travel guides, destinations, and tips', color: '#06b6d4', icon: 'travel', enabled: false, contentTypes: ['guide', 'listicle', 'review'], order: 9 },
+  { id: '1', name: 'News', slug: 'news', description: 'Breaking news and current events', color: '#3b82f6', icon: 'news', enabled: true, contentTypes: ['news', 'analysis'], order: 0, aliases: ['breaking', 'current-events', 'world-news'], displayName: { de: 'Nachrichten', en: 'News' } },
+  { id: '2', name: 'Technology', slug: 'technology', description: 'Tech news, gadgets, and innovations', color: '#8b5cf6', icon: 'technology', enabled: true, contentTypes: ['news', 'review', 'guide'], order: 1, aliases: ['tech', 'gadgets', 'digital'], displayName: { de: 'Technologie', en: 'Technology' } },
+  { id: '3', name: 'Health', slug: 'health', description: 'Health tips, wellness, and medical news', color: '#22c55e', icon: 'health', enabled: true, contentTypes: ['news', 'guide', 'listicle'], order: 2, aliases: ['wellness', 'medical', 'fitness'], displayName: { de: 'Gesundheit', en: 'Health' } },
+  { id: '4', name: 'Finance', slug: 'finance', description: 'Financial news, investing, and money tips', color: '#f97316', icon: 'finance', enabled: true, contentTypes: ['news', 'analysis', 'guide'], order: 3, aliases: ['business', 'money', 'investing', 'economy'], displayName: { de: 'Finanzen', en: 'Finance' } },
+  { id: '5', name: 'Sports', slug: 'sports', description: 'Sports news, scores, and highlights', color: '#ef4444', icon: 'sports', enabled: true, contentTypes: ['news', 'analysis'], order: 4, aliases: ['football', 'soccer', 'basketball', 'athletics'], displayName: { de: 'Sport', en: 'Sports' } },
+  { id: '6', name: 'Lifestyle', slug: 'lifestyle', description: 'Lifestyle, trends, and living tips', color: '#ec4899', icon: 'lifestyle', enabled: true, contentTypes: ['guide', 'listicle', 'review'], order: 5, aliases: ['living', 'trends', 'fashion'], displayName: { de: 'Lifestyle', en: 'Lifestyle' } },
+  { id: '7', name: 'Entertainment', slug: 'entertainment', description: 'Movies, music, and celebrity news', color: '#6366f1', icon: 'entertainment', enabled: true, contentTypes: ['news', 'review', 'interview'], order: 6, aliases: ['movies', 'music', 'celebrity', 'tv'], displayName: { de: 'Unterhaltung', en: 'Entertainment' } },
+  { id: '8', name: 'Recipes', slug: 'recipes', description: 'Delicious recipes and cooking guides', color: '#f59e0b', icon: 'recipes', enabled: false, contentTypes: ['recipe', 'guide', 'listicle'], order: 7, aliases: ['food', 'cooking', 'kitchen'], displayName: { de: 'Rezepte', en: 'Recipes' } },
+  { id: '9', name: 'Relationships', slug: 'relationships', description: 'Dating, relationships, and advice', color: '#ec4899', icon: 'relationships', enabled: false, contentTypes: ['guide', 'analysis', 'listicle'], order: 8, aliases: ['dating', 'love', 'advice'], displayName: { de: 'Beziehungen', en: 'Relationships' } },
+  { id: '10', name: 'Travel', slug: 'travel', description: 'Travel guides, destinations, and tips', color: '#06b6d4', icon: 'travel', enabled: false, contentTypes: ['guide', 'listicle', 'review'], order: 9, aliases: ['vacation', 'destinations', 'tourism'], displayName: { de: 'Reisen', en: 'Travel' } },
 ];
 
 export function CategoriesManager({ onCategoriesChange }: CategoriesManagerProps) {
@@ -102,7 +265,10 @@ export function CategoriesManager({ onCategoriesChange }: CategoriesManagerProps
     icon: 'default',
     enabled: true,
     contentTypes: ['news'],
+    aliases: [],
+    displayName: { de: '', en: '' },
   });
+  const [newAlias, setNewAlias] = useState('');
 
   useEffect(() => {
     loadCategories();
@@ -171,6 +337,11 @@ export function CategoriesManager({ onCategoriesChange }: CategoriesManagerProps
       enabled: newCategory.enabled !== false,
       contentTypes: newCategory.contentTypes || ['news'],
       order: categories.length,
+      aliases: newCategory.aliases || [],
+      displayName: {
+        de: newCategory.displayName?.de || newCategory.name,
+        en: newCategory.displayName?.en || newCategory.name,
+      },
     };
     
     setCategories([...categories, category]);
@@ -181,8 +352,49 @@ export function CategoriesManager({ onCategoriesChange }: CategoriesManagerProps
       icon: 'default',
       enabled: true,
       contentTypes: ['news'],
+      aliases: [],
+      displayName: { de: '', en: '' },
     });
+    setNewAlias('');
     setShowAddForm(false);
+  }
+
+  function addAliasToNew() {
+    if (!newAlias) return;
+    const aliasSlug = generateSlug(newAlias);
+    if (aliasSlug && !newCategory.aliases?.includes(aliasSlug)) {
+      setNewCategory({
+        ...newCategory,
+        aliases: [...(newCategory.aliases || []), aliasSlug],
+      });
+    }
+    setNewAlias('');
+  }
+
+  function removeAliasFromNew(alias: string) {
+    setNewCategory({
+      ...newCategory,
+      aliases: newCategory.aliases?.filter(a => a !== alias) || [],
+    });
+  }
+
+  function addAliasToEditing(alias: string) {
+    if (!editingCategory || !alias) return;
+    const aliasSlug = generateSlug(alias);
+    if (aliasSlug && !editingCategory.aliases?.includes(aliasSlug)) {
+      setEditingCategory({
+        ...editingCategory,
+        aliases: [...(editingCategory.aliases || []), aliasSlug],
+      });
+    }
+  }
+
+  function removeAliasFromEditing(alias: string) {
+    if (!editingCategory) return;
+    setEditingCategory({
+      ...editingCategory,
+      aliases: editingCategory.aliases?.filter(a => a !== alias) || [],
+    });
   }
 
   function handleUpdateCategory(updated: Category) {
@@ -365,6 +577,72 @@ export function CategoriesManager({ onCategoriesChange }: CategoriesManagerProps
               </div>
             </div>
 
+            {/* Display Names */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                Display Names (Localized)
+              </Label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">German (DE)</Label>
+                  <Input
+                    value={newCategory.displayName?.de || ''}
+                    onChange={(e) => setNewCategory({ 
+                      ...newCategory, 
+                      displayName: { ...newCategory.displayName, de: e.target.value, en: newCategory.displayName?.en || '' } 
+                    })}
+                    placeholder="e.g., Nachrichten"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">English (EN)</Label>
+                  <Input
+                    value={newCategory.displayName?.en || ''}
+                    onChange={(e) => setNewCategory({ 
+                      ...newCategory, 
+                      displayName: { ...newCategory.displayName, de: newCategory.displayName?.de || '', en: e.target.value } 
+                    })}
+                    placeholder="e.g., News"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Aliases */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                URL Aliases
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Alternative slugs that will redirect to this category (e.g., &quot;business&quot; → &quot;finance&quot;)
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  value={newAlias}
+                  onChange={(e) => setNewAlias(e.target.value)}
+                  placeholder="Add alias (e.g., business)"
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addAliasToNew())}
+                />
+                <Button type="button" variant="outline" onClick={addAliasToNew}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              {newCategory.aliases && newCategory.aliases.length > 0 && (
+                <div className="flex gap-2 flex-wrap mt-2">
+                  {newCategory.aliases.map(alias => (
+                    <Badge key={alias} variant="secondary" className="gap-1">
+                      {alias}
+                      <button onClick={() => removeAliasFromNew(alias)} className="hover:text-red-500">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex gap-2">
               <Button onClick={handleAddCategory}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -399,71 +677,13 @@ export function CategoriesManager({ onCategoriesChange }: CategoriesManagerProps
                   className={`p-4 border rounded-lg ${category.enabled ? 'bg-white' : 'bg-gray-50 opacity-60'}`}
                 >
                   {isEditing ? (
-                    <div className="space-y-4">
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label>Name</Label>
-                          <Input
-                            value={editingCategory.name}
-                            onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Description</Label>
-                          <Input
-                            value={editingCategory.description}
-                            onChange={(e) => setEditingCategory({ ...editingCategory, description: e.target.value })}
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label>Color</Label>
-                        <div className="flex gap-2 flex-wrap">
-                          {CATEGORY_COLORS.map(color => (
-                            <button
-                              key={color.value}
-                              onClick={() => setEditingCategory({ ...editingCategory, color: color.value })}
-                              className={`w-6 h-6 rounded-full border-2 ${
-                                editingCategory.color === color.value ? 'border-gray-900' : 'border-transparent'
-                              }`}
-                              style={{ backgroundColor: color.value }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Content Types</Label>
-                        <div className="flex gap-2 flex-wrap">
-                          {CONTENT_TYPES.map(type => (
-                            <Badge
-                              key={type.id}
-                              variant={editingCategory.contentTypes.includes(type.id) ? 'default' : 'outline'}
-                              className="cursor-pointer"
-                              onClick={() => {
-                                const types = editingCategory.contentTypes.includes(type.id)
-                                  ? editingCategory.contentTypes.filter(t => t !== type.id)
-                                  : [...editingCategory.contentTypes, type.id];
-                                setEditingCategory({ ...editingCategory, contentTypes: types.length > 0 ? types : ['news'] });
-                              }}
-                            >
-                              <type.icon className="h-3 w-3 mr-1" />
-                              {type.label}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Button size="sm" onClick={() => handleUpdateCategory(editingCategory)}>
-                          Save
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => setEditingCategory(null)}>
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
+                    <EditCategoryForm 
+                      editingCategory={editingCategory}
+                      setEditingCategory={setEditingCategory}
+                      handleUpdateCategory={handleUpdateCategory}
+                      addAliasToEditing={addAliasToEditing}
+                      removeAliasFromEditing={removeAliasFromEditing}
+                    />
                   ) : (
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -484,9 +704,14 @@ export function CategoriesManager({ onCategoriesChange }: CategoriesManagerProps
                           <div className="flex items-center gap-2">
                             <span className="font-medium">{category.name}</span>
                             <Badge variant="outline" className="text-xs">{category.slug}</Badge>
+                            {category.displayName && (
+                              <span className="text-xs text-muted-foreground">
+                                ({category.displayName.de} / {category.displayName.en})
+                              </span>
+                            )}
                           </div>
                           <p className="text-sm text-muted-foreground">{category.description}</p>
-                          <div className="flex gap-1 mt-1">
+                          <div className="flex gap-1 mt-1 flex-wrap">
                             {category.contentTypes.map(type => {
                               const contentType = CONTENT_TYPES.find(t => t.id === type);
                               return contentType ? (
@@ -496,6 +721,17 @@ export function CategoriesManager({ onCategoriesChange }: CategoriesManagerProps
                               ) : null;
                             })}
                           </div>
+                          {category.aliases && category.aliases.length > 0 && (
+                            <div className="flex gap-1 mt-1 items-center">
+                              <Link2 className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">Aliases:</span>
+                              {category.aliases.map(alias => (
+                                <Badge key={alias} variant="outline" className="text-xs">
+                                  {alias}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">

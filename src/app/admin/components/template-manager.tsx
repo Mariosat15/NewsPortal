@@ -1,93 +1,63 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Layout, Check, Monitor, Moon, Sun, Eye, Palette } from 'lucide-react';
+import { Layout, Check, Moon, Sun, Eye, Palette, Sparkles, Grid, List, Newspaper, BookOpen, Laptop, Building2, Loader2 } from 'lucide-react';
+import { getAllTemplates, TemplateDefinition } from '@/lib/templates';
 
-interface Template {
-  id: string;
-  name: string;
-  description: string;
-  features: string[];
-  isDark: boolean;
-}
+// Category icons for template categories
+const CATEGORY_ICONS: Record<string, React.ElementType> = {
+  financial: Building2,
+  editorial: Newspaper,
+  tech: Laptop,
+  minimal: BookOpen,
+  news: Grid,
+  magazine: List,
+};
 
-const templates: Template[] = [
-  {
-    id: 'magazine',
-    name: 'Magazine',
-    description: 'Classic news magazine layout with trending sidebar, featured articles, and category sections',
-    features: ['3-column layout', 'Trending sidebar', 'Featured hero', 'Category sections'],
-    isDark: false,
-  },
-  {
-    id: 'minimal',
-    name: 'Minimal',
-    description: 'Clean, minimalist design focusing on content with generous whitespace',
-    features: ['Single column', 'Large typography', 'Focused reading', 'Serif fonts'],
-    isDark: false,
-  },
-  {
-    id: 'grid',
-    name: 'Grid',
-    description: 'Modern card-based grid layout for visual browsing',
-    features: ['Masonry grid', 'Visual cards', 'Category filters', 'Compact view'],
-    isDark: false,
-  },
-  {
-    id: 'classic',
-    name: 'Classic',
-    description: 'Traditional newspaper-style layout with breaking news bar',
-    features: ['Multi-column', 'Breaking news', 'Headline focus', 'Traditional style'],
-    isDark: false,
-  },
-  {
-    id: 'dark-pro',
-    name: 'Dark Pro',
-    description: 'Professional dark theme with market tickers, breaking news, and category sections',
-    features: ['Dark background', 'Market ticker', 'Breaking news bar', 'Multi-section'],
-    isDark: true,
-  },
-  {
-    id: 'dark-portal',
-    name: 'Dark Portal',
-    description: 'Modern news portal with tabbed navigation, top stories, and world news sidebar',
-    features: ['Tabbed content', 'Top stories', 'World news', 'Mixed dark/light'],
-    isDark: true,
-  },
-];
-
-const colorSchemes = [
-  { id: 'pink', name: 'Pink', primary: '#e91e8c', secondary: '#d11a7d' },
-  { id: 'blue', name: 'Blue', primary: '#2563eb', secondary: '#1d4ed8' },
-  { id: 'red', name: 'Red', primary: '#dc2626', secondary: '#b91c1c' },
-  { id: 'green', name: 'Green', primary: '#16a34a', secondary: '#15803d' },
-  { id: 'purple', name: 'Purple', primary: '#9333ea', secondary: '#7e22ce' },
-  { id: 'orange', name: 'Orange', primary: '#ea580c', secondary: '#c2410c' },
+// Color presets that can override template colors
+const colorPresets = [
+  { id: 'default', name: 'Template Default', primary: null },
+  { id: 'pink', name: 'Pink', primary: '#e91e8c' },
+  { id: 'blue', name: 'Blue', primary: '#2563eb' },
+  { id: 'red', name: 'Red', primary: '#dc2626' },
+  { id: 'green', name: 'Green', primary: '#16a34a' },
+  { id: 'purple', name: 'Purple', primary: '#9333ea' },
+  { id: 'orange', name: 'Orange', primary: '#ea580c' },
+  { id: 'teal', name: 'Teal', primary: '#14b8a6' },
 ];
 
 export function TemplateManager() {
-  const [selectedTemplate, setSelectedTemplate] = useState('magazine');
-  const [selectedColor, setSelectedColor] = useState('pink');
-  const [darkMode, setDarkMode] = useState(false);
+  const [templates, setTemplates] = useState<TemplateDefinition[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState('guardian');
+  const [selectedColor, setSelectedColor] = useState('default');
+  const [colorMode, setColorMode] = useState<'light' | 'dark' | 'system'>('light');
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [filterCategory, setFilterCategory] = useState<string | null>(null);
 
   useEffect(() => {
+    // Load all templates
+    const allTemplates = getAllTemplates();
+    setTemplates(allTemplates);
     loadSettings();
   }, []);
 
   const loadSettings = async () => {
+    setLoading(true);
     try {
       const res = await fetch('/api/admin/settings');
       if (res.ok) {
         const data = await res.json();
         const settings = data.settings || data;
-        if (settings.template?.layout) setSelectedTemplate(settings.template.layout);
-        if (settings.template?.colorScheme) setSelectedColor(settings.template.colorScheme);
-        if (settings.template?.darkMode !== undefined) setDarkMode(settings.template.darkMode);
+        if (settings.template?.templateId) setSelectedTemplate(settings.template.templateId);
+        if (settings.template?.colorPreset) setSelectedColor(settings.template.colorPreset);
+        if (settings.template?.colorMode) setColorMode(settings.template.colorMode);
       }
     } catch (error) {
       console.error('Error loading template settings:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -96,14 +66,16 @@ export function TemplateManager() {
     setMessage(null);
 
     try {
+      const colorPreset = colorPresets.find(c => c.id === selectedColor);
       const res = await fetch('/api/admin/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           template: {
-            layout: selectedTemplate,
-            colorScheme: selectedColor,
-            darkMode,
+            templateId: selectedTemplate,
+            colorPreset: selectedColor,
+            colorMode,
+            customPrimary: colorPreset?.primary || null,
           }
         }),
       });
@@ -120,10 +92,24 @@ export function TemplateManager() {
     }
   };
 
-  const selectedColorObj = colorSchemes.find(c => c.id === selectedColor);
   const selectedTemplateObj = templates.find(t => t.id === selectedTemplate);
-  const lightTemplates = templates.filter(t => !t.isDark);
-  const darkTemplates = templates.filter(t => t.isDark);
+  const selectedColorObj = colorPresets.find(c => c.id === selectedColor);
+  
+  // Get unique categories
+  const categories = [...new Set(templates.map(t => t.category))];
+  
+  // Filter templates
+  const filteredTemplates = filterCategory 
+    ? templates.filter(t => t.category === filterCategory)
+    : templates;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -135,7 +121,7 @@ export function TemplateManager() {
           </div>
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Template Settings</h2>
-            <p className="text-sm text-gray-500">Customize the look and feel of your news portal</p>
+            <p className="text-sm text-gray-500">Choose from {templates.length} professional templates</p>
           </div>
         </div>
         <button
@@ -153,159 +139,234 @@ export function TemplateManager() {
         </div>
       )}
 
-      {/* Light Templates */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-          <Sun className="h-4 w-4" />
-          Light Templates
-        </h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {lightTemplates.map((template) => (
+      {/* Category Filter */}
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={() => setFilterCategory(null)}
+          className={`px-3 py-1.5 text-sm font-medium rounded-full transition-all ${
+            !filterCategory 
+              ? 'bg-gray-900 text-white' 
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          All Templates
+        </button>
+        {categories.map(cat => {
+          const Icon = CATEGORY_ICONS[cat] || Sparkles;
+          return (
             <button
-              key={template.id}
-              onClick={() => setSelectedTemplate(template.id)}
-              className={`relative p-4 rounded-xl border-2 text-left transition-all ${
-                selectedTemplate === template.id
-                  ? 'border-[#e91e8c] bg-pink-50'
-                  : 'border-gray-200 hover:border-gray-300 bg-white'
+              key={cat}
+              onClick={() => setFilterCategory(cat)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-all ${
+                filterCategory === cat 
+                  ? 'bg-gray-900 text-white' 
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              {selectedTemplate === template.id && (
-                <div className="absolute top-2 right-2 w-5 h-5 bg-[#e91e8c] rounded-full flex items-center justify-center">
-                  <Check className="h-3 w-3 text-white" />
-                </div>
-              )}
-              
-              {/* Preview */}
-              <div className="aspect-[4/3] bg-gray-100 rounded-lg mb-3 p-2 overflow-hidden">
-                {template.id === 'magazine' && (
-                  <div className="h-full flex gap-1">
-                    <div className="w-1/4 bg-gray-200 rounded" />
-                    <div className="flex-1 bg-gray-300 rounded" />
-                    <div className="w-1/4 bg-gray-200 rounded" />
+              <Icon className="h-3.5 w-3.5" />
+              {cat.charAt(0).toUpperCase() + cat.slice(1)}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Templates Grid */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+          <Sparkles className="h-4 w-4" />
+          {filterCategory ? `${filterCategory.charAt(0).toUpperCase() + filterCategory.slice(1)} Templates` : 'All Templates'} 
+          <span className="text-gray-400 font-normal">({filteredTemplates.length})</span>
+        </h3>
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredTemplates.map((template) => {
+            const CategoryIcon = CATEGORY_ICONS[template.category] || Sparkles;
+            const isDark = template.features.darkMode;
+            
+            return (
+              <button
+                key={template.id}
+                onClick={() => setSelectedTemplate(template.id)}
+                className={`relative p-4 rounded-xl border-2 text-left transition-all ${
+                  selectedTemplate === template.id
+                    ? 'border-[#e91e8c] bg-pink-50'
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+              >
+                {selectedTemplate === template.id && (
+                  <div className="absolute top-2 right-2 w-5 h-5 bg-[#e91e8c] rounded-full flex items-center justify-center">
+                    <Check className="h-3 w-3 text-white" />
                   </div>
                 )}
-                {template.id === 'minimal' && (
-                  <div className="h-full flex flex-col items-center gap-1">
-                    <div className="w-3/4 h-2 bg-gray-300 rounded" />
-                    <div className="w-full h-12 bg-gray-200 rounded mt-1" />
-                    <div className="w-full h-1 bg-gray-200 rounded" />
-                    <div className="w-full h-1 bg-gray-200 rounded" />
+                
+                {/* Template Preview */}
+                <div 
+                  className="aspect-[4/3] rounded-lg mb-3 p-2 overflow-hidden relative"
+                  style={{ 
+                    backgroundColor: template.colors.light.background,
+                    border: `1px solid ${template.colors.light.border}`,
+                  }}
+                >
+                  {/* Mini header */}
+                  <div 
+                    className="h-3 rounded-sm mb-1.5 flex items-center px-1"
+                    style={{ backgroundColor: template.colors.light.surface }}
+                  >
+                    <div 
+                      className="w-6 h-1.5 rounded"
+                      style={{ backgroundColor: template.colors.light.primary }}
+                    />
                   </div>
-                )}
-                {template.id === 'grid' && (
-                  <div className="h-full grid grid-cols-3 gap-1">
-                    {[...Array(6)].map((_, i) => (
-                      <div key={i} className="bg-gray-200 rounded" />
-                    ))}
-                  </div>
-                )}
-                {template.id === 'classic' && (
-                  <div className="h-full flex flex-col gap-1">
-                    <div className="h-2 bg-red-400 rounded" />
-                    <div className="flex-1 flex gap-1">
-                      <div className="w-2/3 bg-gray-300 rounded" />
-                      <div className="w-1/3 space-y-1">
-                        <div className="h-1/3 bg-gray-200 rounded" />
-                        <div className="h-1/3 bg-gray-200 rounded" />
-                        <div className="h-1/3 bg-gray-200 rounded" />
+                  
+                  {/* Layout preview based on homepage type */}
+                  {template.layout.homepage === 'magazine' && (
+                    <div className="flex gap-1 h-[calc(100%-1rem)]">
+                      <div className="w-1/4 space-y-1">
+                        <div className="h-4 rounded" style={{ backgroundColor: template.colors.light.surfaceAlt }} />
+                        <div className="h-4 rounded" style={{ backgroundColor: template.colors.light.surfaceAlt }} />
+                      </div>
+                      <div className="flex-1 rounded" style={{ backgroundColor: template.colors.light.primary + '30' }} />
+                    </div>
+                  )}
+                  {template.layout.homepage === 'grid' && (
+                    <div className="grid grid-cols-3 gap-1 h-[calc(100%-1rem)]">
+                      {[1,2,3,4,5,6].map(i => (
+                        <div key={i} className="rounded" style={{ backgroundColor: template.colors.light.surfaceAlt }} />
+                      ))}
+                    </div>
+                  )}
+                  {template.layout.homepage === 'editorial' && (
+                    <div className="space-y-1 h-[calc(100%-1rem)]">
+                      <div className="h-1/2 rounded flex gap-1">
+                        <div className="flex-1 rounded" style={{ backgroundColor: template.colors.light.surfaceAlt }} />
+                        <div className="w-1/3 space-y-1">
+                          <div className="h-1/2 rounded" style={{ backgroundColor: template.colors.light.border }} />
+                          <div className="h-1/2 rounded" style={{ backgroundColor: template.colors.light.border }} />
+                        </div>
+                      </div>
+                      <div className="h-1/2 grid grid-cols-3 gap-1">
+                        {[1,2,3].map(i => (
+                          <div key={i} className="rounded" style={{ backgroundColor: template.colors.light.surfaceAlt }} />
+                        ))}
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
-              
-              <h4 className="font-semibold text-gray-900 text-sm">{template.name}</h4>
-              <p className="text-xs text-gray-500 mt-1 line-clamp-2">{template.description}</p>
-              
-              <div className="mt-3 flex flex-wrap gap-1">
-                {template.features.slice(0, 2).map((feature) => (
-                  <span key={feature} className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                    {feature}
+                  )}
+                  {template.layout.homepage === 'minimal' && (
+                    <div className="flex flex-col items-center justify-center h-[calc(100%-1rem)] space-y-1">
+                      <div className="w-3/4 h-2 rounded" style={{ backgroundColor: template.colors.light.text + '40' }} />
+                      <div className="w-1/2 h-1.5 rounded" style={{ backgroundColor: template.colors.light.textMuted }} />
+                      <div className="w-full h-8 rounded mt-2" style={{ backgroundColor: template.colors.light.surfaceAlt }} />
+                    </div>
+                  )}
+                  {template.layout.homepage === 'cards' && (
+                    <div className="grid grid-cols-2 gap-1 h-[calc(100%-1rem)]">
+                      {[1,2,3,4].map(i => (
+                        <div 
+                          key={i} 
+                          className="rounded relative overflow-hidden"
+                          style={{ backgroundColor: template.colors.light.surfaceAlt }}
+                        >
+                          <div 
+                            className="absolute bottom-0 left-0 right-0 h-1/2"
+                            style={{ 
+                              background: `linear-gradient(transparent, ${template.colors.light.surface})` 
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {template.layout.homepage === 'masonry' && (
+                    <div className="flex gap-1 h-[calc(100%-1rem)]">
+                      <div className="flex-1 space-y-1">
+                        <div className="h-2/3 rounded" style={{ backgroundColor: template.colors.light.surfaceAlt }} />
+                        <div className="h-1/3 rounded" style={{ backgroundColor: template.colors.light.surfaceAlt }} />
+                      </div>
+                      <div className="flex-1 space-y-1 mt-2">
+                        <div className="h-1/2 rounded" style={{ backgroundColor: template.colors.light.surfaceAlt }} />
+                        <div className="h-1/2 rounded" style={{ backgroundColor: template.colors.light.surfaceAlt }} />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <div className="h-1/3 rounded" style={{ backgroundColor: template.colors.light.surfaceAlt }} />
+                        <div className="h-2/3 rounded" style={{ backgroundColor: template.colors.light.surfaceAlt }} />
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Dark mode indicator */}
+                  {isDark && (
+                    <div className="absolute top-1 left-1">
+                      <Moon className="h-3 w-3 text-gray-400" />
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex items-center gap-2 mb-1">
+                  <h4 className="font-semibold text-gray-900 text-sm">{template.name}</h4>
+                  <span 
+                    className="text-[10px] px-1.5 py-0.5 rounded capitalize"
+                    style={{ 
+                      backgroundColor: template.colors.light.primary + '20',
+                      color: template.colors.light.primary,
+                    }}
+                  >
+                    {template.category}
                   </span>
-                ))}
-              </div>
+                </div>
+                <p className="text-xs text-gray-500 line-clamp-2">{template.description}</p>
+                
+                {/* Feature tags */}
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <span className="text-[9px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded capitalize">
+                    {template.layout.header}
+                  </span>
+                  <span className="text-[9px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded capitalize">
+                    {template.layout.homepage}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Color Mode */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+          {colorMode === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+          Color Mode
+        </h3>
+        <div className="flex gap-3">
+          {(['light', 'dark', 'system'] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setColorMode(mode)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all ${
+                colorMode === mode
+                  ? 'border-gray-900 bg-gray-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              {mode === 'light' && <Sun className="h-4 w-4" />}
+              {mode === 'dark' && <Moon className="h-4 w-4" />}
+              {mode === 'system' && <Laptop className="h-4 w-4" />}
+              <span className="text-sm font-medium text-gray-700 capitalize">{mode}</span>
+              {colorMode === mode && <Check className="h-4 w-4 text-gray-900" />}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Dark Templates */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-          <Moon className="h-4 w-4" />
-          Dark Templates
-        </h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {darkTemplates.map((template) => (
-            <button
-              key={template.id}
-              onClick={() => setSelectedTemplate(template.id)}
-              className={`relative p-4 rounded-xl border-2 text-left transition-all ${
-                selectedTemplate === template.id
-                  ? 'border-[#e91e8c] bg-pink-50'
-                  : 'border-gray-200 hover:border-gray-300 bg-white'
-              }`}
-            >
-              {selectedTemplate === template.id && (
-                <div className="absolute top-2 right-2 w-5 h-5 bg-[#e91e8c] rounded-full flex items-center justify-center">
-                  <Check className="h-3 w-3 text-white" />
-                </div>
-              )}
-              
-              {/* Dark Preview */}
-              <div className="aspect-[4/3] bg-[#1a1d29] rounded-lg mb-3 p-2 overflow-hidden">
-                {template.id === 'dark-pro' && (
-                  <div className="h-full flex flex-col gap-1">
-                    <div className="h-1.5 bg-red-500 rounded" />
-                    <div className="flex-1 flex gap-1">
-                      <div className="w-2/3 bg-gray-700 rounded relative">
-                        <div className="absolute bottom-1 left-1 right-1 h-2 bg-gray-600 rounded" />
-                      </div>
-                      <div className="w-1/3 space-y-1">
-                        <div className="h-1/2 bg-[#242836] rounded" />
-                        <div className="h-1/2 bg-[#242836] rounded" />
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {template.id === 'dark-portal' && (
-                  <div className="h-full flex flex-col gap-1">
-                    <div className="h-1.5 bg-red-600 rounded" />
-                    <div className="flex-1 bg-gray-300 rounded relative">
-                      <div className="absolute bottom-1 left-1 right-1 h-3 bg-white/90 rounded" />
-                    </div>
-                    <div className="flex gap-1 h-1/3">
-                      <div className="flex-1 bg-gray-800 rounded" />
-                      <div className="w-1/3 bg-gray-200 rounded" />
-                    </div>
-                  </div>
-                )}
-              </div>
-              
-              <h4 className="font-semibold text-gray-900 text-sm">{template.name}</h4>
-              <p className="text-xs text-gray-500 mt-1 line-clamp-2">{template.description}</p>
-              
-              <div className="mt-3 flex flex-wrap gap-1">
-                {template.features.slice(0, 2).map((feature) => (
-                  <span key={feature} className="text-[10px] px-2 py-0.5 bg-gray-800 text-gray-300 rounded">
-                    {feature}
-                  </span>
-                ))}
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Color Scheme */}
+      {/* Accent Color Override */}
       <div>
         <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
           <Palette className="h-4 w-4" />
-          Accent Color
+          Accent Color Override
         </h3>
+        <p className="text-xs text-gray-500 mb-3">
+          Override the template&apos;s default accent color, or keep the original design.
+        </p>
         <div className="flex flex-wrap gap-3">
-          {colorSchemes.map((color) => (
+          {colorPresets.map((color) => (
             <button
               key={color.id}
               onClick={() => setSelectedColor(color.id)}
@@ -315,10 +376,14 @@ export function TemplateManager() {
                   : 'border-gray-200 hover:border-gray-300'
               }`}
             >
-              <div 
-                className="w-5 h-5 rounded-full shadow-inner"
-                style={{ backgroundColor: color.primary }}
-              />
+              {color.primary ? (
+                <div 
+                  className="w-5 h-5 rounded-full shadow-inner"
+                  style={{ backgroundColor: color.primary }}
+                />
+              ) : (
+                <div className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500" />
+              )}
               <span className="text-sm font-medium text-gray-700">{color.name}</span>
               {selectedColor === color.id && (
                 <Check className="h-4 w-4 text-gray-900" />
@@ -328,248 +393,195 @@ export function TemplateManager() {
         </div>
       </div>
 
-      {/* Live Preview */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-          <Eye className="h-4 w-4" />
-          Live Preview
-        </h3>
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
-          <div className="bg-gray-800 px-4 py-2 flex items-center gap-2">
-            <div className="flex gap-1.5">
-              <div className="w-3 h-3 rounded-full bg-red-500" />
-              <div className="w-3 h-3 rounded-full bg-yellow-500" />
-              <div className="w-3 h-3 rounded-full bg-green-500" />
-            </div>
-            <div className="flex-1 text-center">
-              <span className="text-xs text-gray-400">
-                {selectedTemplateObj?.name} Template
-                {selectedTemplateObj?.isDark && ' (Dark)'}
-              </span>
-            </div>
-          </div>
-          
-          <div className={`min-h-[320px] p-6 ${selectedTemplateObj?.isDark ? 'bg-[#1a1d29]' : 'bg-gray-50'}`}>
-            {/* Magazine Preview */}
-            {selectedTemplate === 'magazine' && (
-              <div className="flex gap-4">
-                <div className="w-1/4 space-y-2">
-                  <div className="h-4 rounded" style={{ backgroundColor: selectedColorObj?.primary }} />
-                  {[1,2,3,4].map(i => (
-                    <div key={i} className="flex gap-2 p-2 bg-white rounded shadow-sm">
-                      <div className="w-8 h-8 bg-gray-200 rounded" />
-                      <div className="flex-1 space-y-1">
-                        <div className="h-2 bg-gray-200 rounded w-full" />
-                        <div className="h-2 bg-gray-100 rounded w-3/4" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex-1 space-y-3">
-                  <div className="aspect-video bg-gray-200 rounded-lg relative">
-                    <div className="absolute bottom-3 left-3 right-3">
-                      <div className="h-3 rounded w-16 mb-2" style={{ backgroundColor: selectedColorObj?.primary }} />
-                      <div className="h-3 bg-white rounded w-3/4 mb-1" />
-                      <div className="h-2 bg-white/70 rounded w-1/2" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    {[1,2].map(i => (
-                      <div key={i} className="aspect-video bg-gray-200 rounded-lg" />
-                    ))}
-                  </div>
-                </div>
-                <div className="w-1/4 space-y-2">
-                  <div className="flex gap-1">
-                    <div className="h-6 rounded px-2 text-white text-xs flex items-center" style={{ backgroundColor: selectedColorObj?.primary }}>Latest</div>
-                    <div className="h-6 bg-gray-200 rounded px-2 text-xs flex items-center text-gray-600">Popular</div>
-                  </div>
-                  {[1,2,3].map(i => (
-                    <div key={i} className="flex gap-2 p-2 bg-white rounded shadow-sm">
-                      <div className="w-12 h-10 bg-gray-200 rounded" />
-                      <div className="flex-1 space-y-1">
-                        <div className="h-2 bg-gray-200 rounded w-full" />
-                        <div className="h-2 bg-gray-100 rounded w-2/3" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+      {/* Selected Template Preview */}
+      {selectedTemplateObj && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+            <Eye className="h-4 w-4" />
+            Template Preview: {selectedTemplateObj.name}
+          </h3>
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="bg-gray-800 px-4 py-2 flex items-center gap-2">
+              <div className="flex gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-red-500" />
+                <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                <div className="w-3 h-3 rounded-full bg-green-500" />
               </div>
-            )}
-            
-            {/* Minimal Preview */}
-            {selectedTemplate === 'minimal' && (
-              <div className="max-w-2xl mx-auto space-y-6 bg-white p-6 rounded-lg">
-                <div className="text-center space-y-2">
-                  <div className="h-2 rounded w-16 mx-auto" style={{ backgroundColor: selectedColorObj?.primary }} />
-                  <div className="h-4 bg-gray-300 rounded w-3/4 mx-auto" />
-                  <div className="h-3 bg-gray-100 rounded w-1/2 mx-auto" />
-                </div>
-                <div className="aspect-video bg-gray-200 rounded-lg" />
-                <div className="space-y-2">
-                  <div className="h-2 bg-gray-200 rounded" />
-                  <div className="h-2 bg-gray-200 rounded" />
-                  <div className="h-2 bg-gray-200 rounded w-4/5" />
-                </div>
+              <div className="flex-1 text-center">
+                <span className="text-xs text-gray-400">
+                  {selectedTemplateObj.name} - {selectedTemplateObj.layout.homepage} layout
+                </span>
               </div>
-            )}
+            </div>
             
-            {/* Grid Preview */}
-            {selectedTemplate === 'grid' && (
-              <div className="space-y-4">
-                <div className="flex gap-2 justify-center">
-                  {['All', 'News', 'Tech', 'Sports'].map((cat, i) => (
-                    <div 
-                      key={cat} 
-                      className={`h-6 px-3 rounded-full text-xs flex items-center ${i === 0 ? 'text-white' : 'bg-white text-gray-600'}`}
-                      style={i === 0 ? { backgroundColor: selectedColorObj?.primary } : {}}
+            <div 
+              className="min-h-[400px] p-6"
+              style={{ 
+                backgroundColor: colorMode === 'dark' 
+                  ? selectedTemplateObj.colors.dark.background 
+                  : selectedTemplateObj.colors.light.background 
+              }}
+            >
+              {/* Header Preview */}
+              <div 
+                className="rounded-lg p-3 mb-4 flex items-center justify-between"
+                style={{ 
+                  backgroundColor: colorMode === 'dark'
+                    ? selectedTemplateObj.colors.dark.surface
+                    : selectedTemplateObj.colors.light.surface,
+                  borderBottom: `1px solid ${colorMode === 'dark' ? selectedTemplateObj.colors.dark.border : selectedTemplateObj.colors.light.border}`,
+                }}
+              >
+                <div 
+                  className="font-bold text-lg"
+                  style={{ 
+                    fontFamily: selectedTemplateObj.typography.headingFont,
+                    color: selectedColorObj?.primary || (colorMode === 'dark' 
+                      ? selectedTemplateObj.colors.dark.primary 
+                      : selectedTemplateObj.colors.light.primary),
+                  }}
+                >
+                  Brand
+                </div>
+                <div className="flex gap-4">
+                  {['News', 'Tech', 'Finance', 'Sports'].map(cat => (
+                    <span 
+                      key={cat}
+                      className="text-sm"
+                      style={{ 
+                        fontFamily: selectedTemplateObj.typography.bodyFont,
+                        color: colorMode === 'dark' 
+                          ? selectedTemplateObj.colors.dark.text 
+                          : selectedTemplateObj.colors.light.text,
+                      }}
                     >
                       {cat}
-                    </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-4 gap-3">
-                  {[1,2,3,4,5,6,7,8].map(i => (
-                    <div key={i} className="bg-white rounded-lg shadow-sm overflow-hidden">
-                      <div className="aspect-video bg-gray-200" />
-                      <div className="p-2 space-y-1">
-                        <div className="h-2 bg-gray-200 rounded" />
-                        <div className="h-2 bg-gray-100 rounded w-2/3" />
-                      </div>
-                    </div>
+                    </span>
                   ))}
                 </div>
               </div>
-            )}
-            
-            {/* Classic Preview */}
-            {selectedTemplate === 'classic' && (
-              <div className="space-y-4">
-                <div className="h-8 rounded flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: selectedColorObj?.primary }}>
-                  BREAKING NEWS
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="col-span-2 space-y-3">
-                    <div className="aspect-video bg-gray-200 rounded-lg" />
-                    <div className="h-4 bg-gray-300 rounded w-3/4" />
-                    <div className="h-2 bg-gray-200 rounded" />
-                  </div>
-                  <div className="space-y-3">
-                    {[1,2,3].map(i => (
-                      <div key={i} className="p-2 bg-white rounded shadow-sm space-y-1">
-                        <div className="h-2 bg-gray-200 rounded" />
-                        <div className="h-2 bg-gray-100 rounded w-3/4" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
 
-            {/* Dark Pro Preview */}
-            {selectedTemplate === 'dark-pro' && (
+              {/* Content Preview based on layout */}
               <div className="space-y-4">
-                <div className="h-6 bg-red-600 rounded flex items-center px-3">
-                  <span className="bg-white text-red-600 text-[9px] font-bold px-1.5 py-0.5 rounded">BREAKING</span>
-                  <span className="text-white text-xs ml-2">Latest breaking news...</span>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="col-span-2 space-y-3">
-                    <div className="aspect-video bg-gray-700 rounded-lg relative">
-                      <div className="absolute bottom-2 left-2 right-2">
-                        <div className="h-3 bg-white rounded w-3/4 mb-1" />
-                        <div className="h-2 bg-white/50 rounded w-1/2" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      {[1,2,3,4].map(i => (
-                        <div key={i} className="aspect-video bg-gray-700 rounded" />
-                      ))}
+                {/* Featured Article */}
+                <div 
+                  className="rounded-lg overflow-hidden"
+                  style={{ 
+                    backgroundColor: colorMode === 'dark'
+                      ? selectedTemplateObj.colors.dark.surface
+                      : selectedTemplateObj.colors.light.surface,
+                    borderRadius: selectedTemplateObj.features.roundedCorners === 'none' ? '0' : 
+                                  selectedTemplateObj.features.roundedCorners === 'lg' ? '0.75rem' : '0.5rem',
+                  }}
+                >
+                  <div 
+                    className="aspect-video relative"
+                    style={{ 
+                      backgroundColor: colorMode === 'dark'
+                        ? selectedTemplateObj.colors.dark.surfaceAlt
+                        : selectedTemplateObj.colors.light.surfaceAlt,
+                    }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                    <div className="absolute bottom-4 left-4 right-4">
+                      <span 
+                        className="inline-block px-2 py-1 text-xs font-bold text-white rounded mb-2"
+                        style={{ 
+                          backgroundColor: selectedColorObj?.primary || (colorMode === 'dark' 
+                            ? selectedTemplateObj.colors.dark.accent 
+                            : selectedTemplateObj.colors.light.accent),
+                        }}
+                      >
+                        FEATURED
+                      </span>
+                      <h2 
+                        className="text-xl font-bold text-white"
+                        style={{ fontFamily: selectedTemplateObj.typography.headingFont }}
+                      >
+                        Breaking News: Major Development in Tech Industry
+                      </h2>
                     </div>
                   </div>
-                  <div className="space-y-3">
-                    <div className="bg-[#242836] rounded-lg p-3">
-                      <div className="text-white text-xs font-bold mb-2">Top Stories</div>
-                      {[1,2,3].map(i => (
-                        <div key={i} className="flex items-center gap-2 py-1">
-                          <span className="text-red-500 text-xs">●</span>
-                          <div className="h-2 bg-gray-600 rounded flex-1" />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="bg-[#242836] rounded-lg p-3">
-                      <div className="text-white text-xs font-bold mb-2">Newsletter</div>
-                      <div className="h-6 bg-gray-700 rounded" />
-                    </div>
-                  </div>
                 </div>
-              </div>
-            )}
 
-            {/* Dark Portal Preview */}
-            {selectedTemplate === 'dark-portal' && (
-              <div className="space-y-4">
-                <div className="h-6 bg-red-600 rounded flex items-center px-3">
-                  <span className="bg-white text-red-600 text-[9px] font-bold px-1.5 py-0.5 rounded animate-pulse">BREAKING</span>
-                  <span className="text-white text-xs ml-2">Major news update...</span>
-                </div>
-                <div className="bg-white rounded-lg p-4">
-                  <div className="aspect-[21/9] bg-gray-200 rounded-lg relative mb-4">
-                    <div className="absolute bottom-3 left-3">
-                      <div className="h-4 bg-gray-800 rounded w-3/4 mb-1" />
-                      <div className="h-2 bg-gray-600 rounded w-1/2" />
-                    </div>
-                  </div>
-                  <div className="flex gap-2 mb-4">
-                    <div className="h-6 px-3 text-xs flex items-center border-b-2" style={{ borderColor: selectedColorObj?.primary, color: selectedColorObj?.primary }}>LATEST</div>
-                    <div className="h-6 px-3 text-xs flex items-center text-gray-400">POPULAR</div>
-                    <div className="h-6 px-3 text-xs flex items-center text-gray-400">TRENDING</div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-3">
-                    {[1,2,3,4].map(i => (
-                      <div key={i} className="space-y-1">
-                        <div className="aspect-video bg-gray-200 rounded" />
-                        <div className="h-2 bg-gray-200 rounded" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                {/* Article Grid */}
                 <div className="grid grid-cols-3 gap-4">
-                  <div className="col-span-2 bg-gray-800 rounded-lg p-3">
-                    <div className="text-white text-xs font-bold mb-2">TOP STORIES</div>
-                    <div className="flex gap-2">
-                      <div className="w-1/2 aspect-[4/3] bg-gray-700 rounded" />
-                      <div className="w-1/2 space-y-2">
-                        {[1,2,3].map(i => (
-                          <div key={i} className="h-3 bg-gray-700 rounded" />
-                        ))}
+                  {[1, 2, 3].map(i => (
+                    <div 
+                      key={i}
+                      className="overflow-hidden"
+                      style={{ 
+                        backgroundColor: colorMode === 'dark'
+                          ? selectedTemplateObj.colors.dark.surface
+                          : selectedTemplateObj.colors.light.surface,
+                        borderRadius: selectedTemplateObj.features.roundedCorners === 'none' ? '0' : 
+                                      selectedTemplateObj.features.roundedCorners === 'lg' ? '0.75rem' : '0.5rem',
+                        boxShadow: selectedTemplateObj.features.shadows === 'none' ? 'none' :
+                                   selectedTemplateObj.features.shadows === 'subtle' ? '0 1px 3px rgba(0,0,0,0.08)' :
+                                   '0 4px 6px rgba(0,0,0,0.1)',
+                      }}
+                    >
+                      <div 
+                        className="aspect-video"
+                        style={{ 
+                          backgroundColor: colorMode === 'dark'
+                            ? selectedTemplateObj.colors.dark.surfaceAlt
+                            : selectedTemplateObj.colors.light.surfaceAlt,
+                        }}
+                      />
+                      <div className="p-3">
+                        <span 
+                          className="text-xs font-semibold uppercase"
+                          style={{ 
+                            color: selectedColorObj?.primary || (colorMode === 'dark' 
+                              ? selectedTemplateObj.colors.dark.accent 
+                              : selectedTemplateObj.colors.light.accent),
+                          }}
+                        >
+                          {['Tech', 'Finance', 'Sports'][i - 1]}
+                        </span>
+                        <h3 
+                          className="font-semibold mt-1 line-clamp-2"
+                          style={{ 
+                            fontFamily: selectedTemplateObj.typography.headingFont,
+                            color: colorMode === 'dark' 
+                              ? selectedTemplateObj.colors.dark.text 
+                              : selectedTemplateObj.colors.light.text,
+                          }}
+                        >
+                          Article Title Goes Here
+                        </h3>
+                        <p 
+                          className="text-sm mt-1 line-clamp-2"
+                          style={{ 
+                            fontFamily: selectedTemplateObj.typography.bodyFont,
+                            color: colorMode === 'dark' 
+                              ? selectedTemplateObj.colors.dark.textMuted 
+                              : selectedTemplateObj.colors.light.textMuted,
+                          }}
+                        >
+                          Article excerpt text preview...
+                        </p>
                       </div>
                     </div>
-                  </div>
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <div className="text-white text-xs font-bold mb-2">WORLD</div>
-                    {[1,2,3,4].map(i => (
-                      <div key={i} className="flex items-center gap-1 py-1">
-                        <span className="text-red-500 text-xs">›</span>
-                        <div className="h-2 bg-gray-600 rounded flex-1" />
-                      </div>
-                    ))}
-                  </div>
+                  ))}
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Current Selection Info */}
       <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
         <p className="text-sm text-blue-700">
-          <strong>Currently selected:</strong> {selectedTemplateObj?.name} template with {selectedColorObj?.name} accent color.
-          {selectedTemplateObj?.isDark && ' This is a dark theme.'}
+          <strong>Currently selected:</strong> {selectedTemplateObj?.name} template 
+          {selectedColor !== 'default' && ` with ${selectedColorObj?.name} accent override`}
+          {colorMode !== 'light' && ` in ${colorMode} mode`}.
         </p>
         <p className="text-xs text-blue-600 mt-1">
-          After saving, refresh the homepage to see your changes.
+          Template features: {selectedTemplateObj?.layout.header} header, {selectedTemplateObj?.layout.homepage} homepage, 
+          {selectedTemplateObj?.layout.articleCard} cards
         </p>
       </div>
     </div>
