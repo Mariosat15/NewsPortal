@@ -117,14 +117,24 @@ export async function GET(request: NextRequest) {
     // Only use mock if explicitly requested OR no password configured
     // When we have real credentials, use real DIMOCO (no fallback to mock)
     const hasRealCredentials = config.password && config.password !== '';
-    const shouldUseMock = useMock || !hasRealCredentials;
+    
+    // SANDBOX MODE: Use mock by default for sandbox testing
+    // DIMOCO sandbox has strict configuration requirements that may not match our setup
+    // In production with real DIMOCO credentials, set DIMOCO_USE_REAL_API=true
+    const forceRealApi = process.env.DIMOCO_USE_REAL_API === 'true';
+    const isSandbox = config.apiUrl.includes('sandbox');
+    const shouldUseMock = useMock || !hasRealCredentials || (isSandbox && !forceRealApi);
 
     console.log('[Payment] DIMOCO config check:', {
       hasPassword: !!config.password,
       apiUrl: config.apiUrl,
       merchantId: config.merchantId,
-      useSandbox: config.useSandbox,
+      isSandbox,
+      forceRealApi,
       shouldUseMock,
+      reason: shouldUseMock 
+        ? (useMock ? 'mock=true param' : !hasRealCredentials ? 'no credentials' : 'sandbox mode (use DIMOCO_USE_REAL_API=true to override)')
+        : 'using real API',
     });
 
     // Prepare payment request
