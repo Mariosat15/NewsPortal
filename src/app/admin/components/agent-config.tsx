@@ -450,6 +450,48 @@ export function AgentConfig() {
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [runResult, setRunResult] = useState<{ success: boolean; message: string } | null>(null);
   const [saveResult, setSaveResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [pipelineStep, setPipelineStep] = useState<string>('');
+
+  // Poll pipeline progress to sync running state
+  useEffect(() => {
+    async function checkPipelineStatus() {
+      try {
+        const res = await fetch('/api/agents/progress');
+        const data = await res.json();
+        if (data.success && data.progress) {
+          // Sync running state with actual pipeline status
+          if (data.progress.isRunning && !running) {
+            setRunning(true);
+            setPipelineStep(data.progress.step);
+          } else if (!data.progress.isRunning && running) {
+            // Pipeline just finished
+            setRunning(false);
+            setPipelineStep('');
+            if (data.progress.step === 'completed') {
+              setRunResult({
+                success: true,
+                message: `Successfully published ${data.progress.articlesPublished} articles`,
+              });
+              setLastRun(new Date().toISOString());
+            } else if (data.progress.step === 'failed') {
+              setRunResult({
+                success: false,
+                message: data.progress.details || 'Pipeline failed',
+              });
+            }
+          } else if (data.progress.isRunning) {
+            setPipelineStep(data.progress.step);
+          }
+        }
+      } catch (e) {
+        // Ignore errors
+      }
+    }
+    
+    checkPipelineStatus();
+    const interval = setInterval(checkPipelineStatus, 2000);
+    return () => clearInterval(interval);
+  }, [running]);
 
   // Load settings from API
   useEffect(() => {
@@ -702,13 +744,17 @@ export function AgentConfig() {
               <Button 
                 onClick={handleRunAgents} 
                 disabled={running}
-                className="w-full"
+                className={`w-full ${running ? 'bg-blue-600 hover:bg-blue-600' : ''}`}
                 size="lg"
               >
                 {running ? (
                   <>
                     <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                    Generating Articles...
+                    {pipelineStep === 'gathering' && 'Gathering Topics...'}
+                    {pipelineStep === 'drafting' && 'Creating Drafts with AI...'}
+                    {pipelineStep === 'editing' && 'Editing & Polishing...'}
+                    {pipelineStep === 'publishing' && 'Publishing Articles...'}
+                    {!['gathering', 'drafting', 'editing', 'publishing'].includes(pipelineStep) && 'Running Pipeline...'}
                   </>
                 ) : (
                   <>
