@@ -54,7 +54,7 @@ export function StandardHeader({ template, categories, locale, brandName, logoUr
                 fontFamily: template.typography.bodyFont,
               }}
             >
-              {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+              {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
             </Link>
           ))}
         </nav>
@@ -118,7 +118,7 @@ export function StandardHeader({ template, categories, locale, brandName, logoUr
                 style={{ color: colors.text }}
                 onClick={() => setMobileMenuOpen(false)}
               >
-                {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </Link>
             ))}
           </nav>

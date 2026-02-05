@@ -46,7 +46,7 @@ export function Footer() {
   const footerLinks = dynamicLinks.length > 0
     ? dynamicLinks.map(page => ({
         key: page.slug,
-        label: page.title[locale] || page.title.de,
+        label: page.title?.[locale] || page.title?.de || page.slug,
         href: `/${locale}/legal/${page.slug}`,
       }))
     : [

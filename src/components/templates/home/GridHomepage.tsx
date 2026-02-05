@@ -52,7 +52,7 @@ export function GridHomepage({ template, articles, categories, locale }: HomeLay
                   boxShadow: activeCategory === cat.slug ? '0 4px 14px -3px rgba(0,0,0,0.2)' : 'none',
                 }}
               >
-                {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </button>
             ))}
           </div>

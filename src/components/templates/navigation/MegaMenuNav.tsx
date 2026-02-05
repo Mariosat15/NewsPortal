@@ -41,7 +41,7 @@ export function MegaMenuNav({ template, categories, locale, currentCategory }: N
                 fontFamily: template.typography.bodyFont,
               }}
             >
-              {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+              {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               {cat.aliases && cat.aliases.length > 0 && (
                 <ChevronDown className="w-3 h-3" />
               )}
@@ -108,7 +108,7 @@ export function MegaMenuNav({ template, categories, locale, currentCategory }: N
                       color: currentCategory === cat.slug ? colors.accent : colors.text,
                     }}
                   >
-                    {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+                    {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
                   </Link>
                 ))}
               </div>

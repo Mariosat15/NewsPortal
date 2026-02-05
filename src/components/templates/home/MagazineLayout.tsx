@@ -316,7 +316,7 @@ export function MagazineLayout({ template, articles, categories, locale }: HomeL
                         className="text-sm font-medium"
                         style={{ color: colors.text }}
                       >
-                        {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+                        {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
                       </span>
                       <ChevronRight className="w-4 h-4" style={{ color: colors.textMuted }} />
                     </Link>

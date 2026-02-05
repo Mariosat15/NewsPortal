@@ -74,7 +74,7 @@ export function CenteredHeader({ template, categories, locale, brandName, logoUr
                   fontFamily: template.typography.bodyFont,
                 }}
               >
-                {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
                 <span 
                   className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-0.5 transition-all group-hover:w-full"
                   style={{ backgroundColor: colors.accent }}
@@ -109,7 +109,7 @@ export function CenteredHeader({ template, categories, locale, brandName, logoUr
                 style={{ color: colors.text }}
                 onClick={() => setMobileMenuOpen(false)}
               >
-                {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </Link>
             ))}
           </nav>

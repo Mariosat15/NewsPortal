@@ -74,7 +74,7 @@ export function SidebarNav({ template, categories, locale, currentCategory }: Na
               style={{ backgroundColor: cat.color || colors.accent }}
             />
             <span className="text-sm font-medium flex-1">
-              {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+              {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
             </span>
             <ChevronRight 
               className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity"

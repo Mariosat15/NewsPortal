@@ -231,7 +231,7 @@ export function CardsHomepage({ template, articles, categories, locale }: HomeLa
                         style={{ backgroundColor: cat.color || colors.accent }}
                       />
                       <span className="text-sm font-medium">
-                        {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+                        {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
                       </span>
                     </div>
                     <ChevronRight className="w-4 h-4 opacity-40" />

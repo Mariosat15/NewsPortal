@@ -47,7 +47,7 @@ export function HorizontalNav({ template, categories, locale, currentCategory }:
               fontFamily: template.typography.bodyFont,
             }}
           >
-            {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+            {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
           </Link>
         ))}
       </div>

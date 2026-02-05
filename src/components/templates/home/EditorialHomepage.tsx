@@ -47,7 +47,7 @@ export function EditorialHomepage({ template, articles, categories, locale }: Ho
                 className="text-xs font-medium uppercase tracking-wider hover:underline hidden md:block"
                 style={{ color: colors.textMuted }}
               >
-                {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </Link>
             ))}
           </div>
@@ -364,7 +364,7 @@ export function EditorialHomepage({ template, articles, categories, locale }: Ho
                         border: `1px solid ${colors.border}`,
                       }}
                     >
-                      {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+                      {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
                     </Link>
                   ))}
                 </div>

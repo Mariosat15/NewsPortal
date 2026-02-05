@@ -117,7 +117,7 @@ export function StickyCompactHeader({ template, categories, locale, brandName, l
                   fontFamily: template.typography.bodyFont,
                 }}
               >
-                {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </Link>
             ))}
           </nav>
@@ -157,7 +157,7 @@ export function StickyCompactHeader({ template, categories, locale, brandName, l
                 style={{ color: colors.text }}
                 onClick={() => setMobileMenuOpen(false)}
               >
-                {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </Link>
             ))}
           </nav>

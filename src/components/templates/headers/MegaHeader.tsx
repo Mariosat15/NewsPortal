@@ -127,7 +127,7 @@ export function MegaHeader({ template, categories, locale, brandName, logoUrl }:
                   fontFamily: template.typography.bodyFont,
                 }}
               >
-                {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
                 <ChevronDown className="w-3 h-3" />
               </Link>
               
@@ -194,7 +194,7 @@ export function MegaHeader({ template, categories, locale, brandName, logoUrl }:
                 style={{ color: colors.text }}
                 onClick={() => setMobileMenuOpen(false)}
               >
-                {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </Link>
             ))}
           </nav>

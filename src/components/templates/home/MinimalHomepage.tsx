@@ -67,7 +67,7 @@ export function MinimalHomepage({ template, articles, categories, locale }: Home
                 color: colors.text,
               }}
             >
-              {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+              {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
             </Link>
           ))}
         </div>

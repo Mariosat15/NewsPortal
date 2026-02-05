@@ -52,7 +52,7 @@ export function MinimalHeader({ template, categories, locale, brandName, logoUrl
                 fontFamily: template.typography.bodyFont,
               }}
             >
-              {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+              {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
             </Link>
           ))}
         </nav>
@@ -85,7 +85,7 @@ export function MinimalHeader({ template, categories, locale, brandName, logoUrl
                 }}
                 onClick={() => setMobileMenuOpen(false)}
               >
-                {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </Link>
             ))}
           </nav>

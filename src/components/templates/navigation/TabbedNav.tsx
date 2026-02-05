@@ -60,7 +60,7 @@ export function TabbedNav({ template, categories, locale, currentCategory }: Nav
               onMouseEnter={() => setHoveredTab(cat.slug)}
               onMouseLeave={() => setHoveredTab(null)}
             >
-              {cat.displayName[locale as 'de' | 'en'] || cat.displayName.de}
+              {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               
               {/* Active/Hover indicator */}
               <span 
