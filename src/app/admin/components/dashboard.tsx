@@ -18,7 +18,8 @@ import {
   Megaphone,
   Palette,
   DollarSign,
-  Cog
+  Cog,
+  Scale
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -34,9 +35,10 @@ import { ImageSources } from './image-sources';
 import { LandingPagesManager } from './landing-pages-manager';
 import { TrackingAnalytics } from './tracking-analytics';
 import { CategoriesManager } from './categories-manager';
+import { LegalPagesManager } from './legal-pages-manager';
 import { FolderOpen } from 'lucide-react';
 
-type TabType = 'overview' | 'articles' | 'categories' | 'users' | 'transactions' | 'billing' | 'agents' | 'landing-pages' | 'analytics' | 'templates' | 'images' | 'settings';
+type TabType = 'overview' | 'articles' | 'categories' | 'users' | 'transactions' | 'billing' | 'agents' | 'landing-pages' | 'analytics' | 'templates' | 'images' | 'settings' | 'legal';
 
 interface NavSection {
   title: string;
@@ -84,6 +86,7 @@ const navSections: NavSection[] = [
     icon: Cog,
     items: [
       { id: 'agents', label: 'AI Agents', icon: Bot },
+      { id: 'legal', label: 'Legal Pages', icon: Scale },
       { id: 'settings', label: 'Settings', icon: Settings },
     ],
   },
@@ -207,6 +210,7 @@ export function AdminDashboard() {
           {activeTab === 'analytics' && <TrackingAnalytics />}
           {activeTab === 'images' && <ImageSources />}
           {activeTab === 'templates' && <TemplateManager />}
+          {activeTab === 'legal' && <LegalPagesManager />}
           {activeTab === 'settings' && <BrandingSettings />}
         </div>
       </main>

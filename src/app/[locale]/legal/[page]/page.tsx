@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { getServerBrandConfig } from '@/lib/brand/server';
+import { getServerBrandConfig, getBrandId } from '@/lib/brand/server';
+import { getLegalPageRepository } from '@/lib/db';
 
-const legalPages = ['hilfe', 'kundenportal', 'widerrufsbelehrung', 'impressum', 'kuendigung', 'agb', 'datenschutz'];
+const defaultLegalPages = ['hilfe', 'kundenportal', 'widerrufsbelehrung', 'impressum', 'kuendigung', 'agb', 'datenschutz'];
 
 export async function generateStaticParams() {
-  return legalPages.map((page) => ({ page }));
+  return defaultLegalPages.map((page) => ({ page }));
 }
 
 export async function generateMetadata({
@@ -13,14 +14,32 @@ export async function generateMetadata({
 }: {
   params: Promise<{ locale: string; page: string }>;
 }) {
-  const { page } = await params;
-  const t = await getTranslations('legal');
+  const { locale, page } = await params;
   const brand = await getServerBrandConfig();
 
-  if (!legalPages.includes(page)) {
+  // Try to get from database first
+  try {
+    const brandId = await getBrandId();
+    const repo = getLegalPageRepository(brandId);
+    const dbPage = await repo.findBySlug(page);
+    
+    if (dbPage && dbPage.isActive) {
+      const title = dbPage.title[locale as 'de' | 'en'] || dbPage.title.de;
+      return {
+        title,
+        description: `${title} - ${brand.name}`,
+      };
+    }
+  } catch (error) {
+    console.error('Error fetching legal page metadata:', error);
+  }
+
+  // Fallback to translations
+  if (!defaultLegalPages.includes(page)) {
     return {};
   }
 
+  const t = await getTranslations('legal');
   return {
     title: t(`${page}Title`),
     description: `${t(`${page}Title`)} - ${brand.name}`,
@@ -183,14 +202,32 @@ export default async function LegalPage({
   params: Promise<{ locale: string; page: string }>;
 }) {
   const { locale, page } = await params;
-  
-  if (!legalPages.includes(page)) {
-    notFound();
+  const brand = await getServerBrandConfig();
+
+  // Try to get content from database first
+  let content: string | null = null;
+  let pageTitle: string | null = null;
+
+  try {
+    const brandId = await getBrandId();
+    const repo = getLegalPageRepository(brandId);
+    const dbPage = await repo.findBySlug(page);
+    
+    if (dbPage && dbPage.isActive) {
+      content = dbPage.content[locale as 'de' | 'en'] || dbPage.content.de;
+      pageTitle = dbPage.title[locale as 'de' | 'en'] || dbPage.title.de;
+    }
+  } catch (error) {
+    console.error('Error fetching legal page from database:', error);
   }
 
-  const t = await getTranslations('legal');
-  const brand = await getServerBrandConfig();
-  const content = getLegalContent(page, locale, brand);
+  // Fallback to hardcoded content if not in database
+  if (!content) {
+    if (!defaultLegalPages.includes(page)) {
+      notFound();
+    }
+    content = getLegalContent(page, locale, brand);
+  }
 
   return (
     <div className="min-h-screen bg-white">

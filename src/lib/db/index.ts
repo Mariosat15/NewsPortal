@@ -11,6 +11,7 @@ export * from './models/landing-page';
 export * from './models/visitor-session';
 export * from './models/tracking-event';
 export * from './models/customer';
+export * from './models/legal-page';
 export type { 
   BillingEvent, 
   BillingEventCreateInput, 
@@ -28,3 +29,4 @@ export { LandingPageRepository, getLandingPageRepository } from './repositories/
 export { TrackingRepository, getTrackingRepository } from './repositories/tracking-repository';
 export { CustomerRepository, getCustomerRepository } from './repositories/customer-repository';
 export { BillingRepository, getBillingRepository } from './repositories/billing-repository';
+export { LegalPageRepository, getLegalPageRepository } from './repositories/legal-page-repository';

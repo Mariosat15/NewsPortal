@@ -28,7 +28,8 @@ import {
   Eye,
   EyeOff,
   DollarSign,
-  Power
+  Power,
+  Upload
 } from 'lucide-react';
 
 interface BrandSettings {
@@ -415,27 +416,123 @@ export function BrandingSettings() {
               </CardTitle>
               <CardDescription>Upload your brand assets</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="logoUrl">Logo URL</Label>
-                <Input 
-                  id="logoUrl" 
-                  value={settings.logoUrl} 
-                  onChange={(e) => updateSetting('logoUrl', e.target.value)}
-                />
+            <CardContent className="space-y-6">
+              {/* Logo Upload */}
+              <div className="space-y-3">
+                <Label>Logo</Label>
+                <div className="flex gap-3 items-start">
+                  <div className="flex-1">
+                    <Input 
+                      id="logoUrl" 
+                      value={settings.logoUrl} 
+                      onChange={(e) => updateSetting('logoUrl', e.target.value)}
+                      placeholder="/images/logo.png or upload"
+                    />
+                  </div>
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('type', 'logo');
+                        try {
+                          const res = await fetch('/api/admin/upload', {
+                            method: 'POST',
+                            body: formData,
+                          });
+                          const data = await res.json();
+                          if (data.success) {
+                            updateSetting('logoUrl', data.url);
+                          } else {
+                            alert(data.error || 'Upload failed');
+                          }
+                        } catch {
+                          alert('Upload failed');
+                        }
+                        e.target.value = '';
+                      }}
+                    />
+                    <div className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
+                      <Upload className="h-4 w-4" />
+                      Upload
+                    </div>
+                  </label>
+                </div>
                 {settings.logoUrl && (
-                  <div className="mt-2 p-4 bg-gray-100 rounded-lg">
-                    <img src={settings.logoUrl} alt="Logo preview" className="h-12 object-contain" />
+                  <div className="p-4 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <img 
+                      src={settings.logoUrl} 
+                      alt="Logo preview" 
+                      className="h-16 object-contain"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/images/logo.png';
+                      }}
+                    />
                   </div>
                 )}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="faviconUrl">Favicon URL</Label>
-                <Input 
-                  id="faviconUrl" 
-                  value={settings.faviconUrl} 
-                  onChange={(e) => updateSetting('faviconUrl', e.target.value)}
-                />
+
+              {/* Favicon Upload */}
+              <div className="space-y-3">
+                <Label>Favicon</Label>
+                <div className="flex gap-3 items-start">
+                  <div className="flex-1">
+                    <Input 
+                      id="faviconUrl" 
+                      value={settings.faviconUrl} 
+                      onChange={(e) => updateSetting('faviconUrl', e.target.value)}
+                      placeholder="/favicon.svg or upload"
+                    />
+                  </div>
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/*,.ico"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('type', 'favicon');
+                        try {
+                          const res = await fetch('/api/admin/upload', {
+                            method: 'POST',
+                            body: formData,
+                          });
+                          const data = await res.json();
+                          if (data.success) {
+                            updateSetting('faviconUrl', data.url);
+                          } else {
+                            alert(data.error || 'Upload failed');
+                          }
+                        } catch {
+                          alert('Upload failed');
+                        }
+                        e.target.value = '';
+                      }}
+                    />
+                    <div className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
+                      <Upload className="h-4 w-4" />
+                      Upload
+                    </div>
+                  </label>
+                </div>
+                {settings.faviconUrl && (
+                  <div className="p-4 bg-gray-100 rounded-lg flex items-center gap-3">
+                    <img 
+                      src={settings.faviconUrl} 
+                      alt="Favicon preview" 
+                      className="h-8 w-8 object-contain"
+                    />
+                    <span className="text-sm text-muted-foreground">{settings.faviconUrl}</span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
