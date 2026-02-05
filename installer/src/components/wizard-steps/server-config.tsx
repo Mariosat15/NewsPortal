@@ -145,6 +145,24 @@ export function ServerConfigStep({ config, onChange, onTestConnection }: ServerC
         </p>
       </div>
 
+      <div className="flex items-center space-x-3 p-4 bg-amber-50 rounded-lg border border-amber-200">
+        <input
+          type="checkbox"
+          id="skipAptWait"
+          checked={config.skipAptWait || false}
+          onChange={(e) => onChange({ ...config, skipAptWait: e.target.checked })}
+          className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+        />
+        <div>
+          <Label htmlFor="skipAptWait" className="font-medium text-amber-800 cursor-pointer">
+            Skip package manager wait (Re-deployment)
+          </Label>
+          <p className="text-xs text-amber-600">
+            Check this for re-deployments. Uncheck for fresh server installs.
+          </p>
+        </div>
+      </div>
+
       <div className="pt-4 border-t">
         <Button
           type="button"

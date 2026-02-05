@@ -6,6 +6,7 @@ export interface ServerConfig {
   password?: string;
   privateKey?: string;
   deployPath: string;
+  skipAptWait?: boolean;  // Skip waiting for apt/dpkg (useful for re-deployments)
 }
 
 export interface DomainConfig {

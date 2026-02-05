@@ -212,29 +212,43 @@ export async function deployToServer(
     currentStep = 'prepare';
     onProgress({ stepId: 'prepare', status: 'running', message: 'Preparing system...' });
 
-    // Wait for any existing apt/dpkg processes to finish (common on fresh installs)
-    onProgress({ stepId: 'prepare', status: 'running', log: 'Checking for running package managers...' });
-    
-    // Check if unattended-upgrades is running and wait/stop it
-    const aptRunning = await ssh.exec('pgrep -f "apt|dpkg|unattended" || echo "none"');
-    if (!aptRunning.stdout.includes('none')) {
-      onProgress({ stepId: 'prepare', status: 'running', log: 'Waiting for automatic updates to complete (this may take a few minutes)...' });
+    // Check if we should skip the apt wait (for re-deployments)
+    const skipAptWait = config.server.skipAptWait || false;
+
+    if (!skipAptWait) {
+      // Wait for any existing apt/dpkg processes to finish (common on fresh installs)
+      onProgress({ stepId: 'prepare', status: 'running', log: 'Checking for running package managers...' });
       
-      // Try to stop unattended-upgrades gracefully
+      // Try to stop unattended-upgrades gracefully first
       await ssh.exec('sudo systemctl stop unattended-upgrades 2>/dev/null || true');
+      await ssh.exec('sudo systemctl disable unattended-upgrades 2>/dev/null || true');
       
-      // Wait for any apt/dpkg processes to finish (max 5 minutes)
-      for (let i = 0; i < 60; i++) {
-        const stillRunning = await ssh.exec('pgrep -f "apt-get|dpkg" || echo "done"');
-        if (stillRunning.stdout.includes('done')) {
-          break;
+      // Check if apt/dpkg is actually running (exclude grep/pgrep from results)
+      const aptRunning = await ssh.exec('ps aux | grep -E "[a]pt-get|[d]pkg" | grep -v grep | head -1');
+      
+      if (aptRunning.stdout.trim()) {
+        onProgress({ stepId: 'prepare', status: 'running', log: 'Package manager is busy, waiting (max 60s)...' });
+        
+        // Wait max 60 seconds (not 5 minutes)
+        for (let i = 0; i < 12; i++) {
+          const stillRunning = await ssh.exec('ps aux | grep -E "[a]pt-get|[d]pkg" | grep -v grep | head -1');
+          if (!stillRunning.stdout.trim()) {
+            onProgress({ stepId: 'prepare', status: 'running', log: 'Package manager is now free' });
+            break;
+          }
+          onProgress({ stepId: 'prepare', status: 'running', log: `Waiting for package manager... (${i * 5}s)` });
+          await new Promise(resolve => setTimeout(resolve, 5000));
         }
-        onProgress({ stepId: 'prepare', status: 'running', log: `Waiting for package manager... (${i * 5}s)` });
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        // Force kill any remaining stuck processes
+        await ssh.exec('sudo killall -9 apt apt-get dpkg 2>/dev/null || true');
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
-      
-      // Kill any remaining stuck processes
-      await ssh.exec('sudo killall apt apt-get 2>/dev/null || true');
+    } else {
+      onProgress({ stepId: 'prepare', status: 'running', log: 'Skipping apt wait (re-deployment mode)' });
+      // Still try to stop unattended-upgrades
+      await ssh.exec('sudo systemctl stop unattended-upgrades 2>/dev/null || true');
+      await ssh.exec('sudo killall -9 apt apt-get dpkg 2>/dev/null || true');
     }
 
     // Fix any broken dpkg state FIRST (critical!)
