@@ -27,7 +27,23 @@ function checkSuccess(result: { exitCode: number; stdout: string; stderr: string
   }
 }
 
+// Helper to ensure MongoDB URI has proper TLS options for VPS compatibility
+function getMongoDbUri(uri: string): string {
+  // If it's a MongoDB Atlas connection (mongodb+srv), add TLS options for VPS compatibility
+  if (uri.includes('mongodb+srv://') || uri.includes('mongodb.net')) {
+    const separator = uri.includes('?') ? '&' : '?';
+    // Check if TLS options are already present
+    if (!uri.includes('tls=') && !uri.includes('tlsAllowInvalidCertificates')) {
+      return `${uri}${separator}tls=true&tlsAllowInvalidCertificates=true`;
+    }
+  }
+  return uri;
+}
+
 export function generateEnvFile(config: DeploymentConfig): string {
+  // Ensure MongoDB URI has TLS options for VPS compatibility
+  const mongoUri = getMongoDbUri(config.database.mongodbUri);
+  
   return `# ============================================
 # NEWS PORTAL - ${config.domain.brandName}
 # Brand ID: ${config.domain.brandId}
@@ -42,8 +58,8 @@ BRAND_LOGO_URL=/images/brands/${config.domain.brandId}/logo.svg
 BRAND_PRIMARY_COLOR=${config.domain.primaryColor}
 BRAND_SECONDARY_COLOR=${config.domain.secondaryColor}
 
-# MongoDB
-MONGODB_URI=${config.database.mongodbUri}
+# MongoDB (TLS options added automatically for VPS compatibility)
+MONGODB_URI=${mongoUri}
 
 # Authentication
 BETTER_AUTH_SECRET=${config.admin.authSecret}
