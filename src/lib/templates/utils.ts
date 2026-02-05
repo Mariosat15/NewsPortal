@@ -238,34 +238,27 @@ export function getShadow(template: ResolvedTemplate, intensity: 'subtle' | 'med
   
   if (shadowSetting === 'none' || intensity === 'none') return 'none';
   
-  const shadowMap: Record<typeof shadowSetting, Record<typeof intensity, string>> = {
+  // After early return, shadowSetting and intensity are guaranteed to be 'subtle' | 'medium' | 'strong'
+  type ValidShadow = 'subtle' | 'medium' | 'strong';
+  const shadowMap: Record<ValidShadow, Record<ValidShadow, string>> = {
     subtle: {
       subtle: '0 1px 2px rgba(0,0,0,0.04)',
       medium: '0 2px 4px rgba(0,0,0,0.06)',
       strong: '0 4px 8px rgba(0,0,0,0.08)',
-      none: 'none',
     },
     medium: {
       subtle: '0 2px 4px rgba(0,0,0,0.06)',
       medium: '0 4px 12px rgba(0,0,0,0.1)',
       strong: '0 8px 24px rgba(0,0,0,0.15)',
-      none: 'none',
     },
     strong: {
       subtle: '0 4px 8px rgba(0,0,0,0.1)',
       medium: '0 8px 24px rgba(0,0,0,0.15)',
       strong: '0 16px 48px rgba(0,0,0,0.2)',
-      none: 'none',
-    },
-    none: {
-      subtle: 'none',
-      medium: 'none',
-      strong: 'none',
-      none: 'none',
     },
   };
   
-  return shadowMap[shadowSetting][intensity];
+  return shadowMap[shadowSetting as ValidShadow][intensity as ValidShadow];
 }
 
 // =============================================================================
