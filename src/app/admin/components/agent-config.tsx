@@ -13,6 +13,149 @@ import {
 } from 'lucide-react';
 import { SchedulePicker } from './schedule-picker';
 
+// Pipeline Progress Component
+function PipelineProgressCard() {
+  const [progress, setProgress] = useState<{
+    isRunning: boolean;
+    step: string;
+    stepNumber: number;
+    totalSteps: number;
+    details: string;
+    startedAt: string | null;
+    topicsGathered: number;
+    draftsCreated: number;
+    articlesEdited: number;
+    articlesPublished: number;
+  } | null>(null);
+  const [recentLogs, setRecentLogs] = useState<Array<{
+    startedAt: string;
+    completedAt?: string;
+    status: string;
+    itemsSuccessful: number;
+    itemsProcessed: number;
+    errors: string[];
+  }>>([]);
+
+  useEffect(() => {
+    fetchProgress();
+    // Poll every 2 seconds when running
+    const interval = setInterval(fetchProgress, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function fetchProgress() {
+    try {
+      const res = await fetch('/api/agents/progress');
+      const data = await res.json();
+      if (data.success) {
+        setProgress(data.progress);
+        setRecentLogs(data.recentLogs || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch progress:', error);
+    }
+  }
+
+  const stepLabels: Record<string, string> = {
+    idle: 'Idle',
+    initializing: 'Initializing',
+    gathering: 'Gathering Topics',
+    drafting: 'Creating Drafts',
+    editing: 'Editing Articles',
+    publishing: 'Publishing',
+    completed: 'Completed',
+    failed: 'Failed',
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="h-5 w-5" />
+          Pipeline Progress
+        </CardTitle>
+        <CardDescription>Real-time status of content generation</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {progress?.isRunning ? (
+          <div className="space-y-4">
+            {/* Progress bar */}
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="font-medium text-blue-700">{stepLabels[progress.step] || progress.step}</span>
+                <span className="text-muted-foreground">Step {progress.stepNumber}/{progress.totalSteps}</span>
+              </div>
+              <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-blue-600 transition-all duration-500"
+                  style={{ width: `${(progress.stepNumber / progress.totalSteps) * 100}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">{progress.details}</p>
+            </div>
+
+            {/* Live stats */}
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="p-2 bg-blue-50 rounded">
+                <p className="text-xs text-muted-foreground">Topics</p>
+                <p className="font-bold text-blue-700">{progress.topicsGathered}</p>
+              </div>
+              <div className="p-2 bg-purple-50 rounded">
+                <p className="text-xs text-muted-foreground">Drafts</p>
+                <p className="font-bold text-purple-700">{progress.draftsCreated}</p>
+              </div>
+              <div className="p-2 bg-amber-50 rounded">
+                <p className="text-xs text-muted-foreground">Edited</p>
+                <p className="font-bold text-amber-700">{progress.articlesEdited}</p>
+              </div>
+              <div className="p-2 bg-green-50 rounded">
+                <p className="text-xs text-muted-foreground">Published</p>
+                <p className="font-bold text-green-700">{progress.articlesPublished}</p>
+              </div>
+            </div>
+            
+            {progress.startedAt && (
+              <p className="text-xs text-muted-foreground">
+                Started: {new Date(progress.startedAt).toLocaleTimeString()}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-4 text-muted-foreground">
+            <p className="text-sm">No pipeline currently running</p>
+            {progress?.step === 'completed' && (
+              <p className="text-xs text-green-600 mt-1">{progress.details}</p>
+            )}
+            {progress?.step === 'failed' && (
+              <p className="text-xs text-red-600 mt-1">{progress.details}</p>
+            )}
+          </div>
+        )}
+
+        {/* Recent runs */}
+        {recentLogs.length > 0 && (
+          <div className="border-t pt-4">
+            <p className="font-medium text-sm mb-2">Recent Runs</p>
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {recentLogs.slice(0, 5).map((log, i) => (
+                <div key={i} className="flex items-center justify-between text-xs p-2 bg-gray-50 rounded">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${log.status === 'completed' ? 'bg-green-500' : 'bg-red-500'}`} />
+                    <span>{new Date(log.startedAt).toLocaleString()}</span>
+                  </div>
+                  <span className={log.status === 'completed' ? 'text-green-600' : 'text-red-600'}>
+                    {log.itemsSuccessful}/{log.itemsProcessed} published
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // Worker Status Card Component
 function WorkerStatusCard({ schedule }: { schedule: string }) {
   const [status, setStatus] = useState<{
@@ -596,6 +739,8 @@ export function AgentConfig() {
           </Card>
 
           <WorkerStatusCard schedule={settings.cronSchedule} />
+
+          <PipelineProgressCard />
 
           <Card>
             <CardHeader>

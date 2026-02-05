@@ -25,9 +25,82 @@ const defaultArticleStyle: ArticleStyle = {
   includeSources: true,
 };
 
+// Pipeline progress tracking (in-memory for real-time updates)
+let currentPipelineProgress: {
+  isRunning: boolean;
+  step: string;
+  stepNumber: number;
+  totalSteps: number;
+  details: string;
+  startedAt: Date | null;
+  topicsGathered: number;
+  draftsCreated: number;
+  articlesEdited: number;
+  articlesPublished: number;
+} = {
+  isRunning: false,
+  step: 'idle',
+  stepNumber: 0,
+  totalSteps: 4,
+  details: '',
+  startedAt: null,
+  topicsGathered: 0,
+  draftsCreated: 0,
+  articlesEdited: 0,
+  articlesPublished: 0,
+};
+
+// Get current pipeline progress
+export function getPipelineProgress() {
+  return { ...currentPipelineProgress };
+}
+
+// Reset progress
+function resetProgress() {
+  currentPipelineProgress = {
+    isRunning: false,
+    step: 'idle',
+    stepNumber: 0,
+    totalSteps: 4,
+    details: '',
+    startedAt: null,
+    topicsGathered: 0,
+    draftsCreated: 0,
+    articlesEdited: 0,
+    articlesPublished: 0,
+  };
+}
+
+// Update progress
+function updateProgress(step: string, stepNumber: number, details: string, data?: Partial<typeof currentPipelineProgress>) {
+  currentPipelineProgress = {
+    ...currentPipelineProgress,
+    step,
+    stepNumber,
+    details,
+    ...data,
+  };
+  console.log(`[Pipeline] Step ${stepNumber}/4: ${step} - ${details}`);
+}
+
 // Main orchestrator that runs all agents in sequence
 export async function runAgentPipeline(brandId: string, customSettings?: Partial<AgentConfig>): Promise<AgentRunLog> {
   const startTime = new Date();
+  
+  // Initialize progress
+  currentPipelineProgress = {
+    isRunning: true,
+    step: 'initializing',
+    stepNumber: 0,
+    totalSteps: 4,
+    details: 'Loading configuration...',
+    startedAt: startTime,
+    topicsGathered: 0,
+    draftsCreated: 0,
+    articlesEdited: 0,
+    articlesPublished: 0,
+  };
+  
   const log: AgentRunLog = {
     agentName: 'ContentPipeline',
     brandId,
@@ -87,7 +160,7 @@ export async function runAgentPipeline(brandId: string, customSettings?: Partial
     console.log(`Max articles: ${agentConfig.maxArticlesPerRun}`);
 
     // Step 1: Gather topics
-    console.log('Step 1: Gathering topics...');
+    updateProgress('gathering', 1, `Gathering topics from ${agentConfig.topics.length} categories...`);
     const gatherResult = await gatherTopics(agentConfig);
     
     if (!gatherResult.success || !gatherResult.data) {
@@ -96,10 +169,10 @@ export async function runAgentPipeline(brandId: string, customSettings?: Partial
 
     const gatheredTopics = gatherResult.data;
     log.metadata!.topicsGathered = gatheredTopics.length;
-    console.log(`Gathered ${gatheredTopics.length} topics`);
+    updateProgress('gathering', 1, `Gathered ${gatheredTopics.length} topics`, { topicsGathered: gatheredTopics.length });
 
     // Step 2: Create drafts with AI config and article style
-    console.log('Step 2: Creating drafts...');
+    updateProgress('drafting', 2, `Creating ${agentConfig.maxArticlesPerRun} drafts with AI (${agentConfig.aiModel?.model || 'gpt-4o'})...`);
     const aiConfig = agentConfig.aiModel || defaultAIConfig;
     const articleStyle = agentConfig.articleStyle || agentConfig.defaultArticleStyle || defaultArticleStyle;
     
@@ -119,10 +192,10 @@ export async function runAgentPipeline(brandId: string, customSettings?: Partial
 
     const drafts = draftResult.data;
     log.metadata!.draftsCreated = drafts.length;
-    console.log(`Created ${drafts.length} drafts`);
+    updateProgress('drafting', 2, `Created ${drafts.length} article drafts`, { draftsCreated: drafts.length });
 
     // Step 3: Edit drafts
-    console.log('Step 3: Editing drafts...');
+    updateProgress('editing', 3, `Editing and polishing ${drafts.length} drafts...`);
     const editResult = await editDrafts(drafts);
 
     if (!editResult.success || !editResult.data) {
@@ -131,7 +204,7 @@ export async function runAgentPipeline(brandId: string, customSettings?: Partial
 
     const editedArticles = editResult.data;
     log.metadata!.articlesEdited = editedArticles.length;
-    console.log(`Edited ${editedArticles.length} articles`);
+    updateProgress('editing', 3, `Edited ${editedArticles.length} articles, checking duplicates...`, { articlesEdited: editedArticles.length });
 
     // Filter out duplicates
     const uniqueArticles: EditedArticle[] = [];
@@ -145,7 +218,7 @@ export async function runAgentPipeline(brandId: string, customSettings?: Partial
     }
 
     // Step 4: Publish articles
-    console.log('Step 4: Publishing articles...');
+    updateProgress('publishing', 4, `Publishing ${uniqueArticles.length} unique articles...`);
     const publishResult = await publishArticles(uniqueArticles, brandId);
 
     if (!publishResult.success) {
@@ -154,7 +227,7 @@ export async function runAgentPipeline(brandId: string, customSettings?: Partial
 
     const publishedArticles = publishResult.data || [];
     log.metadata!.articlesPublished = publishedArticles.length;
-    console.log(`Published ${publishedArticles.length} articles`);
+    updateProgress('publishing', 4, `Published ${publishedArticles.length} articles`, { articlesPublished: publishedArticles.length });
 
     // Update log stats
     log.itemsProcessed = gatheredTopics.length;
@@ -163,7 +236,24 @@ export async function runAgentPipeline(brandId: string, customSettings?: Partial
     log.status = 'completed';
     log.completedAt = new Date();
 
+    // Save log to database
+    try {
+      const logsCollection = await getCollection(brandId, 'pipelineLogs');
+      await logsCollection.insertOne({
+        ...log,
+        _id: undefined,
+        createdAt: new Date(),
+      });
+    } catch (e) {
+      console.error('Failed to save pipeline log:', e);
+    }
+
     console.log(`Pipeline completed: ${log.itemsSuccessful}/${log.itemsProcessed} articles published`);
+    
+    // Reset progress after completion
+    currentPipelineProgress.isRunning = false;
+    currentPipelineProgress.step = 'completed';
+    currentPipelineProgress.details = `Completed: ${publishedArticles.length} articles published`;
 
     return log;
   } catch (error) {
@@ -171,6 +261,24 @@ export async function runAgentPipeline(brandId: string, customSettings?: Partial
     log.completedAt = new Date();
     log.errors.push(error instanceof Error ? error.message : 'Unknown error');
     console.error('Agent pipeline failed:', error);
+    
+    // Save failed log to database
+    try {
+      const logsCollection = await getCollection(brandId, 'pipelineLogs');
+      await logsCollection.insertOne({
+        ...log,
+        _id: undefined,
+        createdAt: new Date(),
+      });
+    } catch (e) {
+      console.error('Failed to save pipeline log:', e);
+    }
+    
+    // Reset progress on error
+    currentPipelineProgress.isRunning = false;
+    currentPipelineProgress.step = 'failed';
+    currentPipelineProgress.details = error instanceof Error ? error.message : 'Unknown error';
+    
     return log;
   }
 }
@@ -194,4 +302,4 @@ export async function runAllBrandPipelines(): Promise<AgentRunLog[]> {
   return logs;
 }
 
-export { gatherTopics, createDrafts, editDrafts, publishArticles };
+export { gatherTopics, createDrafts, editDrafts, publishArticles, getPipelineProgress };

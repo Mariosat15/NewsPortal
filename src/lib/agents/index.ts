@@ -8,7 +8,7 @@ export { editDrafts, editDraft } from './editor';
 export { publishArticles, isDuplicate, generatePlaceholderThumbnail } from './publisher';
 
 // Orchestrator
-export { runAgentPipeline, runAllBrandPipelines } from './orchestrator';
+export { runAgentPipeline, runAllBrandPipelines, getPipelineProgress } from './orchestrator';
 
 // Scheduler utilities
 export { 
