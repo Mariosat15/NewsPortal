@@ -6,6 +6,10 @@ import { getServerBrandConfig } from '@/lib/brand/server';
 import { BrandProvider } from '@/lib/brand/provider';
 import { AppLayout } from '@/components/layout/app-layout';
 import { MsisdnDetector } from '@/components/tracking/msisdn-detector';
+import { getNewTemplateSettings, isNewTemplate } from '@/lib/settings/get-template';
+
+// Force dynamic rendering to always fetch fresh template settings
+export const dynamic = 'force-dynamic';
 
 // Supported locales
 const locales = ['de', 'en'];
@@ -52,6 +56,10 @@ export default async function LocaleLayout({
   // Get messages for the locale
   const messages = await getMessages();
 
+  // Check if using new template system
+  const templateSettings = await getNewTemplateSettings();
+  const useNewTemplateSystem = isNewTemplate(templateSettings.templateId);
+
   return (
     <NextIntlClientProvider messages={messages} locale={locale}>
       <BrandProvider config={brandConfig}>
@@ -60,7 +68,7 @@ export default async function LocaleLayout({
           autoDetect={true} 
           debug={process.env.NODE_ENV === 'development'}
         />
-        <AppLayout>
+        <AppLayout useNewTemplateSystem={useNewTemplateSystem}>
           {children}
         </AppLayout>
       </BrandProvider>

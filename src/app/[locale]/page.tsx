@@ -2,12 +2,19 @@ import { getTranslations } from 'next-intl/server';
 import { ZoxTrending, ZoxFeatured, ZoxTabbedSidebar, ZoxCategorySection, PaginatedArticles } from '@/components/home';
 import { DarkProTemplate, DarkPortalTemplate } from '@/components/templates';
 import { getArticleRepository } from '@/lib/db';
-import { getBrandId } from '@/lib/brand/server';
-import { getTemplateSettings, colorSchemes } from '@/lib/settings/get-template';
+import { getBrandId, getServerBrandConfig } from '@/lib/brand/server';
+import { getTemplateSettings, getNewTemplateSettings, isNewTemplate, getPrimaryColor, colorSchemes } from '@/lib/settings/get-template';
+import { getTemplateById, resolveTemplate } from '@/lib/templates';
+import { getHomeLayoutComponent } from '@/components/templates/home';
+import { getHeaderComponent } from '@/components/templates/headers';
 import { ArrowRight, Flame, Clock, Star } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { getCollection } from '@/lib/db/mongodb';
+import { CategoryConfig, ArticleForCard } from '@/lib/templates/types';
+
+// Force dynamic rendering to always fetch fresh template settings
+export const dynamic = 'force-dynamic';
 
 // Fetch enabled categories from Categories Manager (single source of truth)
 async function getEnabledCategorySlugs(): Promise<string[]> {
@@ -113,9 +120,10 @@ export default async function HomePage({
   const { locale } = await params;
   const t = await getTranslations('article');
 
-  // Fetch template settings
-  const templateSettings = await getTemplateSettings();
-  const colors = colorSchemes[templateSettings.colorScheme] || colorSchemes.pink;
+  // Fetch template settings (check new system first)
+  const newTemplateSettings = await getNewTemplateSettings();
+  const legacyTemplateSettings = await getTemplateSettings();
+  const colors = colorSchemes[legacyTemplateSettings.colorScheme] || colorSchemes.pink;
 
   let articles: ArticlePreview[] = [];
   
@@ -147,8 +155,102 @@ export default async function HomePage({
   const currentLabels = categoryLabels[locale] || categoryLabels['de'];
   const hasArticles = articles.length > 0;
 
+  // Check if using new professional template system
+  if (isNewTemplate(newTemplateSettings.templateId)) {
+    // Use new template system
+    const templateDef = getTemplateById(newTemplateSettings.templateId);
+    const colorMode = newTemplateSettings.colorMode === 'dark' ? 'dark' : 'light';
+    const customPrimary = getPrimaryColor(newTemplateSettings);
+    
+    // Resolve template with colors
+    const resolvedTemplate = resolveTemplate(
+      newTemplateSettings.templateId,
+      colorMode,
+      customPrimary ? { primary: customPrimary, accent: customPrimary } : undefined
+    );
+
+    // Get categories for template
+    const brandId = await getBrandId();
+    const settingsCollection = await getCollection(brandId, 'settings');
+    const categoriesDoc = await settingsCollection.findOne({ key: 'categories' });
+    
+    const templateCategories: CategoryConfig[] = (categoriesDoc?.value || [])
+      .filter((c: { enabled?: boolean }) => c.enabled !== false)
+      .map((c: Record<string, unknown>) => ({
+        slug: c.slug as string,
+        aliases: (c.aliases as string[]) || [],
+        displayName: (c.displayName as { de: string; en: string }) || { de: c.name as string, en: c.name as string },
+        description: { de: '', en: '' },
+        icon: (c.icon as string) || 'default',
+        color: (c.color as string) || '#3b82f6',
+        enabled: true,
+        order: (c.order as number) || 0,
+      }));
+
+    // Convert articles for template components
+    const templateArticles: ArticleForCard[] = articles.map(a => ({
+      slug: a.slug,
+      title: a.title,
+      excerpt: a.teaser,
+      teaser: a.teaser,
+      image: a.thumbnail,
+      thumbnail: a.thumbnail,
+      category: currentLabels[a.category] || a.category,
+      date: new Date(a.publishDate).toLocaleDateString(locale === 'de' ? 'de-DE' : 'en-US'),
+      publishDate: a.publishDate,
+    }));
+
+    // Get the appropriate layout components
+    const HomeLayout = getHomeLayoutComponent(templateDef.layout.homepage);
+    const HeaderComponent = getHeaderComponent(templateDef.layout.header);
+
+    // Get brand config for header
+    const brandConfig = await getServerBrandConfig();
+
+    return (
+      <div 
+        className="min-h-screen flex flex-col"
+        style={{ backgroundColor: resolvedTemplate.activeColors.background }}
+      >
+        {/* Template Header */}
+        <HeaderComponent
+          template={resolvedTemplate}
+          categories={templateCategories}
+          locale={locale}
+          brandName={brandConfig.name}
+          logoUrl={brandConfig.logoUrl}
+        />
+        
+        {/* Main Content */}
+        <main className="flex-1">
+          <HomeLayout
+            template={resolvedTemplate}
+            articles={templateArticles}
+            categories={templateCategories}
+            locale={locale}
+          />
+        </main>
+        
+        {/* Template Footer */}
+        <footer 
+          className="py-8 px-4 text-center"
+          style={{ 
+            backgroundColor: resolvedTemplate.activeColors.surface,
+            borderTop: `1px solid ${resolvedTemplate.activeColors.border}`,
+            color: resolvedTemplate.activeColors.textMuted,
+          }}
+        >
+          <p className="text-sm">
+            &copy; {new Date().getFullYear()} {brandConfig.name}. {locale === 'de' ? 'Alle Rechte vorbehalten.' : 'All rights reserved.'}
+          </p>
+        </footer>
+      </div>
+    );
+  }
+
+  // Legacy template system
   // Render based on template selection
-  if (templateSettings.layout === 'dark-pro') {
+  if (legacyTemplateSettings.layout === 'dark-pro') {
     return (
       <DarkProTemplate
         articles={articles}
@@ -159,7 +261,7 @@ export default async function HomePage({
     );
   }
 
-  if (templateSettings.layout === 'dark-portal') {
+  if (legacyTemplateSettings.layout === 'dark-portal') {
     return (
       <DarkPortalTemplate
         articles={articles}
@@ -170,7 +272,7 @@ export default async function HomePage({
     );
   }
 
-  if (templateSettings.layout === 'minimal') {
+  if (legacyTemplateSettings.layout === 'minimal') {
     return (
       <MinimalTemplate
         articles={articles}
@@ -182,7 +284,7 @@ export default async function HomePage({
     );
   }
 
-  if (templateSettings.layout === 'grid') {
+  if (legacyTemplateSettings.layout === 'grid') {
     return (
       <GridTemplate
         articles={articles}
@@ -194,7 +296,7 @@ export default async function HomePage({
     );
   }
 
-  if (templateSettings.layout === 'classic') {
+  if (legacyTemplateSettings.layout === 'classic') {
     return (
       <ClassicTemplate
         articles={articles}
