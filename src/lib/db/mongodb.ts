@@ -10,17 +10,18 @@ declare global {
   var _mongoPromiseCache: Map<string, Promise<Db>> | undefined;
 }
 
-// Use global cache to persist connections across Next.js hot reloads and workers
+// Use global cache to persist connections across Next.js hot reloads and module re-imports.
+// In development, this prevents connection leaks during HMR.
+// In production, this ensures a single connection pool per process even if
+// the module is re-evaluated by different Next.js server contexts.
 const clientCache: Map<string, MongoClient> = global._mongoClientCache ?? new Map();
 const dbCache: Map<string, Db> = global._mongoDbCache ?? new Map();
 const promiseCache: Map<string, Promise<Db>> = global._mongoPromiseCache ?? new Map();
 
-// Store in global for persistence
-if (process.env.NODE_ENV !== 'production') {
-  global._mongoClientCache = clientCache;
-  global._mongoDbCache = dbCache;
-  global._mongoPromiseCache = promiseCache;
-}
+// Always store in global to persist across module re-evaluations
+global._mongoClientCache = clientCache;
+global._mongoDbCache = dbCache;
+global._mongoPromiseCache = promiseCache;
 
 // Get or create a MongoDB connection for a specific brand database
 export async function getDatabase(brandId: string): Promise<Db> {
@@ -259,6 +260,38 @@ export async function initializeIndexes(brandId: string): Promise<{ created: str
     created.push('sessions.expiresAt (TTL)');
   } catch (e) {
     errors.push(`sessions.expiresAt: ${e instanceof Error ? e.message : 'Unknown error'}`);
+  }
+
+  // Pipeline logs collection indexes (with TTL for auto-cleanup)
+  const pipelineLogs = db.collection('pipelineLogs');
+  try {
+    await pipelineLogs.createIndex({ createdAt: -1 }, { background: true });
+    created.push('pipelineLogs.createdAt');
+  } catch (e) {
+    errors.push(`pipelineLogs.createdAt: ${e instanceof Error ? e.message : 'Unknown error'}`);
+  }
+  try {
+    // Auto-delete pipeline logs older than 30 days to prevent unbounded growth
+    await pipelineLogs.createIndex({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60, background: true });
+    created.push('pipelineLogs.createdAt (TTL 30d)');
+  } catch (e) {
+    errors.push(`pipelineLogs.createdAt_TTL: ${e instanceof Error ? e.message : 'Unknown error'}`);
+  }
+
+  // Tracking events collection indexes (with TTL for auto-cleanup)
+  const trackingEvents = db.collection('tracking_events');
+  try {
+    await trackingEvents.createIndex({ timestamp: -1 }, { background: true });
+    created.push('tracking_events.timestamp');
+  } catch (e) {
+    errors.push(`tracking_events.timestamp: ${e instanceof Error ? e.message : 'Unknown error'}`);
+  }
+  try {
+    // Auto-delete tracking events older than 90 days
+    await trackingEvents.createIndex({ timestamp: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60, background: true });
+    created.push('tracking_events.timestamp (TTL 90d)');
+  } catch (e) {
+    errors.push(`tracking_events.timestamp_TTL: ${e instanceof Error ? e.message : 'Unknown error'}`);
   }
 
   console.log(`Database indexes initialized for ${brandId}:`, { created, errors });
