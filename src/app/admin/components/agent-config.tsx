@@ -331,6 +331,28 @@ interface RSSFeed {
   enabled: boolean;
 }
 
+function normalizeRSSFeed(feed: Partial<RSSFeed>): RSSFeed {
+  const rawLanguage = typeof feed.language === 'string' ? feed.language.toLowerCase() : '';
+  const language: 'de' | 'en' = rawLanguage === 'en' ? 'en' : 'de';
+
+  return {
+    url: typeof feed.url === 'string' ? feed.url : '',
+    name: typeof feed.name === 'string' ? feed.name : 'Unnamed feed',
+    category: typeof feed.category === 'string' && feed.category.trim().length > 0 ? feed.category : 'news',
+    language,
+    enabled: typeof feed.enabled === 'boolean' ? feed.enabled : true,
+  };
+}
+
+function normalizeRSSFeeds(feeds: unknown): RSSFeed[] {
+  if (!Array.isArray(feeds)) return defaultRSSFeeds;
+
+  return feeds
+    .filter((feed): feed is Partial<RSSFeed> => typeof feed === 'object' && feed !== null)
+    .map(normalizeRSSFeed)
+    .filter((feed) => feed.url.trim().length > 0);
+}
+
 interface AIModelConfig {
   model: string;
   temperature: number;
@@ -555,7 +577,7 @@ export function AgentConfig() {
           setSettings({
             ...defaultSettings,
             ...data.settings.agentConfig,
-            rssFeeds: data.settings.agentConfig.rssFeeds || defaultRSSFeeds,
+            rssFeeds: normalizeRSSFeeds(data.settings.agentConfig.rssFeeds),
             aiModel: { ...defaultAIModel, ...(data.settings.agentConfig.aiModel || {}) },
             articleStyle: { ...defaultArticleStyle, ...articleStyle },
             videoSettings: { ...defaultVideoSettings, ...(data.settings.agentConfig.videoSettings || {}) },
@@ -618,9 +640,10 @@ export function AgentConfig() {
 
   const handleAddFeed = () => {
     if (newFeed.url && newFeed.name) {
+      const normalizedNewFeed = normalizeRSSFeed(newFeed);
       setSettings({
         ...settings,
-        rssFeeds: [...settings.rssFeeds, newFeed as RSSFeed],
+        rssFeeds: [...settings.rssFeeds, normalizedNewFeed],
       });
       setNewFeed({ url: '', name: '', category: 'news', language: 'de', enabled: true });
     }
@@ -956,8 +979,8 @@ export function AgentConfig() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline">{feed.category}</Badge>
-                      <Badge variant="secondary">{feed.language.toUpperCase()}</Badge>
+                      <Badge variant="outline">{feed.category || 'news'}</Badge>
+                      <Badge variant="secondary">{(feed.language || 'de').toUpperCase()}</Badge>
                       <Button variant="ghost" size="icon" onClick={() => handleRemoveFeed(feed.url)}>
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
