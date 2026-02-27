@@ -202,33 +202,16 @@ export default async function ArticlePage({
           }
         }
         
-        // Method 3: SANDBOX ONLY - Check by DIMOCO sandbox MSISDN
-        // In sandbox, all purchases are made with MSISDN 436763602302
-        // This allows testing without real carrier billing
-        const isSandbox = process.env.DIMOCO_API_URL?.includes('sandbox');
-        if (!isUnlocked && isSandbox) {
-          const sandboxMsisdn = '436763602302'; // DIMOCO sandbox test MSISDN
-          const sandboxUnlock = await unlocksCollection.findOne({
-            articleId: found._id,
-            status: 'completed',
-            $or: [
-              { msisdn: sandboxMsisdn },
-              { msisdn: `+${sandboxMsisdn}` },
-              { normalizedMsisdn: sandboxMsisdn },
-            ],
-          });
-          
-          if (sandboxUnlock) {
-            isUnlocked = true;
-            console.log('[Article Access] SANDBOX MODE - Article unlocked via sandbox MSISDN');
-          }
-        }
+        // NOTE: Removed "Method 3" (sandbox MSISDN global check) because it was
+        // causing ALL users to see purchased articles as unlocked. In sandbox mode
+        // all payments use the same test MSISDN (436763602302), so a single purchase
+        // would unlock the article for every visitor. Access must always be tied to
+        // the individual user's MSISDN cookie or session ID.
         
         console.log('[Article Access] Final status:', { 
           isUnlocked, 
           hasMsisdn: !!msisdn,
           hasSession: !!sessionId,
-          isSandbox: !!isSandbox,
         });
       } else {
         // Pricing disabled - all articles are free
