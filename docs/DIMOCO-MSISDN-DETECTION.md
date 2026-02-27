@@ -62,9 +62,9 @@ DIMOCO_ORDER_ID=8000
 BYPASS_NETWORK_CHECK=true
 ```
 
-#### Production Credentials (Live)
+#### Production Credentials (Live) - per pay:smart spec v2.1
 ```env
-DIMOCO_API_URL=https://dcb.dimoco.at/sph/payment
+DIMOCO_API_URL=https://services.dimoco.at/smart/payment
 DIMOCO_MERCHANT_ID=<your-real-merchant-id>
 DIMOCO_PASSWORD=<your-real-password>
 DIMOCO_ORDER_ID=<your-real-order-id>
@@ -75,7 +75,7 @@ BYPASS_NETWORK_CHECK=false
 
 | Feature | Sandbox | Production |
 |---------|---------|------------|
-| API URL | `sandbox-dcb.dimoco.at` | `dcb.dimoco.at` |
+| API URL | `sandbox-dcb.dimoco.at` | `services.dimoco.at/smart/payment` |
 | MSISDN returned | Always `436763602302` | Real user phone number |
 | Operator returned | Always `AT_SANDBOX` | Real carrier name |
 | Identify works on WiFi | Yes (always succeeds) | No (requires 4G/5G) |
@@ -115,14 +115,14 @@ Since `BYPASS_NETWORK_CHECK=true` in your `.env`:
 ### Requirements
 
 1. **Production DIMOCO Account**
-   - Production API URL: `https://dcb.dimoco.at/sph/payment`
+   - Production API URL: `https://services.dimoco.at/smart/payment`
    - Your assigned Merchant ID, Password, and Order ID
    - Carrier partnerships activated for target countries
 
 2. **Environment Variables** (update `.env` on server)
    ```env
    NODE_ENV=production
-   DIMOCO_API_URL=https://dcb.dimoco.at/sph/payment
+   DIMOCO_API_URL=https://services.dimoco.at/smart/payment
    DIMOCO_MERCHANT_ID=<your-merchant-id>
    DIMOCO_PASSWORD=<your-password>
    DIMOCO_ORDER_ID=<your-order-id>
@@ -166,10 +166,10 @@ User on mobile 4G/5G → Clicks "Unlock Article"
 Simply update these 4 env vars on your server:
 ```bash
 # Edit .env file
-DIMOCO_API_URL=https://dcb.dimoco.at/sph/payment
-DIMOCO_MERCHANT_ID=<your-production-merchant-id>
-DIMOCO_PASSWORD=<your-production-password>
-DIMOCO_ORDER_ID=<your-production-order-id>
+   DIMOCO_API_URL=https://services.dimoco.at/smart/payment
+   DIMOCO_MERCHANT_ID=<your-production-merchant-id>
+   DIMOCO_PASSWORD=<your-production-password>
+   DIMOCO_ORDER_ID=<your-production-order-id>
 ```
 Then rebuild and restart:
 ```bash

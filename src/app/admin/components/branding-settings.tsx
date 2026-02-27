@@ -132,7 +132,7 @@ const defaultSettings: BrandSettings = {
     currency: 'EUR',
   },
   dimoco: {
-    apiUrl: 'https://sandbox-dcb.dimoco.at/sph/payment',
+    apiUrl: 'https://services.dimoco.at/smart/payment',
     merchantId: '8000',
     password: '',
     orderId: '8000',
@@ -900,11 +900,11 @@ export function BrandingSettings() {
                   <Input 
                     value={settings.dimoco.apiUrl}
                     onChange={(e) => updateNestedSetting('dimoco', 'apiUrl', e.target.value)}
-                    placeholder="https://sandbox-dcb.dimoco.at/sph/payment"
+                    placeholder="https://services.dimoco.at/smart/payment"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Sandbox: https://sandbox-dcb.dimoco.at/sph/payment<br/>
-                    Production: https://dcb.dimoco.at/sph/payment
+                    Production: https://services.dimoco.at/smart/payment<br/>
+                    Sandbox: https://sandbox-dcb.dimoco.at/sph/payment
                   </p>
                 </div>
                 <div className="space-y-2">

@@ -234,8 +234,8 @@ DIMOCO_PASSWORD=GsD8UxfCtGwK3
 DIMOCO_ORDER_ID=8000
 ARTICLE_PRICE_CENTS=99
 
-# Production (replace sandbox values)
-# DIMOCO_API_URL=https://dcb.dimoco.at/sph/payment
+# Production (per pay:smart specification v2.1)
+# DIMOCO_API_URL=https://services.dimoco.at/smart/payment
 # DIMOCO_MERCHANT_ID=<your-merchant-id>
 # DIMOCO_PASSWORD=<your-password>
 # DIMOCO_ORDER_ID=<your-order-id>
@@ -280,7 +280,7 @@ const digest = crypto.createHmac('sha256', apiKey)
 
 | Setting | Sandbox | Production |
 |---------|---------|------------|
-| API URL | `sandbox-dcb.dimoco.at/sph/payment` | `dcb.dimoco.at/sph/payment` |
+| API URL | `sandbox-dcb.dimoco.at/sph/payment` | `services.dimoco.at/smart/payment` |
 | Real charges | No | Yes |
 | Test MSISDN | Always `436763602302` | Real user phone numbers |
 | `redirect=1` | Required in start action | Not needed |

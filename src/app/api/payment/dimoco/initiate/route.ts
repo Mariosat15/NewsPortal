@@ -160,13 +160,21 @@ export async function GET(request: NextRequest) {
         console.log('[Payment] Sandbox mode: MSISDN=436763602302, operator=AT_SANDBOX');
       }
       
-      response = await startPayment(paymentRequest);
-      console.log('[Payment] DIMOCO response:', JSON.stringify(response));
-      
-      if (!response.success) {
-        console.error('[Payment] DIMOCO API Error:', response.error);
-        // In production: do NOT fall back to mock - show the real error
-        // In sandbox: also don't fall back - let the error surface so it can be debugged
+      try {
+        response = await startPayment(paymentRequest);
+        console.log('[Payment] DIMOCO response:', JSON.stringify(response));
+        
+        if (!response.success) {
+          console.error('[Payment] DIMOCO API Error:', response.error);
+          // In production/sandbox: do NOT fall back to mock - show the real error
+        }
+      } catch (dimocoError) {
+        console.error('[Payment] DIMOCO API exception:', dimocoError);
+        response = {
+          success: false,
+          transactionId: '',
+          error: dimocoError instanceof Error ? dimocoError.message : 'DIMOCO API call failed',
+        };
       }
     }
 

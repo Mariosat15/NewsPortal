@@ -89,13 +89,19 @@ export interface PaymentCallbackData {
   signature?: string;
 }
 
-// DIMOCO API URLs
+// DIMOCO API URLs (per pay:smart specification v2.1, Section 4.3)
+// Server to server: https://services.dimoco.at/smart/payment
+// Enduser transport: https://services.dimoco.at/smart/userpayment
+// Sandbox uses a different hostname: sandbox-dcb.dimoco.at
 const DIMOCO_SANDBOX_URL = 'https://sandbox-dcb.dimoco.at/sph/payment';
-const DIMOCO_PRODUCTION_URL = 'https://dcb.dimoco.at/sph/payment';
+const DIMOCO_PRODUCTION_URL = 'https://services.dimoco.at/smart/payment';
 
 // Get DIMOCO configuration from environment
 export function getDimocoConfig(): DimocoConfig {
   const apiUrl = process.env.DIMOCO_API_URL || DIMOCO_SANDBOX_URL;
+  // Detect sandbox by checking for 'sandbox' in the URL
+  // Production URL: services.dimoco.at/smart/payment
+  // Sandbox URL: sandbox-dcb.dimoco.at/sph/payment
   const useSandbox = apiUrl.includes('sandbox');
   
   return {
@@ -376,11 +382,19 @@ export async function startPayment(
       error: `DIMOCO Error ${errorCode}: ${errorMessage}`,
     };
   } catch (error) {
+    // Log the full error including cause (Node.js fetch wraps the real error)
+    const cause = (error as { cause?: Error })?.cause;
     console.error('[DIMOCO] Start error:', error);
+    if (cause) {
+      console.error('[DIMOCO] Start error cause:', cause.message, cause);
+    }
+    console.error('[DIMOCO] API URL was:', config.apiUrl);
+    
+    const errorMsg = cause?.message || (error instanceof Error ? error.message : 'Network error');
     return {
       success: false,
       transactionId,
-      error: error instanceof Error ? error.message : 'Network error',
+      error: `DIMOCO connection failed: ${errorMsg} (URL: ${config.apiUrl})`,
     };
   }
 }
