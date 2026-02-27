@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
     // Get date range from query params (default 7 days, max 90)
     const searchParams = request.nextUrl.searchParams;
-    const days = Math.min(Math.max(parseInt(searchParams.get('days') || '7', 10), 1), 90);
+    const days = Math.min(Math.max(parseInt(searchParams.get('days') || '7', 10), 1), 365);
 
     // Calculate dates
     const now = new Date();

@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
   FileText, Users, CreditCard, TrendingUp, Activity, BarChart3, 
   ArrowUpRight, ArrowDownRight, Target, DollarSign, UserPlus, ShoppingCart,
-  Repeat, Eye, Zap, RefreshCw, Calendar
+  Repeat, Eye, Zap, RefreshCw, Calendar, Radio
 } from 'lucide-react';
 import {
   LineChart,
@@ -26,6 +26,7 @@ import {
   Cell,
   Legend,
   ComposedChart,
+  ReferenceLine,
 } from 'recharts';
 
 interface Stats {
@@ -54,6 +55,15 @@ interface Stats {
   };
 }
 
+interface EquityPoint {
+  timestamp: string;
+  revenue: number;
+  cumRevenue: number;
+  cumUnlocks: number;
+  // Computed for display
+  label?: string;
+}
+
 const STATUS_COLORS: Record<string, string> = {
   completed: '#22c55e',
   pending: '#f59e0b',
@@ -62,12 +72,219 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const DATE_RANGES = [
-  { label: '7 Days', value: 7 },
-  { label: '30 Days', value: 30 },
-  { label: '60 Days', value: 60 },
-  { label: '120 Days', value: 120 },
-  { label: '1 Year', value: 365 },
+  { label: '7D', value: 7 },
+  { label: '30D', value: 30 },
+  { label: '60D', value: 60 },
+  { label: '120D', value: 120 },
+  { label: '1Y', value: 365 },
 ];
+
+// ── Live Equity Chart Component ──
+function LiveEquityChart({ days }: { days: number }) {
+  const [equityData, setEquityData] = useState<EquityPoint[]>([]);
+  const [totalRevenue, setTotalRevenue] = useState(0);
+  const [totalUnlocks, setTotalUnlocks] = useState(0);
+  const [prevRevenue, setPrevRevenue] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const lastTimestampRef = useRef<string | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const formatTimestamp = useCallback((ts: string) => {
+    const d = new Date(ts);
+    if (days <= 1) return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    if (days <= 7) return d.toLocaleDateString('en-US', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    if (days <= 60) return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }, [days]);
+
+  const fetchEquity = useCallback(async (incremental: boolean = false) => {
+    try {
+      const url = incremental && lastTimestampRef.current
+        ? `/api/admin/stats/equity?days=${days}&after=${encodeURIComponent(lastTimestampRef.current)}`
+        : `/api/admin/stats/equity?days=${days}`;
+
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const json = await res.json();
+      if (!json.success) return;
+
+      const { equityPoints, totalRevenue: tr, totalUnlocks: tu, lastTimestamp } = json.data;
+
+      if (incremental && lastTimestampRef.current) {
+        // Append new points only
+        if (equityPoints.length > 0) {
+          setEquityData(prev => {
+            const newPoints = equityPoints.map((p: EquityPoint) => ({
+              ...p,
+              label: formatTimestamp(p.timestamp),
+            }));
+            return [...prev, ...newPoints];
+          });
+          setPrevRevenue(totalRevenue);
+          setTotalRevenue(tr);
+          setTotalUnlocks(tu);
+        }
+      } else {
+        // Full load
+        const points = equityPoints.map((p: EquityPoint) => ({
+          ...p,
+          label: formatTimestamp(p.timestamp),
+        }));
+        setEquityData(points);
+        setTotalRevenue(tr);
+        setTotalUnlocks(tu);
+        setPrevRevenue(tr);
+        setLoading(false);
+      }
+
+      lastTimestampRef.current = lastTimestamp;
+    } catch (err) {
+      console.error('Equity fetch error:', err);
+    }
+  }, [days, formatTimestamp, totalRevenue]);
+
+  // Full load on mount / days change
+  useEffect(() => {
+    setLoading(true);
+    lastTimestampRef.current = null;
+    fetchEquity(false);
+  }, [days]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Poll every 10 seconds for incremental updates
+  useEffect(() => {
+    pollingRef.current = setInterval(() => {
+      fetchEquity(true);
+    }, 10000);
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [fetchEquity]);
+
+  const revenueChange = totalRevenue - prevRevenue;
+  const isPositive = revenueChange >= 0;
+
+  // Compute domain for the Y axis (add some breathing room)
+  const values = equityData.map((p) => p.cumRevenue);
+  const minVal = values.length > 0 ? Math.min(...values) : 0;
+  const maxVal = values.length > 0 ? Math.max(...values) : 0;
+  const padding = Math.max((maxVal - minVal) * 0.1, 0.5);
+
+  // Custom tooltip
+  const EquityTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: EquityPoint }> }) => {
+    if (!active || !payload?.[0]) return null;
+    const p = payload[0].payload;
+    return (
+      <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+        <p className="text-xs text-muted-foreground">{new Date(p.timestamp).toLocaleString()}</p>
+        <p className="text-sm font-bold text-green-600">€{p.cumRevenue.toFixed(2)}</p>
+        {p.revenue > 0 && (
+          <p className="text-xs text-emerald-500">+€{p.revenue.toFixed(2)} this transaction</p>
+        )}
+        <p className="text-xs text-muted-foreground">{p.cumUnlocks} total unlocks</p>
+      </div>
+    );
+  };
+
+  return (
+    <Card className="border-l-4 border-l-emerald-500">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <TrendingUp className="h-5 w-5 text-emerald-500" />
+              Equity / PnL
+            </CardTitle>
+            <CardDescription className="flex items-center gap-2">
+              Cumulative revenue over time
+              <span className="inline-flex items-center gap-1 text-emerald-600 text-xs">
+                <Radio className="h-3 w-3 animate-pulse" />
+                Live
+              </span>
+            </CardDescription>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold">€{totalRevenue.toFixed(2)}</div>
+            <div className="flex items-center justify-end gap-1 text-sm">
+              {isPositive ? (
+                <span className="text-green-600 flex items-center gap-0.5">
+                  <ArrowUpRight className="h-3 w-3" />
+                  +€{revenueChange.toFixed(2)}
+                </span>
+              ) : revenueChange < 0 ? (
+                <span className="text-red-600 flex items-center gap-0.5">
+                  <ArrowDownRight className="h-3 w-3" />
+                  €{revenueChange.toFixed(2)}
+                </span>
+              ) : null}
+              <span className="text-muted-foreground text-xs">| {totalUnlocks} unlocks</span>
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <div className="h-[280px]">
+          {loading ? (
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              Loading equity curve...
+            </div>
+          ) : equityData.length < 2 ? (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
+              <TrendingUp className="h-8 w-8 opacity-40" />
+              <p>No transaction data yet</p>
+              <p className="text-xs">The equity chart will appear after the first sale</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={equityData}>
+                <defs>
+                  <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 10 }}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                  minTickGap={60}
+                />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  tickLine={false}
+                  tickFormatter={(v) => `€${v.toFixed(v >= 100 ? 0 : 2)}`}
+                  domain={[Math.max(0, minVal - padding), maxVal + padding]}
+                  width={65}
+                />
+                <Tooltip content={<EquityTooltip />} />
+                {/* Baseline reference line (start of period) */}
+                {equityData.length > 0 && (
+                  <ReferenceLine
+                    y={equityData[0].cumRevenue}
+                    stroke="#94a3b8"
+                    strokeDasharray="4 4"
+                    strokeWidth={1}
+                  />
+                )}
+                <Area
+                  type="stepAfter"
+                  dataKey="cumRevenue"
+                  stroke="#10b981"
+                  strokeWidth={2.5}
+                  fill="url(#equityGrad)"
+                  animationDuration={600}
+                  dot={false}
+                  activeDot={{ r: 5, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export function DashboardOverview() {
   const [stats, setStats] = useState<Stats>({
@@ -84,9 +301,10 @@ export function DashboardOverview() {
   });
   const [loading, setLoading] = useState(true);
   const [daysFilter, setDaysFilter] = useState(7);
+  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchStats = useCallback(async (days: number) => {
-    setLoading(true);
+  const fetchStats = useCallback(async (days: number, silent: boolean = false) => {
+    if (!silent) setLoading(true);
     try {
       const response = await fetch(`/api/admin/stats?days=${days}`);
       if (response.ok) {
@@ -96,12 +314,22 @@ export function DashboardOverview() {
     } catch (error) {
       console.error('Failed to fetch stats:', error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchStats(daysFilter);
+  }, [daysFilter, fetchStats]);
+
+  // Auto-refresh stats every 30 seconds (silent — no loading spinner)
+  useEffect(() => {
+    autoRefreshRef.current = setInterval(() => {
+      fetchStats(daysFilter, true);
+    }, 30000);
+    return () => {
+      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+    };
   }, [daysFilter, fetchStats]);
 
   const handleRefresh = () => {
@@ -160,6 +388,9 @@ export function DashboardOverview() {
           </Button>
         </div>
       </div>
+
+      {/* Live Equity / PnL Chart */}
+      <LiveEquityChart days={daysFilter} />
 
       {/* Main Stats Cards */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
