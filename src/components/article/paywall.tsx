@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
-import { Lock, CreditCard, Shield, Zap, Wifi, WifiOff, Smartphone } from 'lucide-react';
+import { Lock, CreditCard, Shield, Zap, Wifi, WifiOff, Smartphone, RotateCcw, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatPrice } from '@/lib/utils';
@@ -36,6 +36,8 @@ export function Paywall({
   const formattedPrice = formatPrice(priceInCents, locale === 'de' ? 'de-DE' : 'en-US');
   const [networkInfo, setNetworkInfo] = useState<NetworkDetectionResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
 
   // Detect network type on component mount
   useEffect(() => {
@@ -59,6 +61,33 @@ export function Paywall({
     }
     detectNetwork();
   }, []);
+
+  // Check for restore error/success in URL params on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const restoreErr = params.get('restore_error');
+    const restored = params.get('restored');
+
+    if (restored === 'true') {
+      // Access was restored - reload the page to re-check unlock status
+      window.location.href = window.location.pathname;
+      return;
+    }
+
+    if (restoreErr === 'no_purchases') {
+      setRestoreError(
+        locale === 'de'
+          ? 'Keine Käufe für Ihre Nummer gefunden. Bitte kaufen Sie den Artikel zuerst.'
+          : 'No purchases found for your number. Please purchase the article first.'
+      );
+    } else if (restoreErr === 'not_found') {
+      setRestoreError(
+        locale === 'de'
+          ? 'Zugang konnte nicht wiederhergestellt werden. Bitte stellen Sie sicher, dass Sie mobile Daten verwenden.'
+          : 'Could not restore access. Please make sure you are using mobile data.'
+      );
+    }
+  }, [locale]);
 
   const handleUnlock = () => {
     // Block if on WiFi
@@ -86,6 +115,14 @@ export function Paywall({
     // Redirect to DIMOCO payment with device data
     const paymentUrl = `/api/payment/dimoco/initiate?articleId=${articleId}&slug=${articleSlug}&returnUrl=${encodeURIComponent(window.location.href)}&deviceData=${deviceData}`;
     window.location.href = paymentUrl;
+  };
+
+  const handleRestoreAccess = () => {
+    setRestoring(true);
+    setRestoreError(null);
+    // Redirect to the restore access endpoint
+    const restoreUrl = `/api/auth/restore-access?slug=${articleSlug}&returnUrl=${encodeURIComponent(window.location.pathname)}`;
+    window.location.href = restoreUrl;
   };
 
   if (loading) {
@@ -205,6 +242,38 @@ export function Paywall({
               </p>
             </>
           )}
+
+          {/* Restore Access - shown for both WiFi and mobile users */}
+          <div className="pt-3 border-t">
+            {restoreError && (
+              <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                {restoreError}
+              </div>
+            )}
+            <button
+              onClick={handleRestoreAccess}
+              disabled={restoring}
+              className="w-full flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              {restoring ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4" />
+              )}
+              <span>
+                {restoring
+                  ? (locale === 'de' ? 'Zugang wird wiederhergestellt...' : 'Restoring access...')
+                  : (locale === 'de' ? 'Bereits gekauft? Zugang wiederherstellen' : 'Already purchased? Restore access')
+                }
+              </span>
+            </button>
+            <p className="text-xs text-center text-muted-foreground mt-1">
+              {locale === 'de'
+                ? 'Nutzen Sie dies, wenn Sie den Artikel in einem anderen Browser gekauft haben'
+                : 'Use this if you purchased the article in a different browser'
+              }
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
