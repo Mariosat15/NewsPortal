@@ -50,10 +50,10 @@ npm install
 
 3. Create environment file:
 ```bash
-cp .env.example .env.local
+cp .env.example .env
 ```
 
-4. Update `.env.local` with your configuration:
+4. Update `.env` with your configuration:
 - MongoDB connection string
 - DIMOCO credentials
 - OpenAI API key
@@ -71,7 +71,7 @@ Admin panel: http://localhost:3000/admin
 
 ## Admin Panel
 
-Access the admin panel at `/admin` with the credentials from your `.env.local`:
+Access the admin panel at `/admin` with the credentials from your `.env`:
 
 - **Dashboard**: View statistics and quick actions
 - **Articles**: Create, edit, and manage articles

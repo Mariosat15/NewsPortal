@@ -34,23 +34,32 @@ if [ -n "$WIZARD_MODE" ]; then
 fi
 
 # Check if .env file exists for the brand
+# IMPORTANT: We use ONLY .env (not .env.local) to avoid precedence conflicts.
+# Next.js loads .env.local > .env, so having both causes silent overrides.
 ENV_FILE=".env.${BRAND_ID}"
 if [ -f "$ENV_FILE" ]; then
     echo "Using brand-specific env: ${ENV_FILE}"
-    cp "$ENV_FILE" .env.local
-elif [ -f ".env" ]; then
-    echo "Using .env file"
-    cp .env .env.local
-elif [ -f ".env.example" ]; then
-    echo "Warning: No .env file found. Using .env.example as template."
-    cp .env.example .env.local
-    echo "Please update .env.local with your configuration."
-    if [ -z "$WIZARD_MODE" ]; then
-        echo ""
-        echo "TIP: For easier setup, use the Deployment Wizard:"
-        echo "  cd installer && npm install && npm run dev"
-        echo ""
+    cp "$ENV_FILE" .env
+elif [ ! -f ".env" ]; then
+    if [ -f ".env.example" ]; then
+        echo "Warning: No .env file found. Using .env.example as template."
+        cp .env.example .env
+        echo "Please update .env with your configuration."
+        if [ -z "$WIZARD_MODE" ]; then
+            echo ""
+            echo "TIP: For easier setup, use the Deployment Wizard:"
+            echo "  cd installer && npm install && npm run dev"
+            echo ""
+        fi
     fi
+else
+    echo "Using existing .env file"
+fi
+
+# Remove .env.local if it exists to prevent override conflicts
+if [ -f ".env.local" ]; then
+    echo "Warning: Removing .env.local to prevent config conflicts (all settings should be in .env)"
+    rm -f .env.local
 fi
 
 # Function to check if command exists

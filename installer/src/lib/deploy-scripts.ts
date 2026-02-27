@@ -374,7 +374,9 @@ export async function deployToServer(
 
     const envContent = generateEnvFile(config);
     await ssh.uploadFile(envContent, `${deployPath}/.env`);
-    await ssh.uploadFile(envContent, `${deployPath}/.env.local`);
+    // Remove .env.local if it exists — Next.js loads .env.local > .env,
+    // so having both causes silent override conflicts.
+    await ssh.exec(`rm -f ${deployPath}/.env.local`).catch(() => {});
 
     // Create brand assets directory
     await ssh.exec(`mkdir -p ${deployPath}/public/images/brands/${brandId}`);
