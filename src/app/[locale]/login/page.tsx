@@ -3,9 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
 import { Smartphone, ArrowRight, Info } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useBrand } from '@/lib/brand/context';
+import { Button } from '../../../components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
+import { useBrand } from '../../../lib/brand/context';
 
 export default function LoginPage() {
   const locale = useLocale();

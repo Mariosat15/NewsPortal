@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
 import { Smartphone, Calendar, ShoppingBag, ExternalLink, Loader2, Wifi, AlertCircle, CheckCircle } from 'lucide-react';
-import { useBrand } from '@/lib/brand/context';
-import { Link } from '@/i18n/navigation';
+import { useBrand } from '../../../lib/brand/context';
+import { Link } from '../../../i18n/navigation';
 
 interface Purchase {
   id: string;
