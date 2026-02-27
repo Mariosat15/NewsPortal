@@ -84,7 +84,8 @@ function updateProgress(step: string, stepNumber: number, details: string, data?
 }
 
 // Main orchestrator that runs all agents in sequence
-export async function runAgentPipeline(brandId: string, customSettings?: Partial<AgentConfig>): Promise<AgentRunLog> {
+// When manualRun is true, the pipeline runs regardless of the 'enabled' flag
+export async function runAgentPipeline(brandId: string, customSettings?: Partial<AgentConfig>, manualRun: boolean = false): Promise<AgentRunLog> {
   const startTime = new Date();
   
   // Initialize progress
@@ -149,16 +150,39 @@ export async function runAgentPipeline(brandId: string, customSettings?: Partial
       agentConfig = { ...agentConfig, ...customSettings };
     }
 
-    if (!agentConfig.enabled) {
+    if (!agentConfig.enabled && !manualRun) {
+      console.log(`[Pipeline] Agents DISABLED for brand ${brandId}. Skipping. (Enable in admin or use manual run)`);
       log.status = 'completed';
       log.completedAt = new Date();
       log.metadata = { message: 'Agents disabled for this brand' };
+      // Reset progress so UI doesn't get stuck
+      currentPipelineProgress.isRunning = false;
+      currentPipelineProgress.step = 'completed';
+      currentPipelineProgress.details = 'Agents disabled for this brand';
       return log;
     }
 
-    console.log(`Starting agent pipeline for brand: ${brandId}`);
-    console.log(`Topics: ${agentConfig.topics.join(', ')}`);
-    console.log(`Max articles: ${agentConfig.maxArticlesPerRun}`);
+    // Validate OPENAI_API_KEY before proceeding
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('[Pipeline] OPENAI_API_KEY is not set! Cannot generate articles.');
+      log.status = 'failed';
+      log.completedAt = new Date();
+      log.errors.push('OPENAI_API_KEY environment variable is not set');
+      log.metadata = { message: 'Missing OPENAI_API_KEY' };
+      currentPipelineProgress.isRunning = false;
+      currentPipelineProgress.step = 'failed';
+      currentPipelineProgress.details = 'OPENAI_API_KEY is not configured';
+      return log;
+    }
+
+    if (!agentConfig.enabled && manualRun) {
+      console.log(`[Pipeline] Agents disabled but running manually (forced)`);
+    }
+
+    console.log(`[Pipeline] Starting for brand: ${brandId}`);
+    console.log(`[Pipeline] Topics: ${agentConfig.topics.join(', ')}`);
+    console.log(`[Pipeline] Max articles: ${agentConfig.maxArticlesPerRun}`);
+    console.log(`[Pipeline] AI Model: ${agentConfig.aiModel?.model || 'gpt-4o'}`);
 
     // Step 1: Gather topics
     updateProgress('gathering', 1, `Gathering topics from ${agentConfig.topics.length} categories...`);

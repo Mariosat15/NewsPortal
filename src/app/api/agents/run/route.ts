@@ -59,10 +59,11 @@ export async function POST(request: NextRequest) {
       // Use defaults
     }
     
-    console.log(`[API] Starting async pipeline for brand: ${brandId}`);
+    console.log(`[API] Starting async pipeline for brand: ${brandId} (manual run)`);
     
     // Start pipeline ASYNC - don't await, return immediately
-    runAgentPipeline(brandId, customSettings)
+    // manualRun=true bypasses the 'enabled' check since user explicitly triggered it
+    runAgentPipeline(brandId, customSettings, true)
       .then((log) => {
         console.log(`[API] Pipeline completed: ${log.status}`);
         lastPipelineResult = {
@@ -112,8 +113,8 @@ export async function GET(request: NextRequest) {
   if (trigger === 'true' && secret === process.env.ADMIN_SECRET) {
     const brandId = getBrandIdSync();
     
-    // Start async
-    runAgentPipeline(brandId).catch(console.error);
+    // Start async - manual trigger bypasses enabled check
+    runAgentPipeline(brandId, undefined, true).catch(console.error);
     
     return NextResponse.json({
       success: true,
