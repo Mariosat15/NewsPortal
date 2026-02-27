@@ -46,6 +46,16 @@ export interface AdminConfig {
   authSecret: string;
 }
 
+export interface CloudflareConfig {
+  enabled: boolean;
+  apiToken: string;
+  accountId: string;
+  /** Populated after zone creation — the nameservers the user must set at their registrar */
+  nameservers?: string[];
+  /** Zone ID returned after creation */
+  zoneId?: string;
+}
+
 export interface DeploymentConfig {
   server: ServerConfig;
   domain: DomainConfig;
@@ -53,6 +63,7 @@ export interface DeploymentConfig {
   payment: PaymentConfig;
   apiKeys: ApiKeysConfig;
   admin: AdminConfig;
+  cloudflare: CloudflareConfig;
 }
 
 export interface DeploymentStep {

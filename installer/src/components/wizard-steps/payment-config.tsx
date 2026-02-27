@@ -26,8 +26,8 @@ export function PaymentConfigStep({ config, onChange }: PaymentConfigStepProps) 
       ...config,
       useSandbox: newUseSandbox,
       dimocoApiUrl: newUseSandbox 
-        ? 'https://sandbox.2pay.global/smartlink' 
-        : 'https://www.2pay.global/smartlink',
+        ? 'https://sandbox-dcb.dimoco.at/sph/payment' 
+        : 'https://services.dimoco.at/smart/payment',
     });
   };
 
@@ -82,10 +82,13 @@ export function PaymentConfigStep({ config, onChange }: PaymentConfigStepProps) 
         <Label htmlFor="dimocoApiUrl">DIMOCO API URL</Label>
         <Input
           id="dimocoApiUrl"
-          placeholder="https://sandbox.2pay.global/smartlink"
+          placeholder="https://services.dimoco.at/smart/payment"
           value={config.dimocoApiUrl}
           onChange={(e) => onChange({ ...config, dimocoApiUrl: e.target.value })}
         />
+        <p className="text-xs text-muted-foreground">
+          Production: https://services.dimoco.at/smart/payment | Sandbox: https://sandbox-dcb.dimoco.at/sph/payment
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

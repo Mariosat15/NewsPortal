@@ -3,7 +3,7 @@
 import { DeploymentConfig } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Server, Globe, Database, CreditCard, Key, Shield, 
+  Server, Globe, Database, CreditCard, Key, Shield, Cloud,
   CheckCircle, AlertCircle, Rocket
 } from 'lucide-react';
 
@@ -73,6 +73,18 @@ export function ReviewDeployStep({ config }: ReviewDeployStepProps) {
         { label: 'Email', value: config.admin.adminEmail || 'Not set', valid: !!config.admin.adminEmail },
         { label: 'Password', value: config.admin.adminPassword ? '••••••••' : 'Not set', valid: !!config.admin.adminPassword },
         { label: 'Secrets', value: config.admin.adminSecret && config.admin.authSecret ? 'Generated' : 'Missing', valid: !!config.admin.adminSecret && !!config.admin.authSecret },
+      ],
+    },
+    {
+      icon: Cloud,
+      title: 'Cloudflare',
+      color: 'orange',
+      items: [
+        { label: 'Status', value: config.cloudflare?.enabled ? 'Enabled' : 'Disabled (optional)', valid: true },
+        ...(config.cloudflare?.enabled ? [
+          { label: 'API Token', value: config.cloudflare.apiToken ? '••••••••' : 'Not set', valid: !!config.cloudflare.apiToken },
+          { label: 'Account ID', value: config.cloudflare.accountId ? `${config.cloudflare.accountId.substring(0, 8)}...` : 'Not set', valid: !!config.cloudflare.accountId },
+        ] : []),
       ],
     },
   ];
@@ -167,6 +179,12 @@ export function ReviewDeployStep({ config }: ReviewDeployStepProps) {
             <CheckCircle className="h-4 w-4 text-green-500" />
             Set up SSL certificate with Let&apos;s Encrypt
           </li>
+          {config.cloudflare?.enabled && (
+            <li className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-orange-500" />
+              Add domain to Cloudflare (DNS, CDN, WAF, DDoS protection)
+            </li>
+          )}
           <li className="flex items-center gap-2">
             <CheckCircle className="h-4 w-4 text-green-500" />
             Start the application with PM2

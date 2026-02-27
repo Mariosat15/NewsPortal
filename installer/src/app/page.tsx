@@ -15,6 +15,7 @@ import { DatabaseConfigStep } from '@/components/wizard-steps/database-config';
 import { PaymentConfigStep } from '@/components/wizard-steps/payment-config';
 import { ApiKeysConfigStep } from '@/components/wizard-steps/api-keys-config';
 import { AdminConfigStep } from '@/components/wizard-steps/admin-config';
+import { CloudflareConfigStep } from '@/components/wizard-steps/cloudflare-config';
 import { ReviewDeployStep } from '@/components/wizard-steps/review-deploy';
 import { DeploymentProgressComponent } from '@/components/deployment-progress';
 
@@ -26,6 +27,7 @@ import {
   PaymentConfig, 
   ApiKeysConfig, 
   AdminConfig,
+  CloudflareConfig,
   DeploymentProgress 
 } from '@/lib/types';
 import { generateSecureSecret } from '@/lib/utils';
@@ -37,6 +39,7 @@ const STEPS = [
   { id: 'payment', title: 'Payment', icon: CreditCard, description: 'DIMOCO config' },
   { id: 'apiKeys', title: 'API Keys', icon: Key, description: 'External services' },
   { id: 'admin', title: 'Admin', icon: Shield, description: 'Admin access' },
+  { id: 'cloudflare', title: 'Cloudflare', icon: Shield, description: 'CDN & protection' },
   { id: 'review', title: 'Review', icon: CheckCircle, description: 'Deploy' },
 ];
 
@@ -63,13 +66,13 @@ const initialConfig: DeploymentConfig = {
     useAtlas: true,
   },
   payment: {
-    dimocoApiUrl: 'https://sandbox.2pay.global/smartlink',
+    dimocoApiUrl: 'https://services.dimoco.at/smart/payment',
     dimocoMerchantId: '',
     dimocoServiceId: '',
     dimocoApiKey: '',
     dimocoCallbackSecret: '',
     articlePriceCents: 99,
-    useSandbox: true,
+    useSandbox: false,
   },
   apiKeys: {
     openaiApiKey: '',
@@ -81,6 +84,11 @@ const initialConfig: DeploymentConfig = {
     adminPassword: '',
     adminSecret: '',
     authSecret: '',
+  },
+  cloudflare: {
+    enabled: false,
+    apiToken: '',
+    accountId: '',
   },
 };
 
@@ -221,6 +229,7 @@ export default function InstallerPage() {
         { id: 'build', name: 'Building application (npm run build)', status: 'pending' },
         { id: 'nginx', name: 'Configuring Nginx web server', status: 'pending' },
         { id: 'ssl', name: 'Setting up SSL certificate', status: 'pending' },
+        ...(config.cloudflare.enabled ? [{ id: 'cloudflare' as const, name: 'Setting up Cloudflare (DNS, CDN, WAF)', status: 'pending' as const }] : []),
         { id: 'start', name: 'Starting application with PM2', status: 'pending' },
       ],
       isComplete: false,
@@ -336,6 +345,13 @@ export default function InstallerPage() {
           />
         );
       case 6:
+        return (
+          <CloudflareConfigStep
+            config={config.cloudflare}
+            onChange={(cloudflare) => setConfig({ ...config, cloudflare })}
+          />
+        );
+      case 7:
         return <ReviewDeployStep config={config} />;
       default:
         return null;

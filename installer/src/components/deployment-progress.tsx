@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { 
   CheckCircle, XCircle, Loader2, Circle,
   Server, Upload, FileCode, Package, Hammer, 
-  Globe, Lock, Play, ExternalLink
+  Globe, Lock, Play, ExternalLink, Cloud
 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
@@ -23,6 +23,7 @@ const stepIcons: Record<string, React.ElementType> = {
   build: Hammer,
   nginx: Globe,
   ssl: Lock,
+  cloudflare: Cloud,
   start: Play,
 };
 
