@@ -1,22 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getPipelineProgress } from '@/lib/agents/orchestrator';
 import { getCollection } from '@/lib/db/mongodb';
-
-// Verify admin authentication
-async function verifyAdmin(request: NextRequest): Promise<boolean> {
-  const cookieStore = await cookies();
-  const adminToken = cookieStore.get('admin_token')?.value;
-  const validToken = process.env.ADMIN_SECRET || 'admin-secret';
-  
-  if (adminToken === validToken) return true;
-  
-  const authHeader = request.headers.get('Authorization');
-  if (authHeader === `Bearer ${validToken}`) return true;
-  
-  return false;
-}
+import { verifyAdmin } from '@/lib/auth/admin';
 
 // GET /api/agents/progress - Get current pipeline progress and recent logs
 export async function GET(request: NextRequest) {

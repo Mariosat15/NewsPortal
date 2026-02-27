@@ -7,6 +7,7 @@ import { getArticleRepository, getUnlockRepository } from '@/lib/db';
 import { getCollection } from '@/lib/db/mongodb';
 import { getBrandId, getServerBrandConfig } from '@/lib/brand/server';
 import { formatDate } from '@/lib/utils';
+import { sanitizeHtml } from '@/lib/utils/sanitize-html';
 import { cookies } from 'next/headers';
 import Image from 'next/image';
 
@@ -267,7 +268,7 @@ export default async function ArticlePage({
             {isUnlocked ? (
               <div 
                 className="article-content prose prose-lg max-w-none"
-                dangerouslySetInnerHTML={{ __html: article.content }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(article.content) }}
               />
             ) : (
               <>
@@ -276,7 +277,7 @@ export default async function ArticlePage({
                   <div 
                     className="article-content prose prose-lg max-w-none paywall-blur"
                     dangerouslySetInnerHTML={{ 
-                      __html: article.content.substring(0, 500) + '...' 
+                      __html: sanitizeHtml(article.content.substring(0, 500) + '...') 
                     }}
                   />
                 </div>

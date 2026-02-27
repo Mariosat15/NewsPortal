@@ -1,15 +1,7 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { getBrandId } from '@/lib/brand/server';
 import { getCollection } from '@/lib/db/mongodb';
-
-// Verify admin authentication
-async function verifyAdmin(): Promise<boolean> {
-  const cookieStore = await cookies();
-  const adminToken = cookieStore.get('admin_token')?.value;
-  const validToken = process.env.ADMIN_SECRET || 'admin-secret';
-  return adminToken === validToken;
-}
+import { verifyAdmin } from '@/lib/auth/admin';
 
 // GET /api/admin/tracking/landing-page-stats - Get aggregated stats per landing page
 export async function GET() {

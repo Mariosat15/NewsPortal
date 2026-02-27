@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getUserRepository } from '@/lib/db';
+import { verifyAdmin } from '@/lib/auth/admin';
 
 // GET /api/admin/users/[id] - Get single user
 export async function GET(
@@ -8,6 +9,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const isAdmin = await verifyAdmin(request);
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { id } = await params;
     const brandId = getBrandIdSync();
     const repo = getUserRepository(brandId);
@@ -40,6 +46,11 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const isAdmin = await verifyAdmin(request);
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { id } = await params;
     const brandId = getBrandIdSync();
     const repo = getUserRepository(brandId);
@@ -84,6 +95,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const isAdmin = await verifyAdmin(request);
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { id } = await params;
     const brandId = getBrandIdSync();
     const repo = getUserRepository(brandId);

@@ -1,17 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { getUnlockRepository } from '@/lib/db/repositories/unlock-repository';
 import { getArticleRepository } from '@/lib/db/repositories/article-repository';
 import { getBrandId } from '@/lib/brand/server';
 import { ObjectId } from 'mongodb';
-
-// Verify admin authentication
-async function verifyAdmin(): Promise<boolean> {
-  const cookieStore = await cookies();
-  const adminToken = cookieStore.get('admin_token')?.value;
-  const validToken = process.env.ADMIN_SECRET || 'admin-secret';
-  return adminToken === validToken;
-}
+import { verifyAdmin } from '@/lib/auth/admin';
 
 // GET - List transactions with filtering and pagination
 export async function GET(request: NextRequest) {

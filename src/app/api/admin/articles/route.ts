@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getArticleRepository, ArticleCreateInput } from '@/lib/db';
+import { verifyAdmin } from '@/lib/auth/admin';
 
 // GET /api/admin/articles - List all articles (admin)
 export async function GET(request: NextRequest) {
   try {
+    const isAdmin = await verifyAdmin(request);
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const brandId = getBrandIdSync();
     const repo = getArticleRepository(brandId);
 
@@ -39,6 +45,11 @@ export async function GET(request: NextRequest) {
 // POST /api/admin/articles - Create a new article
 export async function POST(request: NextRequest) {
   try {
+    const isAdmin = await verifyAdmin(request);
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const brandId = getBrandIdSync();
     const repo = getArticleRepository(brandId);
 

@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { getServerBrandConfig, getBrandId } from '@/lib/brand/server';
 import { getLegalPageRepository } from '@/lib/db';
+import { sanitizeHtml } from '@/lib/utils/sanitize-html';
 
 // Force dynamic rendering to avoid static generation errors
 export const dynamic = 'force-dynamic';
@@ -233,7 +234,7 @@ export default async function LegalPage({
       <div className="container px-4 py-8 max-w-3xl mx-auto">
         <div 
           className="prose prose-lg max-w-none"
-          dangerouslySetInnerHTML={{ __html: content }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }}
         />
       </div>
     </div>

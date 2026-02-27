@@ -1,24 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { runAgentPipeline } from '@/lib/agents';
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getPipelineProgress } from '@/lib/agents/orchestrator';
+import { verifyAdmin } from '@/lib/auth/admin';
 
 export const dynamic = 'force-dynamic';
-
-// Verify admin authentication
-async function verifyAdmin(request: NextRequest): Promise<boolean> {
-  const cookieStore = await cookies();
-  const adminToken = cookieStore.get('admin_token')?.value;
-  const validToken = process.env.ADMIN_SECRET || 'admin-secret';
-  
-  if (adminToken === validToken) return true;
-  
-  const authHeader = request.headers.get('Authorization');
-  if (authHeader === `Bearer ${validToken}`) return true;
-  
-  return false;
-}
 
 // Store for async pipeline results
 let lastPipelineResult: {

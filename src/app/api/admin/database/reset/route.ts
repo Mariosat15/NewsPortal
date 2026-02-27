@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getCollection } from '@/lib/db/mongodb';
-
-// Verify admin authentication
-async function verifyAdmin(): Promise<boolean> {
-  const cookieStore = await cookies();
-  const adminToken = cookieStore.get('admin_token')?.value;
-  const validToken = process.env.ADMIN_SECRET || 'admin-secret';
-  return adminToken === validToken;
-}
+import { verifyAdmin } from '@/lib/auth/admin';
 
 // POST /api/admin/database/reset - Reset database (delete user data, preserve articles and settings)
 export async function POST(request: NextRequest) {

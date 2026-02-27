@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { getCollection } from '@/lib/db/mongodb';
 import { getArticleRepository } from '@/lib/db/repositories/article-repository';
 import { getBrandId } from '@/lib/brand/server';
 import { Unlock } from '@/lib/db/models/unlock';
 import { ObjectId } from 'mongodb';
-
-// Verify admin authentication
-async function verifyAdmin(): Promise<boolean> {
-  const cookieStore = await cookies();
-  const adminToken = cookieStore.get('admin_token')?.value;
-  const validToken = process.env.ADMIN_SECRET || 'admin-secret';
-  return adminToken === validToken;
-}
+import { verifyAdmin } from '@/lib/auth/admin';
 
 // GET - Get single transaction
 export async function GET(

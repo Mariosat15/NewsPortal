@@ -1,21 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { getBrandIdSync, clearSettingsCache } from '@/lib/brand/server';
 import { getCollection } from '@/lib/db/mongodb';
 import { seedDefaultSettings } from '@/lib/db/seed';
+import { verifyAdmin } from '@/lib/auth/admin';
 
 interface Settings {
   key: string;
   value: unknown;
   updatedAt: Date;
-}
-
-// Verify admin authentication
-async function verifyAdmin(): Promise<boolean> {
-  const cookieStore = await cookies();
-  const adminToken = cookieStore.get('admin_token')?.value;
-  const validToken = process.env.ADMIN_SECRET || 'admin-secret';
-  return adminToken === validToken;
 }
 
 // GET /api/admin/settings - Get all settings

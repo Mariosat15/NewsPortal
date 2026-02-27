@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { ResolvedTemplate, CategoryConfig } from '@/lib/templates/types';
+import { sanitizeHtml } from '@/lib/utils/sanitize-html';
 
 interface FooterLegalPage {
   _id: string;
@@ -195,7 +196,7 @@ export function TemplateFooter({ template, categories, locale, brandName }: Temp
             <div 
               className="text-center text-xs max-w-3xl mx-auto prose prose-sm"
               style={{ color: colors.textMuted }}
-              dangerouslySetInnerHTML={{ __html: disclaimer.content[locale as 'de' | 'en'] }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(disclaimer.content[locale as 'de' | 'en']) }}
             />
           </div>
         </div>

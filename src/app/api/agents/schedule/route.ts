@@ -1,22 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getSchedulerConfig, describeSchedule } from '@/lib/agents/scheduler';
 import { getWorkerStatus, triggerManualRun, updateSchedule, ensureWorkerRunning, stopWorker } from '@/lib/agents/worker';
-
-// Verify admin authentication
-async function verifyAdmin(request: NextRequest): Promise<boolean> {
-  const cookieStore = await cookies();
-  const adminToken = cookieStore.get('admin_token')?.value;
-  const validToken = process.env.ADMIN_SECRET || 'admin-secret';
-  
-  if (adminToken === validToken) return true;
-  
-  const authHeader = request.headers.get('Authorization');
-  if (authHeader === `Bearer ${validToken}`) return true;
-  
-  return false;
-}
+import { verifyAdmin } from '@/lib/auth/admin';
 
 // GET /api/agents/schedule - Get schedule status
 export async function GET(request: NextRequest) {

@@ -1,63 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBrandIdSync } from '@/lib/brand/server';
-import { getArticleRepository, getUserRepository, getUnlockRepository } from '@/lib/db';
+import { getUnlockRepository } from '@/lib/db';
 import { getCollection } from '@/lib/db/mongodb';
+import { verifyAdmin } from '@/lib/auth/admin';
+import { ObjectId } from 'mongodb';
 
 // GET /api/admin/stats - Get dashboard statistics
 export async function GET(request: NextRequest) {
   try {
+    const isAdmin = await verifyAdmin(request);
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const brandId = getBrandIdSync();
-    const articleRepo = getArticleRepository(brandId);
-    const userRepo = getUserRepository(brandId);
     const unlockRepo = getUnlockRepository(brandId);
 
-    // Get date range from query params (default 7 days)
+    // Get date range from query params (default 7 days, max 90)
     const searchParams = request.nextUrl.searchParams;
-    const days = parseInt(searchParams.get('days') || '7', 10);
+    const days = Math.min(Math.max(parseInt(searchParams.get('days') || '7', 10), 1), 90);
 
     // Calculate dates
     const now = new Date();
     const rangeStart = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // Get article stats
-    const allArticles = await articleRepo.listAll({ limit: 1000 });
-    const recentArticles = allArticles.articles.filter(
-      a => new Date(a.createdAt) >= weekAgo
-    ).length;
+    // Get collections
+    const articlesCollection = await getCollection(brandId, 'articles');
+    const usersCollection = await getCollection(brandId, 'users');
+    const unlocksCollection = await getCollection(brandId, 'unlocks');
+    const customersCollection = await getCollection(brandId, 'customers');
+    const sessionsCollection = await getCollection(brandId, 'visitor_sessions');
 
-    // Get user stats
-    const allUsers = await userRepo.listUsers({ limit: 1000 });
-    const recentUsers = allUsers.users.filter(
-      u => new Date(u.firstSeen) >= weekAgo
-    ).length;
+    // ── Article stats via aggregation (no full load) ──
+    const [articleCounts, recentArticleCount] = await Promise.all([
+      articlesCollection.countDocuments({}),
+      articlesCollection.countDocuments({ createdAt: { $gte: weekAgo } }),
+    ]);
 
-    // Get unlock stats
+    // ── User stats via aggregation (no full load) ──
+    const [userCounts, recentUserCount] = await Promise.all([
+      usersCollection.countDocuments({}),
+      usersCollection.countDocuments({ firstSeen: { $gte: weekAgo } }),
+    ]);
+
+    // ── Unlock stats ──
     const unlockStats = await unlockRepo.getStats();
 
-    // Get real chart data - Top performing articles (real data)
-    const topArticles = allArticles.articles
-      .sort((a, b) => (b.viewCount + b.unlockCount * 10) - (a.viewCount + a.unlockCount * 10))
-      .slice(0, 5)
-      .map(article => ({
-        title: article.title.length > 50 ? article.title.substring(0, 47) + '...' : article.title,
-        views: article.viewCount,
-        unlocks: article.unlockCount,
-        slug: article.slug,
-      }));
+    // ── Top articles — aggregation with sort + limit (only fetches 5 docs) ──
+    const topArticlesAgg = await articlesCollection.aggregate([
+      {
+        $addFields: {
+          score: { $add: [{ $ifNull: ['$viewCount', 0] }, { $multiply: [{ $ifNull: ['$unlockCount', 0] }, 10] }] },
+        },
+      },
+      { $sort: { score: -1 } },
+      { $limit: 5 },
+      {
+        $project: {
+          title: 1,
+          viewCount: 1,
+          unlockCount: 1,
+          slug: 1,
+        },
+      },
+    ]).toArray();
 
-    // Get real views by category (real data from articles)
-    const categoryStats: Record<string, { views: number; unlocks: number; articles: number }> = {};
-    allArticles.articles.forEach(article => {
-      const cat = article.category || 'other';
-      if (!categoryStats[cat]) {
-        categoryStats[cat] = { views: 0, unlocks: 0, articles: 0 };
-      }
-      categoryStats[cat].views += article.viewCount;
-      categoryStats[cat].unlocks += article.unlockCount;
-      categoryStats[cat].articles += 1;
-    });
-    
+    const topArticles = topArticlesAgg.map(a => ({
+      title: (a.title?.length || 0) > 50 ? a.title.substring(0, 47) + '...' : a.title || '',
+      views: a.viewCount || 0,
+      unlocks: a.unlockCount || 0,
+      slug: a.slug,
+    }));
+
+    // ── Views by category — single aggregation ──
+    const categoryAgg = await articlesCollection.aggregate([
+      {
+        $group: {
+          _id: { $ifNull: ['$category', 'other'] },
+          views: { $sum: { $ifNull: ['$viewCount', 0] } },
+          unlocks: { $sum: { $ifNull: ['$unlockCount', 0] } },
+          articles: { $sum: 1 },
+        },
+      },
+    ]).toArray();
+
     const categoryColors: Record<string, string> = {
       news: '#3b82f6',
       technology: '#8b5cf6',
@@ -70,80 +97,92 @@ export async function GET(request: NextRequest) {
       other: '#6b7280',
     };
 
-    const viewsByCategory = Object.entries(categoryStats).map(([category, stats]) => ({
-      category: category.charAt(0).toUpperCase() + category.slice(1),
-      views: stats.views,
-      unlocks: stats.unlocks,
-      articles: stats.articles,
-      color: categoryColors[category] || '#6b7280',
+    const viewsByCategory = categoryAgg.map(c => ({
+      category: (c._id as string).charAt(0).toUpperCase() + (c._id as string).slice(1),
+      views: c.views,
+      unlocks: c.unlocks,
+      articles: c.articles,
+      color: categoryColors[c._id as string] || '#6b7280',
     }));
 
-    // Get collections for extended stats
-    const unlocksCollection = await getCollection(brandId, 'unlocks');
-    const transactionsCollection = await getCollection(brandId, 'transactions');
-    const customersCollection = await getCollection(brandId, 'customers');
-    const sessionsCollection = await getCollection(brandId, 'visitor_sessions');
+    // ── Total page views — single aggregation ──
+    const [pageViewsAgg] = await articlesCollection.aggregate([
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$viewCount', 0] } } } },
+    ]).toArray() || [];
+    const totalPageViews = pageViewsAgg?.total || 0;
 
-    // Revenue by day for selected range
+    // ── Revenue by day — single aggregation with zero-fill ──
+    const revenueAgg = await unlocksCollection.aggregate([
+      {
+        $match: {
+          unlockedAt: { $gte: rangeStart },
+          status: 'completed',
+        },
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$unlockedAt' } },
+          revenue: { $sum: { $ifNull: ['$amount', { $ifNull: ['$priceCents', 0] }] } },
+          unlocks: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]).toArray();
+
+    const revenueMap = new Map(revenueAgg.map(r => [r._id, r]));
     const revenueByDay: { date: string; revenue: number; unlocks: number }[] = [];
-    
+
     for (let i = days - 1; i >= 0; i--) {
       const date = new Date(now);
       date.setDate(date.getDate() - i);
       date.setHours(0, 0, 0, 0);
-      
-      const nextDate = new Date(date);
-      nextDate.setDate(nextDate.getDate() + 1);
 
-      const dayUnlocks = await unlocksCollection.find({
-        unlockedAt: { $gte: date, $lt: nextDate },
-        status: 'completed',
-      }).toArray();
+      const dateKey = date.toISOString().split('T')[0];
+      const dayData = revenueMap.get(dateKey);
 
-      // Store revenue in euros (divide cents by 100)
-      const dayRevenueCents = dayUnlocks.reduce((sum, u) => sum + (u.amount || u.priceCents || 0), 0);
-      
-      // Format date based on range - shorter format for longer ranges
-      let dayLabel: string;
-      if (days <= 7) {
-        dayLabel = date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
-      } else if (days <= 30) {
-        dayLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      } else {
-        dayLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      }
-      
+      const dayLabel = days <= 7
+        ? date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })
+        : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
       revenueByDay.push({
         date: dayLabel,
-        revenue: dayRevenueCents / 100, // Convert to euros
-        unlocks: dayUnlocks.length,
+        revenue: (dayData?.revenue || 0) / 100,
+        unlocks: dayData?.unlocks || 0,
       });
     }
 
-    // User growth over selected range (or 14 days minimum for better visualization)
+    // ── User growth — aggregation instead of loading all users ──
     const growthDays = Math.max(days, 14);
-    const userGrowth: { date: string; newUsers: number; totalUsers: number }[] = [];
-    let runningTotal = 0;
-    
-    // Count users before the range start
     const growthStart = new Date(now.getTime() - growthDays * 24 * 60 * 60 * 1000);
-    runningTotal = allUsers.users.filter(u => new Date(u.firstSeen) < growthStart).length;
-    
+
+    // Count users before the growth window (baseline)
+    const baselineUsers = await usersCollection.countDocuments({ firstSeen: { $lt: growthStart } });
+
+    // Get daily new-user counts via aggregation
+    const userGrowthAgg = await usersCollection.aggregate([
+      { $match: { firstSeen: { $gte: growthStart } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$firstSeen' } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]).toArray();
+
+    const growthMap = new Map(userGrowthAgg.map(g => [g._id, g.count as number]));
+    const userGrowth: { date: string; newUsers: number; totalUsers: number }[] = [];
+    let runningTotal = baselineUsers;
+
     for (let i = growthDays - 1; i >= 0; i--) {
       const date = new Date(now);
       date.setDate(date.getDate() - i);
       date.setHours(0, 0, 0, 0);
-      
-      const nextDate = new Date(date);
-      nextDate.setDate(nextDate.getDate() + 1);
-      
-      const newUsersCount = allUsers.users.filter(u => {
-        const seen = new Date(u.firstSeen);
-        return seen >= date && seen < nextDate;
-      }).length;
-      
+
+      const dateKey = date.toISOString().split('T')[0];
+      const newUsersCount = growthMap.get(dateKey) || 0;
       runningTotal += newUsersCount;
-      
+
       userGrowth.push({
         date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         newUsers: newUsersCount,
@@ -151,15 +190,16 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Transaction stats by status (from unlocks, not separate transactions collection)
-    const allUnlocks = await unlocksCollection.find({}).toArray();
+    // ── Transaction stats by status — aggregation ──
+    const statusAgg = await unlocksCollection.aggregate([
+      { $group: { _id: { $ifNull: ['$status', 'unknown'] }, count: { $sum: 1 } } },
+    ]).toArray();
     const transactionsByStatus: Record<string, number> = {};
-    allUnlocks.forEach(u => {
-      const status = u.status || 'unknown';
-      transactionsByStatus[status] = (transactionsByStatus[status] || 0) + 1;
+    statusAgg.forEach(s => {
+      transactionsByStatus[s._id as string] = s.count;
     });
 
-    // Revenue by article (top 5)
+    // ── Revenue by article (top 5) — aggregation + targeted lookup ──
     const revenueByArticle = await unlocksCollection.aggregate([
       { $match: { status: 'completed' } },
       { $group: { _id: '$articleId', totalRevenue: { $sum: '$amount' }, count: { $sum: 1 } } },
@@ -167,40 +207,48 @@ export async function GET(request: NextRequest) {
       { $limit: 5 },
     ]).toArray();
 
-    const articleRevenueData = await Promise.all(
-      revenueByArticle.map(async (item) => {
-        const article = allArticles.articles.find(a => a._id?.toString() === item._id?.toString());
-        return {
-          title: article?.title?.substring(0, 30) + '...' || 'Unknown',
-          revenue: (item.totalRevenue || 0) / 100,
-          unlocks: item.count || 0,
-        };
+    // Fetch only the 5 article titles we need instead of all articles
+    const articleIds = revenueByArticle
+      .map(item => {
+        try { return new ObjectId(item._id as string); } catch { return null; }
       })
-    );
+      .filter((id): id is ObjectId => id !== null);
 
-    // Get accurate counts for conversion funnel
-    const totalPageViews = allArticles.articles.reduce((sum, a) => sum + (a.viewCount || 0), 0);
-    const totalCustomers = await customersCollection.countDocuments({});
+    const revenueArticles = articleIds.length > 0
+      ? await articlesCollection.find(
+          { _id: { $in: articleIds } },
+          { projection: { title: 1 } }
+        ).toArray()
+      : [];
+    const articleTitleMap = new Map(revenueArticles.map(a => [a._id.toString(), a.title]));
+
+    const articleRevenueData = revenueByArticle.map(item => ({
+      title: (articleTitleMap.get(item._id?.toString() || '') || 'Unknown').substring(0, 30) + '...',
+      revenue: (item.totalRevenue || 0) / 100,
+      unlocks: item.count || 0,
+    }));
+
+    // ── Conversion funnel ──
     const completedUnlocks = await unlocksCollection.countDocuments({ status: 'completed' });
-    
-    // Count returning customers (customers who have made more than 1 purchase)
-    // We need to count from unlocks by unique msisdn with count > 1
-    const customerPurchaseCounts = await unlocksCollection.aggregate([
-      { $match: { status: 'completed' } },
-      { $group: { _id: '$msisdn', count: { $sum: 1 } } },
-      { $match: { count: { $gt: 1 } } },
-    ]).toArray();
-    const returningCustomers = customerPurchaseCounts.length;
-    
-    // Unique customers who made at least 1 purchase
-    const uniqueCustomers = await unlocksCollection.aggregate([
-      { $match: { status: 'completed' } },
-      { $group: { _id: '$msisdn' } },
-    ]).toArray();
-    const actualCustomers = uniqueCustomers.length;
 
-    // Build conversion funnel with real data
-    // Use actual page views, or estimate if 0
+    // Customer stats via aggregation
+    const [customerStatsAgg, returningStatsAgg] = await Promise.all([
+      unlocksCollection.aggregate([
+        { $match: { status: 'completed' } },
+        { $group: { _id: '$msisdn' } },
+        { $count: 'total' },
+      ]).toArray(),
+      unlocksCollection.aggregate([
+        { $match: { status: 'completed' } },
+        { $group: { _id: '$msisdn', count: { $sum: 1 } } },
+        { $match: { count: { $gt: 1 } } },
+        { $count: 'total' },
+      ]).toArray(),
+    ]);
+
+    const actualCustomers = customerStatsAgg[0]?.total || 0;
+    const returningCustomers = returningStatsAgg[0]?.total || 0;
+
     const paywallShown = completedUnlocks > 0 ? Math.max(completedUnlocks * 3, totalPageViews > 0 ? Math.floor(totalPageViews * 0.4) : completedUnlocks * 3) : 0;
     const paymentStarted = completedUnlocks > 0 ? Math.max(completedUnlocks, Math.floor(paywallShown * 0.5)) : 0;
 
@@ -211,21 +259,26 @@ export async function GET(request: NextRequest) {
       { stage: 'Completed', value: completedUnlocks, color: '#22c55e' },
     ];
 
-    // Landing page performance (if sessions collection exists)
+    // ── Landing page performance ──
     let lpPerformance: { name: string; visits: number; conversions: number; rate: number }[] = [];
     try {
       const lpCollection = await getCollection(brandId, 'landing_pages');
-      const landingPages = await lpCollection.find({ status: 'published' }).toArray();
-      
+      const landingPages = await lpCollection.find(
+        { status: 'published' },
+        { projection: { name: 1, slug: 1 } }
+      ).limit(5).toArray();
+
       lpPerformance = await Promise.all(
-        landingPages.slice(0, 5).map(async (lp) => {
-          const visits = await sessionsCollection.countDocuments({
-            $or: [{ landingPageId: lp._id }, { landingPageSlug: lp.slug }],
-          });
-          const conversions = await sessionsCollection.countDocuments({
-            $or: [{ landingPageId: lp._id }, { landingPageSlug: lp.slug }],
-            purchaseCompleted: true,
-          });
+        landingPages.map(async (lp) => {
+          const [visits, conversions] = await Promise.all([
+            sessionsCollection.countDocuments({
+              $or: [{ landingPageId: lp._id }, { landingPageSlug: lp.slug }],
+            }),
+            sessionsCollection.countDocuments({
+              $or: [{ landingPageId: lp._id }, { landingPageSlug: lp.slug }],
+              purchaseCompleted: true,
+            }),
+          ]);
           return {
             name: lp.name || lp.slug,
             visits,
@@ -235,30 +288,33 @@ export async function GET(request: NextRequest) {
         })
       );
     } catch (e) {
-      console.log('Landing page stats unavailable:', e);
+      // Landing page stats are optional — fail silently
     }
 
-    // This period vs previous period comparison
+    // ── Period comparison — aggregation ──
     const previousRangeStart = new Date(rangeStart.getTime() - days * 24 * 60 * 60 * 1000);
-    
-    const previousUnlocks = await unlocksCollection.countDocuments({
-      unlockedAt: { $gte: previousRangeStart, $lt: rangeStart },
-      status: 'completed',
-    });
-    const currentUnlocks = await unlocksCollection.countDocuments({
-      unlockedAt: { $gte: rangeStart },
-      status: 'completed',
-    });
-    
-    const previousRevenue = (await unlocksCollection.find({
-      unlockedAt: { $gte: previousRangeStart, $lt: rangeStart },
-      status: 'completed',
-    }).toArray()).reduce((sum, u) => sum + (u.amount || 0), 0);
-    
-    const currentRevenue = (await unlocksCollection.find({
-      unlockedAt: { $gte: rangeStart },
-      status: 'completed',
-    }).toArray()).reduce((sum, u) => sum + (u.amount || 0), 0);
+
+    const [previousUnlocks, currentUnlocks, previousRevenueArr, currentRevenueArr] = await Promise.all([
+      unlocksCollection.countDocuments({
+        unlockedAt: { $gte: previousRangeStart, $lt: rangeStart },
+        status: 'completed',
+      }),
+      unlocksCollection.countDocuments({
+        unlockedAt: { $gte: rangeStart },
+        status: 'completed',
+      }),
+      unlocksCollection.aggregate([
+        { $match: { unlockedAt: { $gte: previousRangeStart, $lt: rangeStart }, status: 'completed' } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
+      ]).toArray(),
+      unlocksCollection.aggregate([
+        { $match: { unlockedAt: { $gte: rangeStart }, status: 'completed' } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
+      ]).toArray(),
+    ]);
+
+    const previousRevenue = previousRevenueArr[0]?.total || 0;
+    const currentRevenue = currentRevenueArr[0]?.total || 0;
 
     const periodComparison = {
       unlocks: {
@@ -273,13 +329,12 @@ export async function GET(request: NextRequest) {
       },
     };
 
-    // Calculate conversion rate (completed / page views)
-    const conversionRate = totalPageViews > 0 
+    // ── Derived metrics ──
+    const conversionRate = totalPageViews > 0
       ? ((completedUnlocks / totalPageViews) * 100).toFixed(2)
       : (completedUnlocks > 0 ? '100' : '0');
-    
-    // Avg revenue per customer
-    const avgRevenuePerUser = actualCustomers > 0 
+
+    const avgRevenuePerUser = actualCustomers > 0
       ? (unlockStats.totalRevenue / 100 / actualCustomers).toFixed(2)
       : '0';
 
@@ -287,15 +342,15 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         // Core stats
-        totalArticles: allArticles.total,
-        recentArticles,
-        totalUsers: allUsers.total,
-        recentUsers,
+        totalArticles: articleCounts,
+        recentArticles: recentArticleCount,
+        totalUsers: userCounts,
+        recentUsers: recentUserCount,
         totalRevenue: unlockStats.totalRevenue,
         totalUnlocks: unlockStats.totalUnlocks,
         totalCustomers: actualCustomers,
         returningCustomers,
-        
+
         // Charts data
         topArticles,
         viewsByCategory,
@@ -305,12 +360,12 @@ export async function GET(request: NextRequest) {
         articleRevenueData,
         conversionFunnel,
         lpPerformance,
-        weekOverWeek: periodComparison, // Keep name for backward compatibility
-        
+        weekOverWeek: periodComparison,
+
         // Conversion metrics
         conversionRate,
         avgRevenuePerUser,
-        
+
         // Current filter
         daysFilter: days,
       },

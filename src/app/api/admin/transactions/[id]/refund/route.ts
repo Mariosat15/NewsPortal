@@ -1,19 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { refundPayment } from '@/lib/dimoco/client';
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getCollection } from '@/lib/db/mongodb';
 import { ObjectId } from 'mongodb';
-
-// Verify admin authentication
-async function verifyAdmin(): Promise<boolean> {
-  const cookieStore = await cookies();
-  const adminToken = cookieStore.get('admin_token')?.value;
-  const adminSecret = process.env.ADMIN_SECRET;
-  
-  if (!adminToken || !adminSecret) return false;
-  return adminToken === adminSecret;
-}
+import { verifyAdmin } from '@/lib/auth/admin';
 
 // POST /api/admin/transactions/[id]/refund - Process refund
 export async function POST(

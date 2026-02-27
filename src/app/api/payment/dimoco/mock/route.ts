@@ -1,8 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { escapeHtml } from '@/lib/utils/sanitize-html';
 
-// Mock payment page for development/demo
-// In production, DIMOCO gets MSISDN directly from carrier - user cannot choose their number
+/**
+ * Sanitize a string for use in JavaScript string literals
+ */
+function escapeJs(str: string): string {
+  return str
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/<\/script/gi, '<\\/script');
+}
+
+// Mock payment page for development/demo ONLY
+// SECURITY: This route is BLOCKED in production
 export async function GET(request: NextRequest) {
+  // SECURITY: Block mock payments in production
+  const isProduction = process.env.NODE_ENV === 'production';
+  const hasRealCredentials = !!process.env.DIMOCO_PASSWORD;
+  
+  if (isProduction && hasRealCredentials) {
+    return NextResponse.json(
+      { error: 'Mock payments are disabled in production' },
+      { status: 403 }
+    );
+  }
+
   const searchParams = request.nextUrl.searchParams;
   const transactionId = searchParams.get('transactionId');
   const amount = searchParams.get('amount');
@@ -168,8 +193,8 @@ export async function GET(request: NextRequest) {
     </div>
     
     <h1>Zahlung bestätigen</h1>
-    <div class="amount">${(parseFloat(amount || '99') / 100).toFixed(2)} EUR</div>
-    <div class="description">${decodeURIComponent(description || 'Artikel freischalten')}</div>
+    <div class="amount">${escapeHtml((parseFloat(amount || '99') / 100).toFixed(2))} EUR</div>
+    <div class="description">${escapeHtml(decodeURIComponent(description || 'Artikel freischalten'))}</div>
     
     <form id="paymentForm">
       <div class="form-group">
@@ -184,7 +209,7 @@ export async function GET(request: NextRequest) {
       </div>
       
       <button type="submit" class="btn btn-primary">
-        Jetzt bezahlen (${(parseFloat(amount || '99') / 100).toFixed(2)} €)
+        Jetzt bezahlen (${escapeHtml((parseFloat(amount || '99') / 100).toFixed(2))} €)
       </button>
       
       <button type="button" class="btn btn-secondary" onclick="handleCancel()">
@@ -203,7 +228,7 @@ export async function GET(request: NextRequest) {
   <script>
     const form = document.getElementById('paymentForm');
     // MSISDN is fixed - detected from carrier/session (cannot be changed by user)
-    const detectedMsisdn = '${detectedMsisdn}';
+    const detectedMsisdn = '${escapeJs(detectedMsisdn)}';
     
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -217,27 +242,25 @@ export async function GET(request: NextRequest) {
       
       // Build callback URL with the DETECTED MSISDN (not user input)
       // In production, DIMOCO returns this from carrier - cannot be faked
-      const amountCents = '${amount || '99'}';
+      const amountCents = '${escapeJs(amount || '99')}';
       const baseParams = new URLSearchParams({
-        transactionId: '${transactionId}',
+        transactionId: '${escapeJs(transactionId || '')}',
         status: 'success',
         msisdn: detectedMsisdn,  // Use detected MSISDN, not user input!
         amountCents: amountCents,
-        articleId: '${articleId}',
-        returnUrl: '${successUrl}'
+        articleId: '${escapeJs(articleId || '')}',
+        returnUrl: '${escapeJs(successUrl || '')}'
       }).toString();
       
       // Append metadata separately (it's already URL-encoded)
-      const metadataParam = '${metadata || ''}';
-      const fullCallbackUrl = '${callbackBase}' + '?' + baseParams + (metadataParam ? '&metadata=' + metadataParam : '');
+      const metadataParam = '${escapeJs(metadata || '')}';
+      const fullCallbackUrl = '${escapeJs(callbackBase)}' + '?' + baseParams + (metadataParam ? '&metadata=' + metadataParam : '');
       
-      console.log('[Payment Mock] MSISDN (carrier-detected):', detectedMsisdn);
-      console.log('[Payment Mock] Callback URL:', fullCallbackUrl);
       window.location.href = fullCallbackUrl;
     });
     
     function handleCancel() {
-      window.location.href = '${cancelUrl}';
+      window.location.href = '${escapeJs(cancelUrl || '/')}';
     }
   </script>
 </body>

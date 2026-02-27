@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
 import { useBrand } from '@/lib/brand/context';
+import { sanitizeHtml } from '@/lib/utils/sanitize-html';
 import { useState, useEffect } from 'react';
 
 interface FooterLegalPage {
@@ -147,7 +148,7 @@ export function Footer() {
           <div className="container mx-auto px-4 py-4">
             <div 
               className="text-center text-xs text-gray-500 max-w-3xl mx-auto"
-              dangerouslySetInnerHTML={{ __html: disclaimer.content[locale] }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(disclaimer.content[locale]) }}
             />
           </div>
         </div>
