@@ -227,11 +227,18 @@ Features:
 Set in `.env`:
 
 ```env
-DIMOCO_API_URL=https://sandbox.2pay.global/smartlink
-DIMOCO_MERCHANT_ID=your-merchant-id
-DIMOCO_SERVICE_ID=your-service-id
-DIMOCO_API_KEY=your-shared-secret
+# Sandbox
+DIMOCO_API_URL=https://sandbox-dcb.dimoco.at/sph/payment
+DIMOCO_MERCHANT_ID=8000
+DIMOCO_PASSWORD=GsD8UxfCtGwK3
+DIMOCO_ORDER_ID=8000
 ARTICLE_PRICE_CENTS=99
+
+# Production (replace sandbox values)
+# DIMOCO_API_URL=https://dcb.dimoco.at/sph/payment
+# DIMOCO_MERCHANT_ID=<your-merchant-id>
+# DIMOCO_PASSWORD=<your-password>
+# DIMOCO_ORDER_ID=<your-order-id>
 ```
 
 ### API Actions
@@ -273,9 +280,12 @@ const digest = crypto.createHmac('sha256', apiKey)
 
 | Setting | Sandbox | Production |
 |---------|---------|------------|
-| API URL | `sandbox.2pay.global` | `api.2pay.global` |
+| API URL | `sandbox-dcb.dimoco.at/sph/payment` | `dcb.dimoco.at/sph/payment` |
 | Real charges | No | Yes |
-| Test numbers | Only sandbox numbers | Real MSISDNs |
+| Test MSISDN | Always `436763602302` | Real user phone numbers |
+| `redirect=1` | Required in start action | Not needed |
+| Callback digest | Not verified | HMAC-SHA256 verified |
+| WiFi identify | Always succeeds | Requires 4G/5G |
 
 ---
 

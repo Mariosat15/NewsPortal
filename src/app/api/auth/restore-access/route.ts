@@ -47,13 +47,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Step 2: Try DIMOCO identification (carrier header enrichment)
-    console.log('[Restore Access] Attempting DIMOCO identify for MSISDN recovery...');
-    
-    const isSandbox = process.env.DIMOCO_API_URL?.includes('sandbox');
+    // Works in both sandbox (always succeeds) and production (requires mobile data)
     const hasCredentials = !!process.env.DIMOCO_PASSWORD;
+    const isSandbox = process.env.DIMOCO_API_URL?.includes('sandbox');
 
-    if (hasCredentials && !isSandbox) {
-      // Production: Use real DIMOCO identify
+    if (hasCredentials) {
+      console.log(`[Restore Access] Attempting DIMOCO identify (${isSandbox ? 'sandbox' : 'production'})...`);
+      
       try {
         const result = await identifyUser(baseUrl);
 
@@ -88,9 +88,17 @@ export async function GET(request: NextRequest) {
             return NextResponse.redirect(redirectUrl);
           }
         }
+        
+        // If DIMOCO returned a redirect URL (user needs to be redirected to carrier)
+        if (result.redirectUrl) {
+          console.log('[Restore Access] DIMOCO requires redirect for identification');
+          return NextResponse.redirect(result.redirectUrl);
+        }
       } catch (identifyError) {
         console.error('[Restore Access] DIMOCO identify failed:', identifyError);
       }
+    } else {
+      console.log('[Restore Access] No DIMOCO credentials configured, skipping identify');
     }
 
     // Step 3: Fallback - Try to find purchases by IP address (best effort)

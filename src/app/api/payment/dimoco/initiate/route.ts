@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { startPayment, initiatePaymentMock, getDimocoConfig } from '@/lib/dimoco/client';
+import { startPayment, initiatePaymentMock, getDimocoConfig, isDimocoConfigured } from '@/lib/dimoco/client';
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getArticleRepository } from '@/lib/db';
 import { getCollection } from '@/lib/db/mongodb';
@@ -112,29 +112,23 @@ export async function GET(request: NextRequest) {
     // Get dynamic base URL from request
     const baseUrl = getBaseUrl(request);
 
-    // Check if we should use mock or real DIMOCO
+    // Determine whether to use real DIMOCO API or mock
     const config = getDimocoConfig();
-    // Only use mock if explicitly requested OR no password configured
-    // When we have real credentials, use real DIMOCO (no fallback to mock)
-    const hasRealCredentials = config.password && config.password !== '';
+    const configured = isDimocoConfigured();
     
-    // SANDBOX MODE: Use mock by default for sandbox testing
-    // DIMOCO sandbox has strict configuration requirements that may not match our setup
-    // In production with real DIMOCO credentials, set DIMOCO_USE_REAL_API=true
-    const forceRealApi = process.env.DIMOCO_USE_REAL_API === 'true';
-    const isSandbox = config.apiUrl.includes('sandbox');
-    const shouldUseMock = useMock || !hasRealCredentials || (isSandbox && !forceRealApi);
+    // PRODUCTION-READY LOGIC:
+    // - If credentials are configured → use REAL DIMOCO API (sandbox or production)
+    // - If no credentials → use mock (local development only)
+    // - If ?mock=true → force mock (admin testing)
+    const shouldUseMock = useMock || !configured;
 
-    console.log('[Payment] DIMOCO config check:', {
-      hasPassword: !!config.password,
+    console.log('[Payment] DIMOCO config:', {
+      configured,
       apiUrl: config.apiUrl,
       merchantId: config.merchantId,
-      isSandbox,
-      forceRealApi,
+      isSandbox: config.useSandbox,
       shouldUseMock,
-      reason: shouldUseMock 
-        ? (useMock ? 'mock=true param' : !hasRealCredentials ? 'no credentials' : 'sandbox mode (use DIMOCO_USE_REAL_API=true to override)')
-        : 'using real API',
+      mode: shouldUseMock ? 'MOCK' : config.useSandbox ? 'SANDBOX' : 'PRODUCTION',
     });
 
     // Prepare payment request
@@ -158,28 +152,21 @@ export async function GET(request: NextRequest) {
     let response;
 
     if (shouldUseMock) {
-      console.log('[Payment] Using MOCK payment flow (no real credentials)');
+      console.log('[Payment] Using MOCK payment flow (no credentials configured)');
       response = await initiatePaymentMock(paymentRequest);
     } else {
-      console.log('[Payment] Using REAL DIMOCO SANDBOX API');
-      console.log('[Payment] Expected sandbox behavior: MSISDN=436763602302, operator=AT_SANDBOX');
+      console.log(`[Payment] Using REAL DIMOCO ${config.useSandbox ? 'SANDBOX' : 'PRODUCTION'} API`);
+      if (config.useSandbox) {
+        console.log('[Payment] Sandbox mode: MSISDN=436763602302, operator=AT_SANDBOX');
+      }
       
-      try {
-        response = await startPayment(paymentRequest);
-        
-        // Log the full response for debugging
-        console.log('[Payment] DIMOCO response:', JSON.stringify(response));
-        
-        // If real API fails, fall back to mock for development/testing
-        if (!response.success) {
-          console.error('[Payment] DIMOCO API Error:', response.error);
-          console.log('[Payment] ⚠️ Falling back to MOCK payment for testing...');
-          response = await initiatePaymentMock(paymentRequest);
-        }
-      } catch (dimocoError) {
-        console.error('[Payment] DIMOCO API exception:', dimocoError);
-        console.log('[Payment] ⚠️ Falling back to MOCK payment due to exception...');
-        response = await initiatePaymentMock(paymentRequest);
+      response = await startPayment(paymentRequest);
+      console.log('[Payment] DIMOCO response:', JSON.stringify(response));
+      
+      if (!response.success) {
+        console.error('[Payment] DIMOCO API Error:', response.error);
+        // In production: do NOT fall back to mock - show the real error
+        // In sandbox: also don't fall back - let the error surface so it can be debugged
       }
     }
 

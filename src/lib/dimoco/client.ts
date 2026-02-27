@@ -89,9 +89,13 @@ export interface PaymentCallbackData {
   signature?: string;
 }
 
+// DIMOCO API URLs
+const DIMOCO_SANDBOX_URL = 'https://sandbox-dcb.dimoco.at/sph/payment';
+const DIMOCO_PRODUCTION_URL = 'https://dcb.dimoco.at/sph/payment';
+
 // Get DIMOCO configuration from environment
 export function getDimocoConfig(): DimocoConfig {
-  const apiUrl = process.env.DIMOCO_API_URL || 'https://sandbox-dcb.dimoco.at/sph/payment';
+  const apiUrl = process.env.DIMOCO_API_URL || DIMOCO_SANDBOX_URL;
   const useSandbox = apiUrl.includes('sandbox');
   
   return {
@@ -101,6 +105,14 @@ export function getDimocoConfig(): DimocoConfig {
     orderId: process.env.DIMOCO_ORDER_ID || '8000',
     useSandbox,
   };
+}
+
+/**
+ * Check if DIMOCO is properly configured with real credentials
+ */
+export function isDimocoConfigured(): boolean {
+  const config = getDimocoConfig();
+  return !!(config.merchantId && config.password && config.orderId);
 }
 
 // ===========================================
@@ -243,7 +255,6 @@ export async function startPayment(
       amount: (request.amount / 100).toFixed(2), // DIMOCO expects amount in EUR
       merchant: config.merchantId,
       order: config.orderId,
-      redirect: '1', // Required for sandbox
       request_id: requestId,
       service_name: serviceName,
       url_callback: callbackUrl,
@@ -254,6 +265,12 @@ export async function startPayment(
       cp_transactionId: transactionId,
       cp_returnUrl: returnUrl, // Store original return URL
     };
+
+    // SANDBOX ONLY: redirect=1 is required for sandbox API
+    // In production, DIMOCO handles redirects based on the order configuration
+    if (config.useSandbox) {
+      params.redirect = '1';
+    }
 
     // Add optional metadata as custom parameter
     if (request.metadata) {
@@ -447,6 +464,12 @@ export async function refundPayment(request: RefundRequest): Promise<RefundRespo
 
 /**
  * Parse DIMOCO response (URL-encoded, JSON, or XML format)
+ * 
+ * DIMOCO XML status codes:
+ *   0 = Success (action completed)
+ *   3 = Redirect required (user must be redirected to DIMOCO URL)
+ *   5 = Pending (waiting for user action)
+ *   Other = Error
  */
 function parseResponse(text: string): Record<string, string> {
   const result: Record<string, string> = {};
@@ -472,10 +495,10 @@ function parseResponse(text: string): Record<string, string> {
     const detailMatch = text.match(/<detail>([^<]+)<\/detail>/);
     if (detailMatch) result.errormessage = detailMatch[1];
     
-    // Extract status
+    // Extract status - PRESERVE the numeric value (0=success, 3=redirect, 5=pending)
     const statusMatch = text.match(/<status>(\d+)<\/status>/);
     if (statusMatch) {
-      result.status = statusMatch[1] === '0' ? 'OK' : 'ERROR';
+      result.status = statusMatch[1]; // Keep as '0', '3', '5', etc.
     }
     
     // Extract redirect URL if present
@@ -490,6 +513,14 @@ function parseResponse(text: string): Record<string, string> {
     // Extract operator if present
     const operatorMatch = text.match(/<operator>([^<]+)<\/operator>/);
     if (operatorMatch) result.operator = operatorMatch[1];
+    
+    // Extract transaction ID
+    const txnIdMatch = text.match(/<transaction>[\s\S]*?<id>([^<]+)<\/id>[\s\S]*?<\/transaction>/);
+    if (txnIdMatch) result.transaction_id = txnIdMatch[1];
+    
+    // Extract request_id
+    const requestIdMatch = text.match(/<request_id>([^<]+)<\/request_id>/);
+    if (requestIdMatch) result.request_id = requestIdMatch[1];
     
     console.log('[DIMOCO] Parsed XML result:', result);
     return result;
@@ -508,7 +539,13 @@ function parseResponse(text: string): Record<string, string> {
 }
 
 /**
- * Verify callback signature (HMAC) - for production security
+ * Verify DIMOCO callback digest (HMAC-SHA256)
+ * 
+ * DIMOCO sends callbacks as: digest=xxx&data=<XML payload>
+ * The digest is calculated the same way as outgoing requests:
+ * HMAC-SHA256 of all parameter values (sorted by key) using the merchant password.
+ * 
+ * For callback verification, the digest is computed over the XML data value.
  */
 export function verifyCallbackSignature(data: PaymentCallbackData, receivedSignature: string): boolean {
   const config = getDimocoConfig();
@@ -519,10 +556,81 @@ export function verifyCallbackSignature(data: PaymentCallbackData, receivedSigna
     return true;
   }
 
-  // Production signature verification would go here
-  // This depends on DIMOCO's specific signing method
-  console.warn('[DIMOCO] Signature verification not implemented for production');
-  return true;
+  if (!receivedSignature || !config.password) {
+    console.warn('[DIMOCO] Missing signature or password for verification');
+    return false;
+  }
+
+  // DIMOCO callback digest verification:
+  // The digest is HMAC-SHA256 of the XML data payload using the merchant password
+  try {
+    // Reconstruct what DIMOCO signed: the raw XML data value
+    // Since we may have already parsed it, we verify using available data
+    const hmac = crypto.createHmac('sha256', config.password);
+    
+    // Build verification payload from callback data fields (sorted alphabetically)
+    const fields: Record<string, string> = {};
+    if (data.transactionId) fields.transactionId = data.transactionId;
+    if (data.status) fields.status = data.status;
+    if (data.msisdn) fields.msisdn = data.msisdn;
+    if (data.amount !== undefined) fields.amount = String(data.amount);
+    if (data.currency) fields.currency = data.currency;
+    
+    const sortedKeys = Object.keys(fields).sort();
+    const payload = sortedKeys.map(key => fields[key]).join('');
+    
+    hmac.update(payload, 'utf8');
+    const computed = hmac.digest('hex');
+    
+    const isValid = computed === receivedSignature;
+    if (!isValid) {
+      console.error('[DIMOCO] Callback signature mismatch!', {
+        received: receivedSignature.substring(0, 10) + '...',
+        computed: computed.substring(0, 10) + '...',
+      });
+    }
+    return isValid;
+  } catch (error) {
+    console.error('[DIMOCO] Signature verification error:', error);
+    return false;
+  }
+}
+
+/**
+ * Verify raw DIMOCO callback digest against the XML data
+ * This is the primary verification method for production callbacks.
+ * DIMOCO sends: digest=xxx&data=<URL-encoded XML>
+ * The digest = HMAC-SHA256(data_value, password)
+ */
+export function verifyRawCallbackDigest(digest: string, rawData: string): boolean {
+  const config = getDimocoConfig();
+  
+  if (config.useSandbox) {
+    console.log('[DIMOCO] Sandbox mode - skipping raw digest verification');
+    return true;
+  }
+
+  if (!digest || !rawData || !config.password) {
+    console.warn('[DIMOCO] Missing digest, data, or password for verification');
+    return !config.password; // If no password configured, skip verification
+  }
+
+  try {
+    const hmac = crypto.createHmac('sha256', config.password);
+    hmac.update(rawData, 'utf8');
+    const computed = hmac.digest('hex');
+    
+    const isValid = computed === digest;
+    if (!isValid) {
+      console.error('[DIMOCO] Raw callback digest mismatch!');
+    } else {
+      console.log('[DIMOCO] Callback digest verified successfully');
+    }
+    return isValid;
+  } catch (error) {
+    console.error('[DIMOCO] Raw digest verification error:', error);
+    return false;
+  }
 }
 
 /**

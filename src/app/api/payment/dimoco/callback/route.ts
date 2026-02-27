@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyCallbackSignature, parseAmount, type PaymentCallbackData } from '@/lib/dimoco/client';
+import { verifyCallbackSignature, verifyRawCallbackDigest, parseAmount, type PaymentCallbackData } from '@/lib/dimoco/client';
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getUnlockRepository, getArticleRepository, getUserRepository, getBillingRepository, getCustomerRepository, getTrackingRepository } from '@/lib/db';
 import { getCollection } from '@/lib/db/mongodb';
@@ -44,6 +44,18 @@ export async function POST(request: NextRequest) {
       
       console.log('[Payment Callback POST] Has digest:', !!digest);
       console.log('[Payment Callback POST] Has XML data:', !!xmlData);
+      
+      // Verify callback digest in production
+      if (digest && xmlData) {
+        const isValid = verifyRawCallbackDigest(digest, xmlData);
+        if (!isValid) {
+          console.error('[Payment Callback POST] DIGEST VERIFICATION FAILED - possible tampering!');
+          return NextResponse.json(
+            { success: false, error: 'Invalid callback signature' },
+            { status: 401 }
+          );
+        }
+      }
       
       if (xmlData) {
         // Parse the XML data field

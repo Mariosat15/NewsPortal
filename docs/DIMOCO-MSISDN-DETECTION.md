@@ -51,24 +51,38 @@ We've created three endpoints:
 - **When**: Testing to see detected IP and network type
 - **Result**: Returns IP, network type, carrier info
 
-### 2. DIMOCO Sandbox Configuration
+### 2. DIMOCO Configuration
 
-Your `.env` already has sandbox credentials:
-
+#### Sandbox Credentials (Testing)
 ```env
 DIMOCO_API_URL=https://sandbox-dcb.dimoco.at/sph/payment
 DIMOCO_MERCHANT_ID=8000
 DIMOCO_PASSWORD=GsD8UxfCtGwK3
 DIMOCO_ORDER_ID=8000
+BYPASS_NETWORK_CHECK=true
 ```
 
-### 3. Sandbox Behavior
+#### Production Credentials (Live)
+```env
+DIMOCO_API_URL=https://dcb.dimoco.at/sph/payment
+DIMOCO_MERCHANT_ID=<your-real-merchant-id>
+DIMOCO_PASSWORD=<your-real-password>
+DIMOCO_ORDER_ID=<your-real-order-id>
+BYPASS_NETWORK_CHECK=false
+```
 
-⚠️ **Important**: DIMOCO Sandbox always returns:
-- **MSISDN**: `436763602302`
-- **Operator**: `AT_SANDBOX`
+### 3. Sandbox vs Production Behavior
 
-This is for testing purposes. Real carrier detection only works in production with real carrier partnerships.
+| Feature | Sandbox | Production |
+|---------|---------|------------|
+| API URL | `sandbox-dcb.dimoco.at` | `dcb.dimoco.at` |
+| MSISDN returned | Always `436763602302` | Real user phone number |
+| Operator returned | Always `AT_SANDBOX` | Real carrier name |
+| Identify works on WiFi | Yes (always succeeds) | No (requires 4G/5G) |
+| `redirect=1` in start | Required | Not needed |
+| Real charges | No | Yes |
+
+⚠️ **Important**: DIMOCO Sandbox always returns the same test MSISDN regardless of device. Real carrier detection only works in production.
 
 ## Testing
 
@@ -101,39 +115,67 @@ Since `BYPASS_NETWORK_CHECK=true` in your `.env`:
 ### Requirements
 
 1. **Production DIMOCO Account**
-   - Real API URL (not sandbox)
-   - Production merchant credentials
-   - Carrier partnerships activated
+   - Production API URL: `https://dcb.dimoco.at/sph/payment`
+   - Your assigned Merchant ID, Password, and Order ID
+   - Carrier partnerships activated for target countries
 
-2. **Environment Variables**
+2. **Environment Variables** (update `.env` on server)
    ```env
    NODE_ENV=production
    DIMOCO_API_URL=https://dcb.dimoco.at/sph/payment
-   DIMOCO_MERCHANT_ID=your_real_merchant_id
-   DIMOCO_PASSWORD=your_real_password
-   DIMOCO_ORDER_ID=your_real_order_id
-   BYPASS_NETWORK_CHECK=false  # Important: Disable bypass!
+   DIMOCO_MERCHANT_ID=<your-merchant-id>
+   DIMOCO_PASSWORD=<your-password>
+   DIMOCO_ORDER_ID=<your-order-id>
+   BYPASS_NETWORK_CHECK=false
    ```
 
-3. **Carrier Support**
+3. **Key Differences from Sandbox**
+   - `redirect=1` is NOT sent in production (auto-handled by the app)
+   - Callback digest verification is ENABLED (HMAC-SHA256)
+   - Mock payment fallback is DISABLED
+   - WiFi bypass is DISABLED
+
+4. **Carrier Support**
    - Works with carriers that have DIMOCO partnerships
    - Germany: Deutsche Telekom, Vodafone, O2
-   - Austria: A1, Magenta
+   - Austria: A1, Magenta, Drei
    - Others: Check with DIMOCO
 
-### Production Flow
+### Production Payment Flow
 
 ```
-User on mobile → Carrier adds MSISDN header
-                        ↓
-                  DIMOCO reads it
-                        ↓
-                Real phone number returned
-                        ↓
-                Payment processed
-                        ↓
-                User charged on phone bill
+User on mobile 4G/5G → Clicks "Unlock Article"
+                              ↓
+                  App calls DIMOCO 'start' action
+                              ↓
+                  DIMOCO redirects to carrier payment page
+                              ↓
+                  Carrier identifies user by MSISDN
+                              ↓
+                  User confirms → charged on phone bill
+                              ↓
+                  DIMOCO sends POST callback to our server
+                              ↓
+                  App verifies digest + creates unlock record
+                              ↓
+                  User redirected back → article unlocked
 ```
+
+### Switching from Sandbox to Production
+
+Simply update these 4 env vars on your server:
+```bash
+# Edit .env file
+DIMOCO_API_URL=https://dcb.dimoco.at/sph/payment
+DIMOCO_MERCHANT_ID=<your-production-merchant-id>
+DIMOCO_PASSWORD=<your-production-password>
+DIMOCO_ORDER_ID=<your-production-order-id>
+```
+Then rebuild and restart:
+```bash
+npm run build && pm2 restart all
+```
+No code changes needed - the app auto-detects sandbox vs production from the URL.
 
 ## Header Enrichment Details
 

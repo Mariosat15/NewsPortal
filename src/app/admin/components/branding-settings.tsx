@@ -903,7 +903,8 @@ export function BrandingSettings() {
                     placeholder="https://sandbox-dcb.dimoco.at/sph/payment"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Sandbox: https://sandbox-dcb.dimoco.at/sph/payment
+                    Sandbox: https://sandbox-dcb.dimoco.at/sph/payment<br/>
+                    Production: https://dcb.dimoco.at/sph/payment
                   </p>
                 </div>
                 <div className="space-y-2">
