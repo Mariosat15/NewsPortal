@@ -185,30 +185,8 @@ async function createDraftFromTopic(
   const images = categoryImages[topic.category] || categoryImages.news;
   const randomImages = images.sort(() => Math.random() - 0.5).slice(0, 3);
   
-  // Check if we should fetch video for this category
-  let videoEmbed = '';
-  if (videoSettings.enabled) {
-    const shouldFetchVideo = videoSettings.categoriesWithVideos.length === 0 ||
-      videoSettings.categoriesWithVideos.includes(topic.category);
-    
-    if (shouldFetchVideo) {
-      console.log(`[Drafter] Fetching video for topic: ${topic.topic} in category: ${topic.category}`);
-      try {
-        const { embedHtml } = await getVideoForArticle(
-          topic.topic,
-          topic.category,
-          videoSettings.includeYouTube,
-          videoSettings.includeTikTok
-        );
-        if (embedHtml) {
-          videoEmbed = embedHtml;
-          console.log(`[Drafter] Video embed found for: ${topic.topic}`);
-        }
-      } catch (error) {
-        console.error('[Drafter] Error fetching video:', error);
-      }
-    }
-  }
+  // NOTE: Video fetching happens AFTER article generation (see below)
+  // so we can use the real article title for accurate video search.
 
   // Select the article type based on style and category
   const selectedType = selectArticleType(articleStyle, topic.category);
@@ -356,19 +334,43 @@ Respond ONLY as JSON (no markdown code blocks):
     if (!jsonMatch) return null;
 
     const articleData = JSON.parse(jsonMatch[0]);
-    
-    // Insert video embed at the beginning of content if available
     let finalContent = articleData.content;
-    if (videoEmbed) {
-      // Add video after first paragraph for better article flow
-      const firstParagraphEnd = finalContent.indexOf('</p>');
-      if (firstParagraphEnd > -1) {
-        finalContent = finalContent.slice(0, firstParagraphEnd + 4) + 
-          '\n' + videoEmbed + '\n' + 
-          finalContent.slice(firstParagraphEnd + 4);
-      } else {
-        // If no paragraph found, prepend video
-        finalContent = videoEmbed + '\n' + finalContent;
+
+    // ── Video fetch — runs AFTER article generation so we have the real title ──
+    if (videoSettings.enabled) {
+      const shouldFetchVideo =
+        videoSettings.categoriesWithVideos.length === 0 ||
+        videoSettings.categoriesWithVideos.includes(topic.category);
+
+      if (shouldFetchVideo) {
+        console.log(`[Drafter] Fetching video for article: "${articleData.title}" [${topic.category}]`);
+        try {
+          const { embedHtml } = await getVideoForArticle(
+            articleData.title,           // real article title — specific & accurate
+            articleData.teaser || '',     // teaser for extra context
+            topic.category,
+            language,
+            videoSettings.includeYouTube,
+            videoSettings.includeTikTok
+          );
+          if (embedHtml) {
+            console.log(`[Drafter] ✓ Relevant video found for: "${articleData.title}"`);
+            // Insert video after first paragraph for better article flow
+            const firstParagraphEnd = finalContent.indexOf('</p>');
+            if (firstParagraphEnd > -1) {
+              finalContent =
+                finalContent.slice(0, firstParagraphEnd + 4) +
+                '\n' + embedHtml + '\n' +
+                finalContent.slice(firstParagraphEnd + 4);
+            } else {
+              finalContent = embedHtml + '\n' + finalContent;
+            }
+          } else {
+            console.log(`[Drafter] No relevant video found — article published without video`);
+          }
+        } catch (error) {
+          console.error('[Drafter] Video fetch error (non-fatal):', error);
+        }
       }
     }
 
