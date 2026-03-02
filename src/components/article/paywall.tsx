@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
-import { Lock, CreditCard, Shield, Zap, Wifi, WifiOff, Smartphone, RotateCcw, Loader2 } from 'lucide-react';
+import { Lock, CreditCard, Shield, Zap, Smartphone, RotateCcw, Loader2, WifiOff, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatPrice } from '@/lib/utils';
@@ -39,7 +39,7 @@ export function Paywall({
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
-  // Detect network type on component mount
+  // Detect network type on component mount (advisory only — never blocks purchase)
   useEffect(() => {
     async function detectNetwork() {
       try {
@@ -50,10 +50,10 @@ export function Paywall({
         }
       } catch (error) {
         console.error('Network detection failed:', error);
-        // Default to unknown
+        // Default to unknown — still allow purchase
         setNetworkInfo({
           networkType: 'UNKNOWN',
-          isMobileNetwork: false,
+          isMobileNetwork: true, // Assume mobile on detection failure so button works
         });
       } finally {
         setLoading(false);
@@ -90,11 +90,6 @@ export function Paywall({
   }, [locale]);
 
   const handleUnlock = () => {
-    // Block if on WiFi
-    if (networkInfo && !networkInfo.isMobileNetwork) {
-      return; // Shouldn't happen as button is disabled, but safety check
-    }
-    
     // Collect device fingerprint before payment
     const deviceInfo = storeDeviceInfo();
     console.log('[Payment] Device fingerprint collected:', deviceInfo.deviceFingerprint);
@@ -112,7 +107,7 @@ export function Paywall({
       gpu: deviceInfo.gpu,
     }));
     
-    // Redirect to DIMOCO payment with device data
+    // Redirect to DIMOCO payment — DIMOCO handles carrier detection
     const paymentUrl = `/api/payment/dimoco/initiate?articleId=${articleId}&slug=${articleSlug}&returnUrl=${encodeURIComponent(window.location.href)}&deviceData=${deviceData}`;
     window.location.href = paymentUrl;
   };
@@ -133,8 +128,10 @@ export function Paywall({
     );
   }
 
-  const isOnWifi = networkInfo && !networkInfo.isMobileNetwork;
-  const isOnMobile = networkInfo && networkInfo.isMobileNetwork;
+  // Advisory detection: known WiFi = show tip; unknown/mobile = normal flow
+  // Reason: Hardcoded IP ranges can't cover all carrier IPs, so we NEVER
+  // disable the purchase button. DIMOCO is the authority for carrier detection.
+  const detectedWifi = networkInfo?.networkType === 'WIFI';
 
   return (
     <div className="relative">
@@ -142,108 +139,79 @@ export function Paywall({
       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-background/50 to-background pointer-events-none" />
       
       {/* Paywall card */}
-      <Card className={`relative mx-auto max-w-md shadow-lg ${
-        isOnWifi ? 'border-amber-300 bg-amber-50/50' : 'border-primary/20'
-      }`}>
+      <Card className="relative mx-auto max-w-md shadow-lg border-primary/20">
         <CardHeader className="text-center pb-2">
-          <div className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full ${
-            isOnWifi ? 'bg-amber-100' : 'bg-primary/10'
-          }`}>
-            {isOnWifi ? (
-              <WifiOff className="h-6 w-6 text-amber-600" />
-            ) : (
-              <Lock className="h-6 w-6 text-primary" />
-            )}
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+            <Lock className="h-6 w-6 text-primary" />
           </div>
           <CardTitle className="text-xl">
-            {isOnWifi 
-              ? (locale === 'de' ? 'Mobilfunknetz erforderlich' : 'Mobile Data Required')
-              : t('title')
-            }
+            {t('title')}
           </CardTitle>
           <CardDescription>
-            {isOnWifi
-              ? (locale === 'de' 
-                  ? 'Zum Freischalten dieses Artikels benötigen Sie eine mobile Datenverbindung'
-                  : 'To unlock this article, you need a mobile data connection'
-                )
-              : t('description', { price: formattedPrice })
-            }
+            {t('description', { price: formattedPrice })}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {isOnWifi ? (
-            // WiFi User - show instructions
-            <div className="space-y-4">
-              <div className="p-4 bg-amber-100 border border-amber-300 rounded-lg">
-                <p className="font-medium text-amber-900 mb-3">
-                  {locale === 'de' ? 'So schalten Sie den Artikel frei:' : 'How to unlock this article:'}
-                </p>
-                <ol className="list-decimal list-inside space-y-2 text-sm text-amber-800">
-                  <li>{locale === 'de' ? 'WLAN auf Ihrem Gerät deaktivieren' : 'Turn off WiFi on your device'}</li>
-                  <li>{locale === 'de' ? 'Mobile Daten (4G/5G) aktivieren' : 'Enable mobile data (4G/5G)'}</li>
-                  <li>{locale === 'de' ? 'Diese Seite erneut aufrufen' : 'Return to this page'}</li>
-                  <li>{locale === 'de' ? 'Artikel freischalten' : 'Unlock the article'}</li>
-                </ol>
-              </div>
-              <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-                <Smartphone className="h-4 w-4" />
-                <span>
-                  {locale === 'de' 
-                    ? 'Die Zahlung erfolgt über Ihre Mobilfunkrechnung'
-                    : 'Payment is charged to your mobile phone bill'
-                  }
-                </span>
-              </div>
+          {/* Benefits */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 text-sm">
+              <Shield className="h-4 w-4 text-green-500" />
+              <span>{t('paymentSecure')}</span>
             </div>
-          ) : (
-            // Mobile Data User - show unlock button
-            <>
-              {/* Benefits */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 text-sm">
-                  <Shield className="h-4 w-4 text-green-500" />
-                  <span>{t('paymentSecure')}</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <CreditCard className="h-4 w-4 text-blue-500" />
-                  <span>{t('oneTimePayment')}</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <Zap className="h-4 w-4 text-yellow-500" />
-                  <span>{t('instantAccess')}</span>
-                </div>
-              </div>
+            <div className="flex items-center gap-3 text-sm">
+              <CreditCard className="h-4 w-4 text-blue-500" />
+              <span>{t('oneTimePayment')}</span>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <Zap className="h-4 w-4 text-yellow-500" />
+              <span>{t('instantAccess')}</span>
+            </div>
+          </div>
 
-              {/* Carrier info if available */}
-              {networkInfo?.carrier && (
-                <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg text-sm text-green-700">
-                  <Smartphone className="h-4 w-4" />
-                  <span>
-                    {locale === 'de' ? 'Verbunden mit' : 'Connected to'} <strong>{networkInfo.carrier.name}</strong>
-                  </span>
-                </div>
-              )}
-
-              {/* Unlock button */}
-              <Button
-                onClick={handleUnlock}
-                className="w-full text-lg h-12"
-                size="lg"
-              >
-                {t('unlockFor', { price: formattedPrice })}
-              </Button>
-
-              <p className="text-xs text-center text-muted-foreground">
-                {locale === 'de' 
-                  ? 'Wird Ihrer Mobilfunkrechnung belastet'
-                  : 'Charged to your mobile phone bill'
-                }
-              </p>
-            </>
+          {/* Carrier info if detected */}
+          {networkInfo?.carrier && (
+            <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg text-sm text-green-700">
+              <Smartphone className="h-4 w-4" />
+              <span>
+                {locale === 'de' ? 'Verbunden mit' : 'Connected to'} <strong>{networkInfo.carrier.name}</strong>
+              </span>
+            </div>
           )}
 
-          {/* Restore Access - shown for both WiFi and mobile users */}
+          {/* Advisory WiFi tip — shown as info, NOT as a block */}
+          {detectedWifi && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium">
+                  {locale === 'de' ? 'Tipp: Mobile Daten verwenden' : 'Tip: Use mobile data'}
+                </p>
+                <p className="text-xs mt-0.5 opacity-80">
+                  {locale === 'de'
+                    ? 'Für die Abrechnung über Ihre Mobilfunkrechnung empfehlen wir mobile Daten (4G/5G).'
+                    : 'For carrier billing, we recommend using mobile data (4G/5G).'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Unlock button — ALWAYS enabled, DIMOCO handles carrier verification */}
+          <Button
+            onClick={handleUnlock}
+            className="w-full text-lg h-12"
+            size="lg"
+          >
+            {t('unlockFor', { price: formattedPrice })}
+          </Button>
+
+          <p className="text-xs text-center text-muted-foreground">
+            {locale === 'de' 
+              ? 'Wird Ihrer Mobilfunkrechnung belastet'
+              : 'Charged to your mobile phone bill'
+            }
+          </p>
+
+          {/* Restore Access */}
           <div className="pt-3 border-t">
             {restoreError && (
               <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">

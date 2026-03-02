@@ -80,33 +80,17 @@ export async function GET(request: NextRequest) {
     // Get session ID from cookie for linking purchases
     const sessionId = request.cookies.get('news_session')?.value;
 
-    // VALIDATE NETWORK TYPE - Block WiFi purchases
-    // Only bypass if explicitly set in .env (for local testing when needed)
-    const bypassNetworkCheck = process.env.BYPASS_NETWORK_CHECK === 'true';
-    
+    // NETWORK DETECTION — advisory logging only
+    // Reason: Hardcoded IP ranges can never cover all carrier IPs (e.g. Vodafone DE
+    // uses 109.40.0.0/13 which wasn't in our list, blocking real 5G users).
+    // DIMOCO itself handles carrier detection — if user is on WiFi, DIMOCO will
+    // fail the payment and we show a clear error. No need to pre-block here.
     const networkResult = detectNetworkType(ipAddress);
-    if (!networkResult.isMobileNetwork && !bypassNetworkCheck) {
-      console.log('[Payment] Blocked - Not on mobile network:', networkResult.networkType);
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Mobile data required',
-          errorCode: 'WIFI_NOT_ALLOWED',
-          message: 'Please switch to mobile data (4G/5G) to make a purchase. WiFi purchases are not supported.',
-          networkType: networkResult.networkType
-        },
-        { status: 403 }
-      );
-    }
-
-    if (bypassNetworkCheck && !networkResult.isMobileNetwork) {
-      console.log('[Payment] ⚠️ BYPASS_NETWORK_CHECK enabled: Allowing WiFi purchase for testing');
-    }
-
-    console.log('[Payment] Network validation passed:', {
+    console.log('[Payment] Network detection (advisory):', {
+      ip: ipAddress,
       networkType: networkResult.networkType,
+      isMobileNetwork: networkResult.isMobileNetwork,
       carrier: networkResult.carrier?.name,
-      bypassed: bypassNetworkCheck && !networkResult.isMobileNetwork,
     });
 
     // Get dynamic base URL from request
