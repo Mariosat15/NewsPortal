@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Menu, X, Search, ChevronDown } from 'lucide-react';
 import { HeaderProps } from '@/lib/templates/types';
+import { LanguageSwitcher } from '../LanguageSwitcher';
 
 export function CenteredHeader({ template, categories, locale, brandName, logoUrl }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -27,6 +28,7 @@ export function CenteredHeader({ template, categories, locale, brandName, logoUr
       >
         <div className="flex-1" />
         <div className="flex items-center gap-4">
+          <LanguageSwitcher locale={locale} template={template} variant="icon" />
           <button 
             className="flex items-center gap-2 text-sm"
             style={{ color: colors.textMuted }}
@@ -147,6 +149,9 @@ export function CenteredHeader({ template, categories, locale, brandName, logoUr
                 {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </Link>
             ))}
+            <div className="px-6 py-3 border-t" style={{ borderColor: colors.border }}>
+              <LanguageSwitcher locale={locale} template={template} variant="text" />
+            </div>
           </nav>
         </div>
       )}

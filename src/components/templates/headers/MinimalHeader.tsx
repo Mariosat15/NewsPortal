@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Menu, X, ChevronDown } from 'lucide-react';
 import { HeaderProps } from '@/lib/templates/types';
+import { LanguageSwitcher } from '../LanguageSwitcher';
 
 export function MinimalHeader({ template, categories, locale, brandName, logoUrl }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -92,14 +93,18 @@ export function MinimalHeader({ template, categories, locale, brandName, logoUrl
           )}
         </nav>
 
-        {/* Mobile Menu Button */}
-        <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="md:hidden"
-          style={{ color: colors.text }}
-        >
-          {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        {/* Actions */}
+        <div className="flex items-center gap-1">
+          <LanguageSwitcher locale={locale} template={template} variant="icon" />
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden"
+            style={{ color: colors.text }}
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Menu - Minimal */}
@@ -123,6 +128,10 @@ export function MinimalHeader({ template, categories, locale, brandName, logoUrl
                 {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </Link>
             ))}
+            {/* Mobile Language Switcher */}
+            <div className="pt-4 border-t" style={{ borderColor: colors.border }}>
+              <LanguageSwitcher locale={locale} template={template} variant="text" />
+            </div>
           </nav>
         </div>
       )}

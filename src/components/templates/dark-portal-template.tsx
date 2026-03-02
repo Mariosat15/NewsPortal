@@ -61,10 +61,10 @@ export function DarkPortalTemplate({ articles, locale, categoryLabels, primaryCo
         <div className="container mx-auto px-4">
           <div className="flex items-center gap-3 py-2">
             <span className="bg-white text-red-600 text-[10px] font-black px-2 py-1 rounded animate-pulse">
-              BREAKING NEWS
+              {locale === 'de' ? 'EILMELDUNG' : 'BREAKING NEWS'}
             </span>
             <p className="text-white text-sm truncate">
-              {featuredArticle?.title || 'Latest breaking news updates'}
+              {featuredArticle?.title || (locale === 'de' ? 'Aktuelle Eilmeldungen' : 'Latest breaking news updates')}
             </p>
           </div>
         </div>
@@ -93,7 +93,7 @@ export function DarkPortalTemplate({ articles, locale, categoryLabels, primaryCo
                 <div className="absolute bottom-0 left-0 right-0 p-6">
                   <div className="flex items-center gap-3 mb-3">
                     <span className="text-white/60 text-sm">{formatDate(featuredArticle.publishDate)}</span>
-                    <span className="text-white/60 text-sm">• 455 Comments</span>
+                    <span className="text-white/60 text-sm">• 455 {locale === 'de' ? 'Kommentare' : 'Comments'}</span>
                   </div>
                   <h1 className="text-3xl md:text-4xl font-bold text-white leading-tight mb-3 group-hover:text-red-400 transition-colors">
                     {featuredArticle.title}
@@ -145,7 +145,7 @@ export function DarkPortalTemplate({ articles, locale, categoryLabels, primaryCo
                       <span className={`absolute top-2 left-2 ${categoryColors[article.category] || 'bg-gray-500'} text-white text-[9px] font-bold px-2 py-0.5 rounded`}>
                         {categoryLabels[article.category] || article.category}
                       </span>
-                      <span className="absolute top-2 right-2 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded">
+                        <span className="absolute top-2 right-2 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded">
                         {formatDate(article.publishDate)}
                       </span>
                     </div>
@@ -161,7 +161,7 @@ export function DarkPortalTemplate({ articles, locale, categoryLabels, primaryCo
             <div className="bg-gray-900 rounded-xl p-6 mb-8">
               <h2 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
                 <Flame className="h-5 w-5 text-red-500" />
-                TOP STORIES
+                {locale === 'de' ? 'TOP-MELDUNGEN' : 'TOP STORIES'}
               </h2>
               <div className="grid grid-cols-12 gap-4">
                 {/* Main Story */}
@@ -223,7 +223,7 @@ export function DarkPortalTemplate({ articles, locale, categoryLabels, primaryCo
               {/* Politics */}
               <div>
                 <h3 className="font-bold text-gray-900 mb-4 pb-2 border-b-2 border-red-600">
-                  POLITICS
+                  {locale === 'de' ? 'POLITIK' : 'POLITICS'}
                 </h3>
                 {politicsArticles[0] && (
                   <Link
@@ -263,7 +263,7 @@ export function DarkPortalTemplate({ articles, locale, categoryLabels, primaryCo
               {/* Business */}
               <div>
                 <h3 className="font-bold text-gray-900 mb-4 pb-2 border-b-2 border-amber-500">
-                  BUSINESS
+                  {locale === 'de' ? 'WIRTSCHAFT' : 'BUSINESS'}
                 </h3>
                 {businessArticles[0] && (
                   <Link
@@ -306,7 +306,7 @@ export function DarkPortalTemplate({ articles, locale, categoryLabels, primaryCo
           <aside className="col-span-12 lg:col-span-4 space-y-6">
             {/* World News */}
             <div className="bg-gray-900 rounded-xl p-5">
-              <h3 className="text-white font-bold mb-4">WORLD</h3>
+              <h3 className="text-white font-bold mb-4">{locale === 'de' ? 'WELT' : 'WORLD'}</h3>
               <div className="space-y-3">
                 {worldNews.slice(0, 5).map((article) => (
                   <Link
@@ -325,7 +325,7 @@ export function DarkPortalTemplate({ articles, locale, categoryLabels, primaryCo
 
             {/* Technology */}
             <div className="bg-gray-100 rounded-xl p-5">
-              <h3 className="text-gray-900 font-bold mb-4">TECHNOLOGY</h3>
+              <h3 className="text-gray-900 font-bold mb-4">{locale === 'de' ? 'TECHNOLOGIE' : 'TECHNOLOGY'}</h3>
               {techArticles[0] && (
                 <Link
                   href={`/${locale}/article/${techArticles[0].slug}`}

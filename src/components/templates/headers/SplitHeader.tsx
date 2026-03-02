@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Menu, X, Search, ChevronDown } from 'lucide-react';
 import { HeaderProps } from '@/lib/templates/types';
+import { LanguageSwitcher } from '../LanguageSwitcher';
 
 export function SplitHeader({ template, categories, locale, brandName, logoUrl }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -121,6 +122,7 @@ export function SplitHeader({ template, categories, locale, brandName, logoUrl }
             >
               <Search className="w-5 h-5" />
             </button>
+            <LanguageSwitcher locale={locale} template={template} variant="icon" />
           </nav>
 
           {/* Mobile Menu Button */}
@@ -152,6 +154,9 @@ export function SplitHeader({ template, categories, locale, brandName, logoUrl }
                 {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </Link>
             ))}
+            <div className="px-4 py-3 border-t" style={{ borderColor: colors.border }}>
+              <LanguageSwitcher locale={locale} template={template} variant="text" />
+            </div>
           </nav>
         </div>
       )}

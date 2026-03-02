@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { Menu, X, Search, TrendingUp, Clock, ChevronDown } from 'lucide-react';
 import { HeaderProps } from '@/lib/templates/types';
+import { LanguageSwitcher } from '../LanguageSwitcher';
 
 export function StickyCompactHeader({ template, categories, locale, brandName, logoUrl }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -157,6 +158,9 @@ export function StickyCompactHeader({ template, categories, locale, brandName, l
 
           {/* Actions */}
           <div className="flex items-center gap-2">
+            <div className="hidden lg:block">
+              <LanguageSwitcher locale={locale} template={template} variant="icon" />
+            </div>
             <button 
               className="p-1.5 rounded transition-colors"
               style={{ color: colors.textMuted }}
@@ -193,6 +197,9 @@ export function StickyCompactHeader({ template, categories, locale, brandName, l
                 {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </Link>
             ))}
+            <div className="px-4 py-2 border-t" style={{ borderColor: colors.border }}>
+              <LanguageSwitcher locale={locale} template={template} variant="text" />
+            </div>
           </nav>
         </div>
       )}

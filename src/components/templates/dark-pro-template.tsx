@@ -57,9 +57,11 @@ export function DarkProTemplate({ articles, locale, categoryLabels, primaryColor
       {/* Breaking News Bar */}
       <div className="bg-red-600 text-white py-2">
         <div className="container mx-auto px-4 flex items-center gap-3">
-          <span className="bg-white text-red-600 text-xs font-bold px-2 py-1 rounded">BREAKING NEWS</span>
+          <span className="bg-white text-red-600 text-xs font-bold px-2 py-1 rounded">
+            {locale === 'de' ? 'EILMELDUNG' : 'BREAKING NEWS'}
+          </span>
           <p className="text-sm truncate">
-            {featuredArticle?.teaser || 'Latest updates from around the world'}
+            {featuredArticle?.teaser || (locale === 'de' ? 'Neueste Updates aus aller Welt' : 'Latest updates from around the world')}
           </p>
         </div>
       </div>
@@ -122,7 +124,7 @@ export function DarkProTemplate({ articles, locale, categoryLabels, primaryColor
 
                   {/* Market Ticker (mock) */}
                   <div className="bg-[#242836] rounded-lg p-4">
-                    <h4 className="text-white font-semibold mb-3">Market:</h4>
+                    <h4 className="text-white font-semibold mb-3">{locale === 'de' ? 'Markt:' : 'Market:'}</h4>
                     <div className="grid grid-cols-3 gap-2 text-sm">
                       <div>
                         <span className="text-gray-400">DPXO</span>
@@ -144,7 +146,7 @@ export function DarkProTemplate({ articles, locale, categoryLabels, primaryColor
 
             {/* Latest News Row */}
             <div className="mb-8">
-              <h2 className="text-white font-bold text-lg mb-4">Latest News</h2>
+              <h2 className="text-white font-bold text-lg mb-4">{locale === 'de' ? 'Neueste Nachrichten' : 'Latest News'}</h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {latestArticles.map((article) => (
                   <Link
@@ -175,7 +177,7 @@ export function DarkProTemplate({ articles, locale, categoryLabels, primaryColor
             <div className="grid grid-cols-3 gap-6">
               {/* Politics */}
               <div>
-                <h3 className="text-white font-bold mb-4 pb-2 border-b border-gray-700">Politics</h3>
+                <h3 className="text-white font-bold mb-4 pb-2 border-b border-gray-700">{locale === 'de' ? 'Politik' : 'Politics'}</h3>
                 {politicsArticles.map((article, i) => (
                   <Link
                     key={article.slug}
@@ -197,7 +199,7 @@ export function DarkProTemplate({ articles, locale, categoryLabels, primaryColor
 
               {/* Business */}
               <div>
-                <h3 className="text-white font-bold mb-4 pb-2 border-b border-gray-700">Business</h3>
+                <h3 className="text-white font-bold mb-4 pb-2 border-b border-gray-700">{locale === 'de' ? 'Wirtschaft' : 'Business'}</h3>
                 {businessArticles.map((article, i) => (
                   <Link
                     key={article.slug}
@@ -219,7 +221,7 @@ export function DarkProTemplate({ articles, locale, categoryLabels, primaryColor
 
               {/* Technology */}
               <div>
-                <h3 className="text-white font-bold mb-4 pb-2 border-b border-gray-700">Technology</h3>
+                <h3 className="text-white font-bold mb-4 pb-2 border-b border-gray-700">{locale === 'de' ? 'Technologie' : 'Technology'}</h3>
                 {techArticles.map((article, i) => (
                   <Link
                     key={article.slug}
@@ -247,7 +249,7 @@ export function DarkProTemplate({ articles, locale, categoryLabels, primaryColor
             <div className="bg-[#242836] rounded-lg p-5">
               <h3 className="text-white font-bold mb-4 flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-red-500" />
-                Top Stories
+                {locale === 'de' ? 'Top-Meldungen' : 'Top Stories'}
               </h3>
               <div className="space-y-3">
                 {topStories.map((article, i) => (
@@ -268,7 +270,9 @@ export function DarkProTemplate({ articles, locale, categoryLabels, primaryColor
             {/* Newsletter */}
             <div className="bg-[#242836] rounded-lg p-5">
               <h3 className="text-white font-bold mb-2">Newsletter</h3>
-              <p className="text-gray-400 text-sm mb-4">Get the latest news delivered daily!</p>
+              <p className="text-gray-400 text-sm mb-4">
+                {locale === 'de' ? 'Erhalten Sie täglich die neuesten Nachrichten!' : 'Get the latest news delivered daily!'}
+              </p>
               <div className="flex gap-2">
                 <input
                   type="email"
@@ -276,7 +280,7 @@ export function DarkProTemplate({ articles, locale, categoryLabels, primaryColor
                   className="flex-1 bg-[#1a1d29] text-white text-sm px-3 py-2 rounded border border-gray-700 focus:border-blue-500 focus:outline-none"
                 />
                 <button className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded transition-colors">
-                  Subscribe
+                  {locale === 'de' ? 'Abonnieren' : 'Subscribe'}
                 </button>
               </div>
             </div>
@@ -284,7 +288,7 @@ export function DarkProTemplate({ articles, locale, categoryLabels, primaryColor
             {/* Entertainment */}
             {entertainmentArticle && (
               <div className="bg-[#242836] rounded-lg p-5">
-                <h3 className="text-white font-bold mb-4">Entertainment</h3>
+                <h3 className="text-white font-bold mb-4">{locale === 'de' ? 'Unterhaltung' : 'Entertainment'}</h3>
                 <Link
                   href={`/${locale}/article/${entertainmentArticle.slug}`}
                   className="group block"

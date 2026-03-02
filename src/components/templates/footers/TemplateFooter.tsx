@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { ResolvedTemplate, CategoryConfig } from '@/lib/templates/types';
 import { sanitizeHtml } from '@/lib/utils/sanitize-html';
+import { LanguageSwitcher } from '../LanguageSwitcher';
 
 interface FooterLegalPage {
   _id: string;
@@ -208,12 +209,15 @@ export function TemplateFooter({ template, categories, locale, brandName }: Temp
           className="mx-auto px-4 py-4"
           style={{ maxWidth: template.spacing.containerMax }}
         >
-          <p 
-            className="text-center text-xs"
-            style={{ color: colors.textMuted, opacity: 0.7 }}
-          >
-            © {currentYear} {brandName}. {locale === 'de' ? 'Alle Rechte vorbehalten.' : 'All rights reserved.'}
-          </p>
+          <div className="flex items-center justify-center gap-4">
+            <p 
+              className="text-center text-xs"
+              style={{ color: colors.textMuted, opacity: 0.7 }}
+            >
+              © {currentYear} {brandName}. {locale === 'de' ? 'Alle Rechte vorbehalten.' : 'All rights reserved.'}
+            </p>
+            <LanguageSwitcher locale={locale} template={template} variant="full" />
+          </div>
         </div>
       </div>
     </footer>

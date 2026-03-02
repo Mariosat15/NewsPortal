@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useState } from 'react';
 import { Menu, X, Search, ChevronDown, TrendingUp } from 'lucide-react';
 import { HeaderProps } from '@/lib/templates/types';
+import { LanguageSwitcher } from '../LanguageSwitcher';
 
 export function MegaHeader({ template, categories, locale, brandName, logoUrl }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -90,6 +91,9 @@ export function MegaHeader({ template, categories, locale, brandName, logoUrl }:
               <TrendingUp className="w-4 h-4" />
               {locale === 'de' ? 'Trending' : 'Trending'}
             </button>
+            <div className="hidden lg:block">
+              <LanguageSwitcher locale={locale} template={template} variant="icon" />
+            </div>
             
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -237,6 +241,9 @@ export function MegaHeader({ template, categories, locale, brandName, logoUrl }:
                 {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </Link>
             ))}
+            <div className="px-4 py-3 border-t" style={{ borderColor: colors.border }}>
+              <LanguageSwitcher locale={locale} template={template} variant="text" />
+            </div>
           </nav>
         </div>
       )}

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Menu, X, Search, ChevronDown } from 'lucide-react';
 import { HeaderProps } from '@/lib/templates/types';
+import { LanguageSwitcher } from '../LanguageSwitcher';
 
 export function StandardHeader({ template, categories, locale, brandName, logoUrl }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -95,7 +96,10 @@ export function StandardHeader({ template, categories, locale, brandName, logoUr
         </nav>
 
         {/* Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          {/* Language Switcher */}
+          <LanguageSwitcher locale={locale} template={template} variant="icon" />
+
           {/* Search */}
           <button
             onClick={() => setSearchOpen(!searchOpen)}
@@ -156,6 +160,10 @@ export function StandardHeader({ template, categories, locale, brandName, logoUr
                 {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
               </Link>
             ))}
+            {/* Mobile Language Switcher */}
+            <div className="px-4 py-3 border-t" style={{ borderColor: colors.border }}>
+              <LanguageSwitcher locale={locale} template={template} variant="text" />
+            </div>
           </nav>
         </div>
       )}
