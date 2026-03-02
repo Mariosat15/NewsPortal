@@ -5,40 +5,57 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Default RSS feeds - verified working sources
+// Default RSS feeds - verified working sources, organized by language and category
 const defaultRSSFeeds: RSSFeed[] = [
-  // News - German sources (verified)
+  // ─── GERMAN (de) FEEDS ───────────────────────────────────
+  // News
   { url: 'https://www.tagesschau.de/xml/rss2/', name: 'Tagesschau', category: 'news', language: 'de', enabled: true },
-  { url: 'https://www.spiegel.de/schlagzeilen/index.rss', name: 'Spiegel', category: 'news', language: 'de', enabled: true },
-  // News - English sources (verified)
-  { url: 'https://feeds.bbci.co.uk/news/rss.xml', name: 'BBC News', category: 'news', language: 'en', enabled: true },
-  
-  // Technology - German (verified)
-  { url: 'https://www.heise.de/rss/heise-atom.xml', name: 'Heise', category: 'technology', language: 'de', enabled: true },
-  
-  // Finance - German (verified)
+  { url: 'https://www.spiegel.de/schlagzeilen/index.rss', name: 'Spiegel Online', category: 'news', language: 'de', enabled: true },
+  { url: 'https://rss.sueddeutsche.de/rss/Topthemen', name: 'Süddeutsche Zeitung', category: 'news', language: 'de', enabled: true },
+  { url: 'https://www.zeit.de/rss/index', name: 'ZEIT Online', category: 'news', language: 'de', enabled: true },
+  // Technology
+  { url: 'https://www.heise.de/rss/heise-top-atom.xml', name: 'Heise', category: 'technology', language: 'de', enabled: true },
+  { url: 'https://www.golem.de/rss.php', name: 'Golem', category: 'technology', language: 'de', enabled: true },
+  { url: 'https://t3n.de/rss.xml', name: 't3n', category: 'technology', language: 'de', enabled: true },
+  // Finance
   { url: 'https://www.finanzen.net/rss/news', name: 'Finanzen.net', category: 'finance', language: 'de', enabled: true },
-  
-  // Sports - German (verified)
+  { url: 'https://www.handelsblatt.com/contentexport/feed/top', name: 'Handelsblatt', category: 'finance', language: 'de', enabled: true },
+  // Sports
+  { url: 'https://newsfeed.kicker.de/news/aktuell', name: 'Kicker', category: 'sports', language: 'de', enabled: true },
   { url: 'https://www.sport1.de/rss', name: 'Sport1', category: 'sports', language: 'de', enabled: true },
-  
-  // Health - German (verified)
+  // Health
   { url: 'https://www.aerzteblatt.de/feed/aerzteblatt.rss', name: 'Ärzteblatt', category: 'health', language: 'de', enabled: true },
-  
-  // Entertainment (verified)
+  // Entertainment
   { url: 'https://www.stern.de/rss/unterhaltung/', name: 'Stern Unterhaltung', category: 'entertainment', language: 'de', enabled: true },
-  
-  // Lifestyle (verified)
+  // Lifestyle
   { url: 'https://www.brigitte.de/feed.rss', name: 'Brigitte', category: 'lifestyle', language: 'de', enabled: true },
-  
-  // Recipes/Food (verified)
+  // Recipes
   { url: 'https://www.chefkoch.de/rss/rezept-des-tages.rss', name: 'Chefkoch', category: 'recipes', language: 'de', enabled: true },
-  
-  // Travel (verified)
+  // Travel
   { url: 'https://www.geo.de/reisen/rss.xml', name: 'GEO Reisen', category: 'travel', language: 'de', enabled: true },
-  
-  // Relationships (use general wellness/psychology)
-  { url: 'https://www.brigitte.de/feed.rss', name: 'Brigitte', category: 'relationships', language: 'de', enabled: true },
+  // Relationships
+  { url: 'https://www.brigitte.de/liebe/feed.rss', name: 'Brigitte Liebe', category: 'relationships', language: 'de', enabled: true },
+
+  // ─── ENGLISH (en) FEEDS ──────────────────────────────────
+  // News
+  { url: 'https://feeds.bbci.co.uk/news/world/rss.xml', name: 'BBC World', category: 'news', language: 'en', enabled: true },
+  { url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', name: 'NY Times World', category: 'news', language: 'en', enabled: true },
+  { url: 'https://feeds.reuters.com/reuters/topNews', name: 'Reuters', category: 'news', language: 'en', enabled: true },
+  // Technology
+  { url: 'https://feeds.feedburner.com/TechCrunch/', name: 'TechCrunch', category: 'technology', language: 'en', enabled: true },
+  { url: 'https://www.theverge.com/rss/index.xml', name: 'The Verge', category: 'technology', language: 'en', enabled: true },
+  // Finance
+  { url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories', name: 'MarketWatch', category: 'finance', language: 'en', enabled: true },
+  // Sports
+  { url: 'https://www.espn.com/espn/rss/news', name: 'ESPN', category: 'sports', language: 'en', enabled: true },
+  // Health
+  { url: 'https://rss.medicalnewstoday.com/featurednews.xml', name: 'Medical News Today', category: 'health', language: 'en', enabled: true },
+  // Entertainment
+  { url: 'https://variety.com/feed/', name: 'Variety', category: 'entertainment', language: 'en', enabled: true },
+  // Lifestyle
+  { url: 'https://www.huffpost.com/section/lifestyle/feed', name: 'HuffPost Life', category: 'lifestyle', language: 'en', enabled: true },
+  // Travel
+  { url: 'https://www.lonelyplanet.com/news/feed', name: 'Lonely Planet', category: 'travel', language: 'en', enabled: true },
 ];
 
 // Track rotation state in memory (persisted to DB for reliability)
@@ -111,7 +128,8 @@ export async function gatherTopics(config: AgentConfig): Promise<AgentResult<Gat
     const maxArticles = config.maxArticlesPerRun || 5;
     const categories = config.topics || ['news'];
     
-    console.log(`[Gatherer] Starting - Max articles: ${maxArticles}, Categories: ${categories.join(', ')}`);
+    const articleLanguage = config.defaultLanguage || 'de';
+    console.log(`[Gatherer] Starting - Language: ${articleLanguage.toUpperCase()}, Max articles: ${maxArticles}, Categories: ${categories.join(', ')}`);
     
     // Get rotation offset to determine which categories get articles this run
     const rotationOffset = await getRotationOffset(brandId);
@@ -186,14 +204,20 @@ export async function gatherTopics(config: AgentConfig): Promise<AgentResult<Gat
   }
 }
 
-// Try to get RSS content for a specific category
+// Try to get RSS content for a specific category, filtered by selected language
 async function tryRSSForCategory(category: string, config: AgentConfig): Promise<GatheredTopic['sources']> {
   if (config.useRSSFeeds === false) return [];
   
-  // Get feeds for this category
-  const userFeeds = config.rssFeeds?.filter(f => f.enabled && f.category === category) || [];
-  const defaultFeeds = defaultRSSFeeds.filter(f => f.enabled && f.category === category);
+  const lang = config.defaultLanguage || 'de';
+  
+  // Get feeds for this category, filtered by the selected article language
+  const userFeeds = config.rssFeeds?.filter(f => f.enabled && f.category === category && f.language === lang) || [];
+  const defaultFeeds = defaultRSSFeeds.filter(f => f.enabled && f.category === category && f.language === lang);
   const feeds = userFeeds.length > 0 ? userFeeds : defaultFeeds;
+  
+  if (feeds.length === 0) {
+    console.log(`[Gatherer] No ${lang.toUpperCase()} RSS feeds for category "${category}", will use AI`);
+  }
   
   for (const feed of feeds) {
     try {

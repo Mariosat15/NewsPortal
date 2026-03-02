@@ -418,14 +418,47 @@ interface AgentSettings {
 }
 
 const defaultRSSFeeds: RSSFeed[] = [
+  // ─── GERMAN (de) FEEDS ───────────────────────────────────
+  // News
   { url: 'https://www.tagesschau.de/xml/rss2/', name: 'Tagesschau', category: 'news', language: 'de', enabled: true },
   { url: 'https://www.spiegel.de/schlagzeilen/index.rss', name: 'Spiegel Online', category: 'news', language: 'de', enabled: true },
-  { url: 'https://rss.sueddeutsche.de/rss/Topthemen', name: 'Süddeutsche', category: 'news', language: 'de', enabled: true },
+  { url: 'https://rss.sueddeutsche.de/rss/Topthemen', name: 'Süddeutsche Zeitung', category: 'news', language: 'de', enabled: true },
+  { url: 'https://www.zeit.de/rss/index', name: 'ZEIT Online', category: 'news', language: 'de', enabled: true },
+  // Technology
   { url: 'https://www.heise.de/rss/heise-top-atom.xml', name: 'Heise', category: 'technology', language: 'de', enabled: true },
   { url: 'https://www.golem.de/rss.php', name: 'Golem', category: 'technology', language: 'de', enabled: true },
-  { url: 'https://feeds.bbci.co.uk/news/world/rss.xml', name: 'BBC World', category: 'news', language: 'en', enabled: false },
-  { url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', name: 'NY Times', category: 'news', language: 'en', enabled: false },
-  { url: 'https://feeds.feedburner.com/TechCrunch/', name: 'TechCrunch', category: 'technology', language: 'en', enabled: false },
+  { url: 'https://t3n.de/rss.xml', name: 't3n', category: 'technology', language: 'de', enabled: true },
+  // Finance
+  { url: 'https://www.finanzen.net/rss/news', name: 'Finanzen.net', category: 'finance', language: 'de', enabled: true },
+  { url: 'https://www.handelsblatt.com/contentexport/feed/top', name: 'Handelsblatt', category: 'finance', language: 'de', enabled: true },
+  // Sports
+  { url: 'https://newsfeed.kicker.de/news/aktuell', name: 'Kicker', category: 'sports', language: 'de', enabled: true },
+  { url: 'https://www.sport1.de/rss', name: 'Sport1', category: 'sports', language: 'de', enabled: true },
+  // Health
+  { url: 'https://www.aerzteblatt.de/feed/aerzteblatt.rss', name: 'Ärzteblatt', category: 'health', language: 'de', enabled: true },
+  // Entertainment
+  { url: 'https://www.stern.de/rss/unterhaltung/', name: 'Stern Unterhaltung', category: 'entertainment', language: 'de', enabled: true },
+  // Lifestyle
+  { url: 'https://www.brigitte.de/feed.rss', name: 'Brigitte', category: 'lifestyle', language: 'de', enabled: true },
+
+  // ─── ENGLISH (en) FEEDS ──────────────────────────────────
+  // News
+  { url: 'https://feeds.bbci.co.uk/news/world/rss.xml', name: 'BBC World', category: 'news', language: 'en', enabled: true },
+  { url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', name: 'NY Times World', category: 'news', language: 'en', enabled: true },
+  { url: 'https://feeds.reuters.com/reuters/topNews', name: 'Reuters', category: 'news', language: 'en', enabled: true },
+  // Technology
+  { url: 'https://feeds.feedburner.com/TechCrunch/', name: 'TechCrunch', category: 'technology', language: 'en', enabled: true },
+  { url: 'https://www.theverge.com/rss/index.xml', name: 'The Verge', category: 'technology', language: 'en', enabled: true },
+  // Finance
+  { url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories', name: 'MarketWatch', category: 'finance', language: 'en', enabled: true },
+  // Sports
+  { url: 'https://www.espn.com/espn/rss/news', name: 'ESPN', category: 'sports', language: 'en', enabled: true },
+  // Health
+  { url: 'https://rss.medicalnewstoday.com/featurednews.xml', name: 'Medical News Today', category: 'health', language: 'en', enabled: true },
+  // Entertainment
+  { url: 'https://variety.com/feed/', name: 'Variety', category: 'entertainment', language: 'en', enabled: true },
+  // Lifestyle
+  { url: 'https://www.huffpost.com/section/lifestyle/feed', name: 'HuffPost Life', category: 'lifestyle', language: 'en', enabled: true },
 ];
 
 const defaultAIModel: AIModelConfig = {
@@ -821,6 +854,78 @@ export function AgentConfig() {
       {/* Run Pipeline Tab */}
       {activeTab === 'run' && (
         <div className="grid gap-6 lg:grid-cols-2">
+          {/* Article Language Selection - Prominent Card */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Globe className="h-5 w-5" />
+                Article Language
+              </CardTitle>
+              <CardDescription>
+                Select the language for generated articles. The AI will use RSS feeds and write articles in the chosen language.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                <div
+                  onClick={() => {
+                    setSettings({ ...settings, defaultLanguage: 'de' });
+                  }}
+                  className={`p-5 border-2 rounded-xl cursor-pointer transition-all ${
+                    settings.defaultLanguage === 'de'
+                      ? 'border-blue-500 bg-blue-50 shadow-md'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-3xl">🇩🇪</span>
+                    <div>
+                      <p className="font-bold text-lg">Deutsch</p>
+                      <p className="text-sm text-muted-foreground">German articles</p>
+                    </div>
+                    {settings.defaultLanguage === 'de' && (
+                      <CheckCircle className="h-6 w-6 text-blue-500 ml-auto" />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {settings.rssFeeds.filter(f => f.enabled && f.language === 'de').length} German RSS feeds active
+                  </p>
+                </div>
+                <div
+                  onClick={() => {
+                    setSettings({ ...settings, defaultLanguage: 'en' });
+                  }}
+                  className={`p-5 border-2 rounded-xl cursor-pointer transition-all ${
+                    settings.defaultLanguage === 'en'
+                      ? 'border-blue-500 bg-blue-50 shadow-md'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-3xl">🇬🇧</span>
+                    <div>
+                      <p className="font-bold text-lg">English</p>
+                      <p className="text-sm text-muted-foreground">English articles</p>
+                    </div>
+                    {settings.defaultLanguage === 'en' && (
+                      <CheckCircle className="h-6 w-6 text-blue-500 ml-auto" />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {settings.rssFeeds.filter(f => f.enabled && f.language === 'en').length} English RSS feeds active
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-800">
+                  <strong>Note:</strong> When running the pipeline, only <strong>{settings.defaultLanguage === 'de' ? 'German' : 'English'}</strong> RSS feeds will be used.
+                  The AI will also generate articles in <strong>{settings.defaultLanguage === 'de' ? 'German' : 'English'}</strong>.
+                  You can manage individual feeds in the <strong>RSS Feeds</strong> tab.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -835,8 +940,9 @@ export function AgentConfig() {
               <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <p className="font-medium text-blue-800 mb-2">Current Configuration:</p>
                 <ul className="text-sm text-blue-700 space-y-1">
+                  <li>• Language: {settings.defaultLanguage === 'de' ? '🇩🇪 German' : '🇬🇧 English'}</li>
                   <li>• Topics: {settings.topics.length} configured</li>
-                  <li>• RSS Feeds: {settings.rssFeeds.filter(f => f.enabled).length} enabled</li>
+                  <li>• RSS Feeds: {settings.rssFeeds.filter(f => f.enabled && f.language === settings.defaultLanguage).length} {settings.defaultLanguage.toUpperCase()} feeds active</li>
                   <li>• AI Model: {settings.aiModel.model}</li>
                   <li>• Articles per run: {settings.maxArticlesPerRun}</li>
                   <li>• Types: {settings.articleStyle.types?.join(', ') || 'news'}</li>
@@ -942,10 +1048,23 @@ export function AgentConfig() {
                 RSS Feed Sources
               </CardTitle>
               <CardDescription>
-                Configure news sources for article generation
+                Configure news sources for article generation. Only feeds matching the selected article language (<strong>{settings.defaultLanguage === 'de' ? '🇩🇪 German' : '🇬🇧 English'}</strong>) will be used during generation.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Language info banner */}
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Active language:</strong> {settings.defaultLanguage === 'de' ? '🇩🇪 German' : '🇬🇧 English'} — 
+                  The pipeline will only use <strong>{settings.defaultLanguage.toUpperCase()}</strong> feeds below.
+                  Change language in the <strong>Run Pipeline</strong> tab.
+                </p>
+                <div className="flex gap-4 mt-2 text-xs text-blue-700">
+                  <span>🇩🇪 German feeds: {settings.rssFeeds.filter(f => f.enabled && f.language === 'de').length}</span>
+                  <span>🇬🇧 English feeds: {settings.rssFeeds.filter(f => f.enabled && f.language === 'en').length}</span>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                 <div>
                   <p className="font-medium">Use RSS Feeds</p>
@@ -964,8 +1083,13 @@ export function AgentConfig() {
 
               {/* Feed List */}
               <div className="space-y-2">
-                {settings.rssFeeds.map((feed) => (
-                  <div key={feed.url} className={`flex items-center justify-between p-3 border rounded-lg ${feed.enabled ? 'bg-white' : 'bg-gray-50 opacity-60'}`}>
+                {settings.rssFeeds.map((feed) => {
+                  const matchesLanguage = feed.language === settings.defaultLanguage;
+                  return (
+                  <div key={feed.url} className={`flex items-center justify-between p-3 border rounded-lg ${
+                    !feed.enabled ? 'bg-gray-50 opacity-60' : 
+                    matchesLanguage ? 'bg-white' : 'bg-gray-50 opacity-50'
+                  }`}>
                     <div className="flex items-center gap-3">
                       <input 
                         type="checkbox" 
@@ -980,13 +1104,19 @@ export function AgentConfig() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{feed.category || 'news'}</Badge>
-                      <Badge variant="secondary">{(feed.language || 'de').toUpperCase()}</Badge>
+                      <Badge variant={matchesLanguage ? 'default' : 'secondary'}>
+                        {feed.language === 'de' ? '🇩🇪' : '🇬🇧'} {(feed.language || 'de').toUpperCase()}
+                      </Badge>
+                      {feed.enabled && !matchesLanguage && (
+                        <span className="text-xs text-amber-600" title="This feed won't be used because it doesn't match the selected article language">⚠️</span>
+                      )}
                       <Button variant="ghost" size="icon" onClick={() => handleRemoveFeed(feed.url)}>
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Add New Feed */}
@@ -1658,6 +1788,10 @@ export function AgentConfig() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
+                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <p className="text-2xl font-bold">{settings.defaultLanguage === 'de' ? '🇩🇪' : '🇬🇧'} {settings.defaultLanguage === 'de' ? 'German' : 'English'}</p>
+                    <p className="text-sm text-muted-foreground">Article language</p>
+                  </div>
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-2xl font-bold">{settings.maxArticlesPerRun}</p>
                     <p className="text-sm text-muted-foreground">Total articles</p>
@@ -1665,6 +1799,10 @@ export function AgentConfig() {
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-2xl font-bold">{settings.topics.length}</p>
                     <p className="text-sm text-muted-foreground">Active categories</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <p className="text-2xl font-bold">{settings.rssFeeds.filter(f => f.enabled && f.language === settings.defaultLanguage).length}</p>
+                    <p className="text-sm text-muted-foreground">{settings.defaultLanguage.toUpperCase()} RSS feeds active</p>
                   </div>
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-2xl font-bold">{settings.articleStyle.types?.length || 1}</p>

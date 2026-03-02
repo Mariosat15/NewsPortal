@@ -180,6 +180,7 @@ export async function runAgentPipeline(brandId: string, customSettings?: Partial
     }
 
     console.log(`[Pipeline] Starting for brand: ${brandId}`);
+    console.log(`[Pipeline] Article Language: ${agentConfig.defaultLanguage?.toUpperCase() || 'DE'}`);
     console.log(`[Pipeline] Topics: ${agentConfig.topics.join(', ')}`);
     console.log(`[Pipeline] Max articles: ${agentConfig.maxArticlesPerRun}`);
     console.log(`[Pipeline] AI Model: ${agentConfig.aiModel?.model || 'gpt-4o'}`);
