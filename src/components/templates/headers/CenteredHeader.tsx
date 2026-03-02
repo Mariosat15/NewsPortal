@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Menu, X, Search, ChevronDown } from 'lucide-react';
 import { HeaderProps } from '@/lib/templates/types';
 import { LanguageSwitcher } from '../LanguageSwitcher';
+import { translateCategory } from '@/lib/templates/i18n-helpers';
 
 export function CenteredHeader({ template, categories, locale, brandName, logoUrl }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -81,7 +82,7 @@ export function CenteredHeader({ template, categories, locale, brandName, logoUr
                   fontFamily: template.typography.bodyFont,
                 }}
               >
-                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
                 <span 
                   className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-0.5 transition-all group-hover:w-full"
                   style={{ backgroundColor: colors.accent }}
@@ -111,7 +112,7 @@ export function CenteredHeader({ template, categories, locale, brandName, logoUr
                         className="block px-4 py-2 text-sm uppercase tracking-wider transition-colors hover:bg-black/5"
                         style={{ color: colors.text }}
                       >
-                        {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                        {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
                       </Link>
                     ))}
                   </div>
@@ -146,7 +147,7 @@ export function CenteredHeader({ template, categories, locale, brandName, logoUr
                 style={{ color: colors.text }}
                 onClick={() => setMobileMenuOpen(false)}
               >
-                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
               </Link>
             ))}
             <div className="px-6 py-3 border-t" style={{ borderColor: colors.border }}>

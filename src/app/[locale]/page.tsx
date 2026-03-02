@@ -199,7 +199,11 @@ export default async function HomePage({
       image: a.thumbnail,
       thumbnail: a.thumbnail,
       category: a.category, // Keep original slug for category grouping
-      date: new Date(a.publishDate).toLocaleDateString(locale === 'de' ? 'de-DE' : 'en-US'),
+      // Reason: guard against undefined/malformed publishDate to prevent "Invalid Date"
+      date: (() => {
+        const d = new Date(a.publishDate);
+        return isNaN(d.getTime()) ? '' : d.toLocaleDateString(locale === 'de' ? 'de-DE' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      })(),
       publishDate: a.publishDate,
     }));
 

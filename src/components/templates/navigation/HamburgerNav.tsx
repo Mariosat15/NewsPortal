@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Menu, X, Home, ChevronRight } from 'lucide-react';
 import { NavigationProps } from '@/lib/templates/types';
+import { translateCategory } from '@/lib/templates/i18n-helpers';
 
 export function HamburgerNav({ template, categories, locale, currentCategory }: NavigationProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -111,7 +112,7 @@ export function HamburgerNav({ template, categories, locale, currentCategory }: 
                 style={{ backgroundColor: cat.color || colors.accent }}
               />
               <span className="text-sm font-medium flex-1">
-                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
               </span>
               <ChevronRight className="w-4 h-4 opacity-50" />
             </Link>

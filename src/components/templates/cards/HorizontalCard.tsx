@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Clock, User, ArrowRight } from 'lucide-react';
 import { ArticleCardProps } from '@/lib/templates/types';
+import { translateCategory } from '@/lib/templates/i18n-helpers';
 
 export function HorizontalCard({ article, template, locale, showCategory = true, showAuthor = true, showReadingTime = true }: ArticleCardProps) {
   const colors = template.activeColors;
@@ -62,7 +63,7 @@ export function HorizontalCard({ article, template, locale, showCategory = true,
             className="text-xs font-semibold uppercase tracking-wider mb-2"
             style={{ color: colors.accent }}
           >
-            {article.category}
+            {translateCategory(article.category, locale)}
           </span>
         )}
 

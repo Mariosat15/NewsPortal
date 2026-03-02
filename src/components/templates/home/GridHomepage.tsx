@@ -11,6 +11,7 @@ import {
   getColorWithOpacity,
 } from '@/lib/templates/utils';
 import { Grid, List, ChevronDown } from 'lucide-react';
+import { translateCategory, formatArticleDate } from '@/lib/templates/i18n-helpers';
 
 export function GridHomepage({ template, articles, categories, locale }: HomeLayoutProps) {
   const colors = template.activeColors;
@@ -26,11 +27,14 @@ export function GridHomepage({ template, articles, categories, locale }: HomeLay
     ? articles 
     : articles.filter(a => a.category === activeCategory);
 
-  // Get category display name
+  // Reason: DB categories may lack displayName for a locale; fall back to static i18n map
   const getCategoryName = (slug: string) => {
     const category = categories.find(c => c.slug === slug);
-    return category?.displayName?.[locale as 'de' | 'en'] || category?.displayName?.de || slug;
+    return category?.displayName?.[locale as 'de' | 'en'] || category?.displayName?.de || translateCategory(slug, locale);
   };
+
+  const safeDate = (article: typeof articles[0]) =>
+    formatArticleDate(article.publishDate, article.date, locale);
 
   // Featured articles (first 2)
   const featuredArticles = filteredArticles.slice(0, 2);
@@ -83,7 +87,7 @@ export function GridHomepage({ template, articles, categories, locale }: HomeLay
                     border: activeCategory === cat.slug ? 'none' : `1px solid ${colors.border}`,
                   }}
                 >
-                  {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                  {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
                 </button>
               ))}
             </div>
@@ -182,7 +186,7 @@ export function GridHomepage({ template, articles, categories, locale }: HomeLay
                   <p className="text-white/70 text-sm line-clamp-2 mb-3 max-w-lg">
                     {article.excerpt || article.teaser}
                   </p>
-                  <p className="text-white/50 text-xs">{article.date}</p>
+                  <p className="text-white/50 text-xs">{safeDate(article)}</p>
                 </div>
               </Link>
             ))}
@@ -254,7 +258,7 @@ export function GridHomepage({ template, articles, categories, locale }: HomeLay
                     className="text-xs"
                     style={{ color: colors.textMuted }}
                   >
-                    {article.date}
+                    {safeDate(article)}
                   </p>
                 </div>
               </Link>
@@ -319,7 +323,7 @@ export function GridHomepage({ template, articles, categories, locale }: HomeLay
                     className="text-xs mt-2"
                     style={{ color: colors.textMuted }}
                   >
-                    {article.date}
+                    {safeDate(article)}
                   </p>
                 </div>
               </Link>

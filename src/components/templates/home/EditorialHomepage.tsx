@@ -10,6 +10,7 @@ import {
   getShadow,
   getColorWithOpacity,
 } from '@/lib/templates/utils';
+import { translateCategory } from '@/lib/templates/i18n-helpers';
 
 export function EditorialHomepage({ template, articles, categories, locale }: HomeLayoutProps) {
   const colors = template.activeColors;
@@ -24,17 +25,24 @@ export function EditorialHomepage({ template, articles, categories, locale }: Ho
   const latestArticles = articles.slice(9, 21); // 12 latest articles
   const moreArticles = articles.slice(21, 33); // 12 more articles
 
-  // Get category display name
+  // Reason: DB categories may lack displayName for a locale; fall back to static i18n map
   const getCategoryName = (slug: string) => {
     const category = categories.find(c => c.slug === slug);
-    return category?.displayName?.[locale as 'de' | 'en'] || category?.displayName?.de || slug;
+    return category?.displayName?.[locale as 'de' | 'en'] || category?.displayName?.de || translateCategory(slug, locale);
   };
 
-  // Format date in editorial style
-  const formatDate = (dateStr?: string) => {
+  // Format date in editorial style — safely handles both ISO and pre-formatted strings
+  const formatDate = (publishDateISO?: string, fallbackDate?: string) => {
+    if (!publishDateISO && !fallbackDate) return '';
+    // Prefer ISO publishDate for reliable parsing
+    const dateStr = publishDateISO || fallbackDate;
     if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString(locale === 'de' ? 'de-DE' : 'en-US', {
+    const parsed = new Date(dateStr);
+    if (isNaN(parsed.getTime())) {
+      // If parsing fails (e.g. pre-formatted locale string), return as-is
+      return fallbackDate || dateStr;
+    }
+    return parsed.toLocaleDateString(locale === 'de' ? 'de-DE' : 'en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -74,7 +82,7 @@ export function EditorialHomepage({ template, articles, categories, locale }: Ho
                 className="text-xs font-medium uppercase tracking-wider hover:underline hidden lg:block"
                 style={{ color: colors.textMuted }}
               >
-                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
               </Link>
             ))}
           </div>
@@ -157,7 +165,7 @@ export function EditorialHomepage({ template, articles, categories, locale }: Ho
                       {locale === 'de' ? 'Von' : 'By'} {leadArticle.author}
                     </span>
                   )}
-                  <span>{formatDate(leadArticle.date || leadArticle.publishDate)}</span>
+                  <span>{formatDate(leadArticle.publishDate, leadArticle.date)}</span>
                   {leadArticle.readingTime && (
                     <span className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
@@ -226,7 +234,7 @@ export function EditorialHomepage({ template, articles, categories, locale }: Ho
                         className="text-xs mt-2"
                         style={{ color: colors.textMuted }}
                       >
-                        {formatDate(article.date || article.publishDate)}
+                        {formatDate(article.publishDate, article.date)}
                       </p>
                     </article>
                   ))}
@@ -353,7 +361,7 @@ export function EditorialHomepage({ template, articles, categories, locale }: Ho
                         className="text-[11px] mt-1.5"
                         style={{ color: colors.textMuted }}
                       >
-                        {formatDate(article.date || article.publishDate)}
+                        {formatDate(article.publishDate, article.date)}
                       </p>
                     </div>
                   </Link>
@@ -522,7 +530,7 @@ export function EditorialHomepage({ template, articles, categories, locale }: Ho
                       e.currentTarget.style.borderColor = colors.border;
                     }}
                   >
-                    {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                    {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
                   </Link>
                 ))}
               </div>
@@ -584,7 +592,7 @@ export function EditorialHomepage({ template, articles, categories, locale }: Ho
                       className="text-[11px] mt-1.5"
                       style={{ color: colors.textMuted }}
                     >
-                      {formatDate(article.date || article.publishDate)}
+                      {formatDate(article.publishDate, article.date)}
                     </p>
                   </Link>
                 </article>

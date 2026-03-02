@@ -317,6 +317,7 @@ export default async function CategoryPage({
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
     return date.toLocaleDateString(locale === 'de' ? 'de-DE' : 'en-US', {
       month: 'short',
       day: 'numeric',

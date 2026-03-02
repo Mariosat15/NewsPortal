@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Menu, X, Search, ChevronDown } from 'lucide-react';
 import { HeaderProps } from '@/lib/templates/types';
 import { LanguageSwitcher } from '../LanguageSwitcher';
+import { translateCategory } from '@/lib/templates/i18n-helpers';
 
 export function StandardHeader({ template, categories, locale, brandName, logoUrl }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -60,7 +61,7 @@ export function StandardHeader({ template, categories, locale, brandName, logoUr
                 fontFamily: template.typography.bodyFont,
               }}
             >
-              {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+              {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
             </Link>
           ))}
           {moreCategories.length > 0 && (
@@ -86,7 +87,7 @@ export function StandardHeader({ template, categories, locale, brandName, logoUr
                       className="block px-4 py-2 text-sm transition-colors hover:bg-black/5"
                       style={{ color: colors.text }}
                     >
-                      {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                      {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
                     </Link>
                   ))}
                 </div>
@@ -157,7 +158,7 @@ export function StandardHeader({ template, categories, locale, brandName, logoUr
                 style={{ color: colors.text }}
                 onClick={() => setMobileMenuOpen(false)}
               >
-                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
               </Link>
             ))}
             {/* Mobile Language Switcher */}

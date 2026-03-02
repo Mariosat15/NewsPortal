@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Menu, X, Search, ChevronDown } from 'lucide-react';
 import { HeaderProps } from '@/lib/templates/types';
 import { LanguageSwitcher } from '../LanguageSwitcher';
+import { translateCategory } from '@/lib/templates/i18n-helpers';
 
 export function SplitHeader({ template, categories, locale, brandName, logoUrl }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -45,7 +46,7 @@ export function SplitHeader({ template, categories, locale, brandName, logoUrl }
                   fontFamily: template.typography.bodyFont,
                 }}
               >
-                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
               </Link>
             ))}
           </nav>
@@ -83,7 +84,7 @@ export function SplitHeader({ template, categories, locale, brandName, logoUrl }
                   fontFamily: template.typography.bodyFont,
                 }}
               >
-                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
               </Link>
             ))}
             {moreCategories.length > 0 && (
@@ -109,7 +110,7 @@ export function SplitHeader({ template, categories, locale, brandName, logoUrl }
                         className="block px-4 py-2 text-sm transition-colors hover:bg-black/5"
                         style={{ color: colors.text }}
                       >
-                        {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                        {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
                       </Link>
                     ))}
                   </div>
@@ -151,7 +152,7 @@ export function SplitHeader({ template, categories, locale, brandName, logoUrl }
                 style={{ color: colors.text }}
                 onClick={() => setMobileMenuOpen(false)}
               >
-                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
               </Link>
             ))}
             <div className="px-4 py-3 border-t" style={{ borderColor: colors.border }}>

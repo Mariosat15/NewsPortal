@@ -10,6 +10,7 @@ import {
   getColorWithOpacity,
 } from '@/lib/templates/utils';
 import { Flame, Clock, ChevronDown, Eye } from 'lucide-react';
+import { translateCategory, formatArticleDate } from '@/lib/templates/i18n-helpers';
 
 export function MasonryHomepage({ template, articles, categories, locale }: HomeLayoutProps) {
   const colors = template.activeColors;
@@ -28,10 +29,10 @@ export function MasonryHomepage({ template, articles, categories, locale }: Home
   const col3 = masonryArticles.filter((_, i) => i % 4 === 2);
   const col4 = masonryArticles.filter((_, i) => i % 4 === 3);
 
-  // Get category display name
+  // Reason: DB categories may lack displayName for a locale; fall back to static i18n map
   const getCategoryName = (slug: string) => {
     const category = categories.find(c => c.slug === slug);
-    return category?.displayName?.[locale as 'de' | 'en'] || category?.displayName?.de || slug;
+    return category?.displayName?.[locale as 'de' | 'en'] || category?.displayName?.de || translateCategory(slug, locale);
   };
 
   // Varied aspect ratios for visual interest
@@ -96,7 +97,7 @@ export function MasonryHomepage({ template, articles, categories, locale }: Home
                 )}
                 <span className="flex items-center gap-1.5">
                   <Clock className="w-4 h-4" />
-                  {heroArticle.date}
+                  {formatArticleDate(heroArticle.publishDate, heroArticle.date, locale)}
                 </span>
                 {heroArticle.readingTime && (
                   <span className="flex items-center gap-1.5">
@@ -181,7 +182,7 @@ export function MasonryHomepage({ template, articles, categories, locale }: Home
                     {article.title}
                   </h3>
                   {idx === 0 && (
-                    <p className="text-white/60 text-sm mt-2">{article.date}</p>
+                    <p className="text-white/60 text-sm mt-2">{formatArticleDate(article.publishDate, article.date, locale)}</p>
                   )}
                 </div>
                 
@@ -411,7 +412,7 @@ function MasonryCard({
         >
           {article.title}
         </h3>
-        <p className="text-white/60 text-[11px] mt-2">{article.date}</p>
+        <p className="text-white/60 text-[11px] mt-2">{formatArticleDate(article.publishDate, article.date, locale)}</p>
       </div>
     </Link>
   );

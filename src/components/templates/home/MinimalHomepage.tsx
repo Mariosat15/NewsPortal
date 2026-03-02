@@ -9,6 +9,7 @@ import {
   getBorderRadius,
   getColorWithOpacity,
 } from '@/lib/templates/utils';
+import { translateCategory, formatArticleDate } from '@/lib/templates/i18n-helpers';
 
 export function MinimalHomepage({ template, articles, categories, locale }: HomeLayoutProps) {
   const colors = template.activeColors;
@@ -19,11 +20,15 @@ export function MinimalHomepage({ template, articles, categories, locale }: Home
   const secondaryFeatured = articles.slice(1, 4); // 3 secondary
   const remainingArticles = articles.slice(4, 20); // 16 more
 
-  // Get category display name
+  // Reason: DB categories may lack displayName for a locale; fall back to static i18n map
   const getCategoryName = (slug: string) => {
     const category = categories.find(c => c.slug === slug);
-    return category?.displayName?.[locale as 'de' | 'en'] || category?.displayName?.de || slug;
+    return category?.displayName?.[locale as 'de' | 'en'] || category?.displayName?.de || translateCategory(slug, locale);
   };
+
+  // Reason: article.date may be empty or "Invalid Date" if publishDate was malformed
+  const safeDate = (article: typeof articles[0]) =>
+    formatArticleDate(article.publishDate, article.date, locale);
 
   return (
     <div style={{ backgroundColor: colors.background }}>
@@ -100,7 +105,7 @@ export function MinimalHomepage({ template, articles, categories, locale }: Home
                 e.currentTarget.style.borderColor = colors.border;
               }}
             >
-              {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+              {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
             </Link>
           ))}
         </div>
@@ -175,7 +180,7 @@ export function MinimalHomepage({ template, articles, categories, locale }: Home
                     <span className="font-medium">{featuredArticle.author}</span>
                   </span>
                 )}
-                {featuredArticle.date && <span>{featuredArticle.date}</span>}
+                {safeDate(featuredArticle) && <span>{safeDate(featuredArticle)}</span>}
                 {featuredArticle.readingTime && (
                   <span className="flex items-center gap-1">
                     <Clock className="w-4 h-4" />
@@ -236,7 +241,7 @@ export function MinimalHomepage({ template, articles, categories, locale }: Home
                   className="text-xs mt-2"
                   style={{ color: colors.textMuted }}
                 >
-                  {article.date}
+                  {safeDate(article)}
                 </p>
               </Link>
             ))}
@@ -278,14 +283,14 @@ export function MinimalHomepage({ template, articles, categories, locale }: Home
                         {getCategoryName(article.category)}
                       </span>
                     )}
-                    {article.date && (
+                    {safeDate(article) && (
                       <>
                         <span style={{ color: colors.border }}>·</span>
                         <span 
                           className="text-[11px]"
                           style={{ color: colors.textMuted }}
                         >
-                          {article.date}
+                          {safeDate(article)}
                         </span>
                       </>
                     )}

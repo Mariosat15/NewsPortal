@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Clock } from 'lucide-react';
 import { ArticleCardProps } from '@/lib/templates/types';
+import { translateCategory } from '@/lib/templates/i18n-helpers';
 
 export function MinimalCard({ article, template, locale, showCategory = true, showReadingTime = true }: ArticleCardProps) {
   const colors = template.activeColors;
@@ -22,7 +23,7 @@ export function MinimalCard({ article, template, locale, showCategory = true, sh
               className="font-semibold uppercase tracking-wider"
               style={{ color: colors.accent }}
             >
-              {article.category}
+              {translateCategory(article.category, locale)}
             </span>
             <span style={{ color: colors.border }}>•</span>
           </>

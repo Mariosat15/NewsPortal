@@ -11,6 +11,7 @@ import {
   getColorWithOpacity,
 } from '@/lib/templates/utils';
 import { Clock, TrendingUp, ChevronRight, Mail, Flame, Eye } from 'lucide-react';
+import { translateCategory, formatArticleDate } from '@/lib/templates/i18n-helpers';
 
 export function MagazineLayout({ template, articles, categories, locale }: HomeLayoutProps) {
   const colors = template.activeColors;
@@ -34,10 +35,10 @@ export function MagazineLayout({ template, articles, categories, locale }: HomeL
     articlesByCategory[cat].push(article);
   });
 
-  // Get category display name
+  // Reason: DB categories may lack displayName for a locale; fall back to static i18n map
   const getCategoryName = (slug: string) => {
     const category = categories.find(c => c.slug === slug);
-    return category?.displayName?.[locale as 'de' | 'en'] || category?.displayName?.de || slug;
+    return category?.displayName?.[locale as 'de' | 'en'] || category?.displayName?.de || translateCategory(slug, locale);
   };
 
   return (
@@ -131,7 +132,7 @@ export function MagazineLayout({ template, articles, categories, locale }: HomeL
                     <div className="flex items-center gap-4 text-white/60 text-sm">
                       <span className="flex items-center gap-1.5">
                         <Clock className="w-4 h-4" />
-                        {heroArticle.date}
+                        {formatArticleDate(heroArticle.publishDate, heroArticle.date, locale)}
                       </span>
                       {heroArticle.readingTime && (
                         <span className="flex items-center gap-1.5">
@@ -186,7 +187,7 @@ export function MagazineLayout({ template, articles, categories, locale }: HomeL
                         >
                           {article.title}
                         </h3>
-                        <p className="text-white/60 text-[10px] mt-1.5">{article.date}</p>
+                        <p className="text-white/60 text-[10px] mt-1.5">{formatArticleDate(article.publishDate, article.date, locale)}</p>
                       </div>
                     </Link>
                   ))}
@@ -247,7 +248,7 @@ export function MagazineLayout({ template, articles, categories, locale }: HomeL
                         {article.title}
                       </h4>
                       <p className="text-[11px] mt-1" style={{ color: colors.textMuted }}>
-                        {article.date}
+                        {formatArticleDate(article.publishDate, article.date, locale)}
                       </p>
                     </div>
                   </Link>
@@ -325,7 +326,7 @@ export function MagazineLayout({ template, articles, categories, locale }: HomeL
                       className="flex items-center gap-3 text-xs mt-2"
                       style={{ color: colors.textMuted }}
                     >
-                      <span>{article.date}</span>
+                      <span>{formatArticleDate(article.publishDate, article.date, locale)}</span>
                       {article.readingTime && <span>{article.readingTime} min read</span>}
                     </div>
                   </div>
@@ -406,7 +407,7 @@ export function MagazineLayout({ template, articles, categories, locale }: HomeL
                         className="text-sm font-medium"
                         style={{ color: colors.text }}
                       >
-                        {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                        {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
                       </span>
                       <ChevronRight className="w-4 h-4" style={{ color: colors.textMuted }} />
                     </Link>
@@ -520,7 +521,7 @@ export function MagazineLayout({ template, articles, categories, locale }: HomeL
                           {article.title}
                         </h4>
                         <p className="text-xs mt-1.5" style={{ color: colors.textMuted }}>
-                          {article.date}
+                          {formatArticleDate(article.publishDate, article.date, locale)}
                         </p>
                       </Link>
                     ))}

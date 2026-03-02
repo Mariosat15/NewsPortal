@@ -10,6 +10,7 @@ import {
   getColorWithOpacity,
 } from '@/lib/templates/utils';
 import { Sparkles, ArrowRight, Tag, Bell, ChevronRight, TrendingUp, Clock } from 'lucide-react';
+import { translateCategory, formatArticleDate } from '@/lib/templates/i18n-helpers';
 
 export function CardsHomepage({ template, articles, categories, locale }: HomeLayoutProps) {
   const colors = template.activeColors;
@@ -25,10 +26,10 @@ export function CardsHomepage({ template, articles, categories, locale }: HomeLa
   const trendingArticles = articles.slice(0, 8); // Top 8 for trending
   const moreArticles = articles.slice(22, 38); // 16 more articles
 
-  // Get category display name
+  // Reason: DB categories may lack displayName for a locale; fall back to static i18n map
   const getCategoryName = (slug: string) => {
     const category = categories.find(c => c.slug === slug);
-    return category?.displayName?.[locale as 'de' | 'en'] || category?.displayName?.de || slug;
+    return category?.displayName?.[locale as 'de' | 'en'] || category?.displayName?.de || translateCategory(slug, locale);
   };
 
   return (
@@ -92,7 +93,7 @@ export function CardsHomepage({ template, articles, categories, locale }: HomeLa
                       {heroArticle.author && <span>{heroArticle.author}</span>}
                       <span className="flex items-center gap-1">
                         <Clock className="w-4 h-4" />
-                        {heroArticle.date}
+                        {formatArticleDate(heroArticle.publishDate, heroArticle.date, locale)}
                       </span>
                     </div>
                   </div>
@@ -241,7 +242,7 @@ export function CardsHomepage({ template, articles, categories, locale }: HomeLa
                     className="text-[10px] mt-1.5"
                     style={{ color: colors.textMuted }}
                   >
-                    {article.date}
+                    {formatArticleDate(article.publishDate, article.date, locale)}
                   </p>
                 </div>
               </Link>
@@ -328,7 +329,7 @@ export function CardsHomepage({ template, articles, categories, locale }: HomeLa
                       className="text-[11px] mt-2"
                       style={{ color: colors.textMuted }}
                     >
-                      {article.date}
+                      {formatArticleDate(article.publishDate, article.date, locale)}
                     </p>
                   </div>
                 </Link>
@@ -381,7 +382,7 @@ export function CardsHomepage({ template, articles, categories, locale }: HomeLa
                         {article.title}
                       </h4>
                       <p className="text-[10px] mt-1" style={{ color: colors.textMuted }}>
-                        {article.date}
+                        {formatArticleDate(article.publishDate, article.date, locale)}
                       </p>
                     </div>
                   </Link>
@@ -432,7 +433,7 @@ export function CardsHomepage({ template, articles, categories, locale }: HomeLa
                         style={{ backgroundColor: cat.color || colors.accent }}
                       />
                       <span className="text-sm font-medium">
-                        {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                        {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
                       </span>
                     </div>
                     <ChevronRight className="w-4 h-4" style={{ color: colors.textMuted }} />
@@ -558,7 +559,7 @@ export function CardsHomepage({ template, articles, categories, locale }: HomeLa
                       className="text-[11px] mt-2"
                       style={{ color: colors.textMuted }}
                     >
-                      {article.date}
+                      {formatArticleDate(article.publishDate, article.date, locale)}
                     </p>
                   </div>
                 </Link>

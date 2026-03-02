@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { NavigationProps } from '@/lib/templates/types';
+import { translateCategory } from '@/lib/templates/i18n-helpers';
 
 export function TabbedNav({ template, categories, locale, currentCategory }: NavigationProps) {
   const colors = template.activeColors;
@@ -60,7 +61,7 @@ export function TabbedNav({ template, categories, locale, currentCategory }: Nav
               onMouseEnter={() => setHoveredTab(cat.slug)}
               onMouseLeave={() => setHoveredTab(null)}
             >
-              {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+              {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
               
               {/* Active/Hover indicator */}
               <span 

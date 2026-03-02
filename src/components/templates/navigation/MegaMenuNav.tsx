@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { NavigationProps } from '@/lib/templates/types';
+import { translateCategory } from '@/lib/templates/i18n-helpers';
 
 export function MegaMenuNav({ template, categories, locale, currentCategory }: NavigationProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
@@ -41,7 +42,7 @@ export function MegaMenuNav({ template, categories, locale, currentCategory }: N
                 fontFamily: template.typography.bodyFont,
               }}
             >
-              {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+              {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
               {cat.aliases && cat.aliases.length > 0 && (
                 <ChevronDown className="w-3 h-3" />
               )}
@@ -108,7 +109,7 @@ export function MegaMenuNav({ template, categories, locale, currentCategory }: N
                       color: currentCategory === cat.slug ? colors.accent : colors.text,
                     }}
                   >
-                    {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                    {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
                   </Link>
                 ))}
               </div>

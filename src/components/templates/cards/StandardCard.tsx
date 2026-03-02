@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Clock, User } from 'lucide-react';
 import { ArticleCardProps } from '@/lib/templates/types';
+import { translateCategory, formatArticleDate } from '@/lib/templates/i18n-helpers';
 
 export function StandardCard({ article, template, locale, showCategory = true, showAuthor = true, showReadingTime = true }: ArticleCardProps) {
   const colors = template.activeColors;
@@ -66,7 +67,7 @@ export function StandardCard({ article, template, locale, showCategory = true, s
               borderRadius: template.features.roundedCorners === 'none' ? '0' : '0.25rem',
             }}
           >
-            {article.category}
+            {translateCategory(article.category, locale)}
           </span>
         )}
       </Link>
@@ -118,8 +119,10 @@ export function StandardCard({ article, template, locale, showCategory = true, s
               {article.readingTime}
             </span>
           )}
-          {dateText && (
-            <span className="ml-auto">{dateText}</span>
+          {(article.publishDate || dateText) && (
+            <span className="ml-auto">
+              {formatArticleDate(article.publishDate, dateText, locale)}
+            </span>
           )}
         </div>
       </div>

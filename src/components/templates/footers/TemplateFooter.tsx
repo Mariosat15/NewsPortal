@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { ResolvedTemplate, CategoryConfig } from '@/lib/templates/types';
 import { sanitizeHtml } from '@/lib/utils/sanitize-html';
 import { LanguageSwitcher } from '../LanguageSwitcher';
+import { translateCategory } from '@/lib/templates/i18n-helpers';
 
 interface FooterLegalPage {
   _id: string;
@@ -108,7 +109,7 @@ export function TemplateFooter({ template, categories, locale, brandName }: Temp
                     className="text-sm transition-colors hover:opacity-80"
                     style={{ color: colors.textMuted }}
                   >
-                    {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                    {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
                   </Link>
                 </li>
               ))}
@@ -133,7 +134,7 @@ export function TemplateFooter({ template, categories, locale, brandName }: Temp
                         className="text-sm transition-colors hover:opacity-80"
                         style={{ color: colors.textMuted }}
                       >
-                        {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+                        {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
                       </Link>
                     </li>
                   ))}

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { NavigationProps } from '@/lib/templates/types';
+import { translateCategory } from '@/lib/templates/i18n-helpers';
 
 export function HorizontalNav({ template, categories, locale, currentCategory }: NavigationProps) {
   const colors = template.activeColors;
@@ -47,7 +48,7 @@ export function HorizontalNav({ template, categories, locale, currentCategory }:
               fontFamily: template.typography.bodyFont,
             }}
           >
-            {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || cat.slug}
+            {cat.displayName?.[locale as 'de' | 'en'] || cat.displayName?.de || translateCategory(cat.slug, locale)}
           </Link>
         ))}
       </div>

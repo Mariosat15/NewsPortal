@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Clock } from 'lucide-react';
 import { ArticleCardProps } from '@/lib/templates/types';
+import { translateCategory, formatArticleDate } from '@/lib/templates/i18n-helpers';
 
 export function CompactCard({ article, template, locale, showCategory = true, showReadingTime = true }: ArticleCardProps) {
   const colors = template.activeColors;
@@ -51,7 +52,7 @@ export function CompactCard({ article, template, locale, showCategory = true, sh
             className="text-xs font-semibold uppercase tracking-wider mb-1"
             style={{ color: colors.accent }}
           >
-            {article.category}
+            {translateCategory(article.category, locale)}
           </span>
         )}
 
@@ -78,8 +79,8 @@ export function CompactCard({ article, template, locale, showCategory = true, sh
               {article.readingTime}
             </span>
           )}
-          {dateText && (
-            <span>{dateText}</span>
+          {(article.publishDate || dateText) && (
+            <span>{formatArticleDate(article.publishDate, dateText, locale)}</span>
           )}
         </div>
       </div>

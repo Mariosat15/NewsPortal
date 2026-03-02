@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Clock, User } from 'lucide-react';
 import { CategoryLayoutProps } from '@/lib/templates/types';
+import { translateCategory } from '@/lib/templates/i18n-helpers';
 
 export function TimelineLayout({ template, articles, locale, categoryName }: CategoryLayoutProps) {
   const colors = template.activeColors;
@@ -127,7 +128,7 @@ export function TimelineLayout({ template, articles, locale, categoryName }: Cat
                             className="text-xs font-semibold uppercase tracking-wider"
                             style={{ color: colors.accent }}
                           >
-                            {article.category}
+                            {translateCategory(article.category, locale)}
                           </span>
                         )}
                         

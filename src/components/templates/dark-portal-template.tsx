@@ -39,6 +39,7 @@ export function DarkPortalTemplate({ articles, locale, categoryLabels, primaryCo
   
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
     const now = new Date();
     const diffHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
     if (diffHours < 1) return locale === 'de' ? 'Gerade eben' : 'Just now';

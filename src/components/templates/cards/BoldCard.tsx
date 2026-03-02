@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Clock, User, ArrowUpRight } from 'lucide-react';
 import { ArticleCardProps } from '@/lib/templates/types';
+import { translateCategory } from '@/lib/templates/i18n-helpers';
 
 export function BoldCard({ article, template, locale, showCategory = true, showAuthor = true, showReadingTime = true }: ArticleCardProps) {
   const colors = template.activeColors;
@@ -69,7 +70,7 @@ export function BoldCard({ article, template, locale, showCategory = true, showA
               borderRadius: '2rem',
             }}
           >
-            {article.category}
+            {translateCategory(article.category, locale)}
           </span>
         )}
 
