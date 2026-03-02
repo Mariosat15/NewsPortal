@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { startPayment, initiatePaymentMock, getDimocoConfig, isDimocoConfigured } from '@/lib/dimoco/client';
+import { initiatePaymentMock, getDimocoConfig, isDimocoConfigured, buildDirectPaymentUrl } from '@/lib/dimoco/client';
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getArticleRepository } from '@/lib/db';
 import { getCollection } from '@/lib/db/mongodb';
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
       articleSlug: slug,
       amount: ARTICLE_PRICE_CENTS,
       currency: 'EUR',
-      description: `Artikel: ${article.title.substring(0, 40)}...`,
+      description: `Artikel ${article.title.substring(0, 40)}`,
       returnUrl: returnUrl || `${baseUrl}/de/article/${slug}`,
       brandId,
       baseUrl,
@@ -144,34 +144,57 @@ export async function GET(request: NextRequest) {
       },
     };
 
-    let response;
+    // ────────────────────────────────────────────────────
+    // PRODUCTION: Direct browser redirect to DIMOCO userpayment endpoint
+    // ────────────────────────────────────────────────────
+    // Reason: When the user's browser hits DIMOCO's userpayment URL directly,
+    // the mobile carrier injects MSISDN headers (header enrichment).
+    // This enables automatic phone number detection — no manual entry needed.
+    // Server-to-server POST (startPayment) cannot detect MSISDN because the
+    // request originates from our server, not the user's device on mobile data.
+    // ────────────────────────────────────────────────────
+    if (!shouldUseMock) {
+      console.log(`[Payment] Using DIRECT REDIRECT to DIMOCO ${config.useSandbox ? 'SANDBOX' : 'PRODUCTION'} userpayment endpoint`);
+      console.log('[Payment] This allows carrier header enrichment for automatic MSISDN detection');
 
-    if (shouldUseMock) {
-      console.log('[Payment] Using MOCK payment flow (no credentials configured)');
-      response = await initiatePaymentMock(paymentRequest);
-    } else {
-      console.log(`[Payment] Using REAL DIMOCO ${config.useSandbox ? 'SANDBOX' : 'PRODUCTION'} API`);
-      if (config.useSandbox) {
-        console.log('[Payment] Sandbox mode: MSISDN=436763602302, operator=AT_SANDBOX');
-      }
-      
       try {
-        response = await startPayment(paymentRequest);
-        console.log('[Payment] DIMOCO response:', JSON.stringify(response));
-        
-        if (!response.success) {
-          console.error('[Payment] DIMOCO API Error:', response.error);
-          // In production/sandbox: do NOT fall back to mock - show the real error
+        const { url: directUrl, transactionId } = buildDirectPaymentUrl(paymentRequest);
+
+        // Store pending transaction in database for callback processing
+        try {
+          const transactionsCollection = await getCollection(brandId, 'transactions');
+          await transactionsCollection.insertOne({
+            transactionId,
+            articleId: article._id!.toString(),
+            articleSlug: slug,
+            amount: ARTICLE_PRICE_CENTS,
+            currency: 'EUR',
+            status: 'pending',
+            createdAt: new Date(),
+            metadata: paymentRequest.metadata,
+            returnUrl: paymentRequest.returnUrl,
+          });
+          console.log('[Payment] Stored pending transaction:', transactionId);
+        } catch (e) {
+          console.error('[Payment] Failed to store transaction:', e);
         }
-      } catch (dimocoError) {
-        console.error('[Payment] DIMOCO API exception:', dimocoError);
-        response = {
-          success: false,
-          transactionId: '',
-          error: dimocoError instanceof Error ? dimocoError.message : 'DIMOCO API call failed',
-        };
+
+        console.log('[Payment] Redirecting browser directly to DIMOCO userpayment');
+        return NextResponse.redirect(directUrl);
+      } catch (err) {
+        console.error('[Payment] Failed to build direct redirect URL:', err);
+        return NextResponse.json(
+          { success: false, error: 'Failed to build payment URL' },
+          { status: 500 }
+        );
       }
     }
+
+    // ────────────────────────────────────────────────────
+    // MOCK: Server-to-server flow (local development only)
+    // ────────────────────────────────────────────────────
+    console.log('[Payment] Using MOCK payment flow (no credentials configured)');
+    const response = await initiatePaymentMock(paymentRequest);
 
     if (!response.success || (!response.paymentUrl && !response.redirectUrl)) {
       return NextResponse.json(
@@ -180,7 +203,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Store pending transaction in database for callback processing
+    // Store pending transaction in database
     try {
       const transactionsCollection = await getCollection(brandId, 'transactions');
       await transactionsCollection.insertOne({
@@ -199,10 +222,8 @@ export async function GET(request: NextRequest) {
       console.error('[Payment] Failed to store transaction:', e);
     }
 
-    // Redirect to payment page
+    // Redirect to mock payment page
     let redirectUrl = response.redirectUrl || response.paymentUrl;
-    
-    // DIMOCO returns HTML-encoded ampersands (&amp;) which need to be decoded
     if (redirectUrl) {
       redirectUrl = redirectUrl.replace(/&amp;/g, '&');
     }
@@ -211,7 +232,7 @@ export async function GET(request: NextRequest) {
       ? redirectUrl 
       : new URL(redirectUrl!, baseUrl).toString();
 
-    console.log('[Payment] Redirecting to:', fullRedirectUrl);
+    console.log('[Payment] Redirecting to mock:', fullRedirectUrl);
     return NextResponse.redirect(fullRedirectUrl);
   } catch (error) {
     console.error('Payment initiation error:', error);

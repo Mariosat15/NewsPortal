@@ -1,8 +1,7 @@
 ---
-globs: apps/admin/**
 description: Admin panel application rules for ChartVolt
+alwaysApply: false
 ---
-
 # Admin Panel — ChartVolt
 
 ## 🏗️ Architecture Overview

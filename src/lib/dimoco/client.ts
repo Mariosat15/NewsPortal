@@ -92,9 +92,16 @@ export interface PaymentCallbackData {
 // DIMOCO API URLs (per pay:smart specification v2.1, Section 4.3)
 // Server to server: https://services.dimoco.at/smart/payment
 // Enduser transport: https://services.dimoco.at/smart/userpayment
+//   → The userpayment endpoint is used for DIRECT browser redirects.
+//     When the user's browser hits this URL on mobile data, the carrier
+//     injects MSISDN headers, enabling automatic phone number detection.
+//     The server-to-server (payment) endpoint cannot detect MSISDN because
+//     the request originates from our server, not the user's device.
 // Sandbox uses a different hostname: sandbox-dcb.dimoco.at
 const DIMOCO_SANDBOX_URL = 'https://sandbox-dcb.dimoco.at/sph/payment';
+const DIMOCO_SANDBOX_USERPAYMENT_URL = 'https://sandbox-dcb.dimoco.at/sph/userpayment';
 const DIMOCO_PRODUCTION_URL = 'https://services.dimoco.at/smart/payment';
+const DIMOCO_PRODUCTION_USERPAYMENT_URL = 'https://services.dimoco.at/smart/userpayment';
 
 // Get DIMOCO configuration from environment
 export function getDimocoConfig(): DimocoConfig {
@@ -114,6 +121,22 @@ export function getDimocoConfig(): DimocoConfig {
 }
 
 /**
+ * Get the enduser transport (userpayment) URL for DIMOCO.
+ * 
+ * Reason: When the user's browser is redirected DIRECTLY to this URL,
+ * the mobile carrier can inject MSISDN headers (header enrichment).
+ * This enables automatic phone number detection without manual entry.
+ * The server-to-server "payment" endpoint cannot detect MSISDN because
+ * the HTTP request comes from our server, not the user's device.
+ */
+export function getUserPaymentUrl(): string {
+  const config = getDimocoConfig();
+  return config.useSandbox
+    ? DIMOCO_SANDBOX_USERPAYMENT_URL
+    : DIMOCO_PRODUCTION_USERPAYMENT_URL;
+}
+
+/**
  * Check if DIMOCO is properly configured with real credentials
  */
 export function isDimocoConfigured(): boolean {
@@ -124,6 +147,94 @@ export function isDimocoConfigured(): boolean {
 // ===========================================
 // DIMOCO API Actions
 // ===========================================
+
+/**
+ * Build a direct redirect URL for the DIMOCO userpayment endpoint.
+ * 
+ * This constructs all parameters + digest and returns a URL that the user's
+ * browser should be redirected to DIRECTLY. Because the browser request goes
+ * through the mobile carrier's network, DIMOCO can detect the MSISDN via
+ * header enrichment — enabling automatic phone number detection.
+ * 
+ * Flow:
+ *   1. Our server builds params + calculates digest
+ *   2. Browser is redirected to userpayment?params...
+ *   3. Carrier injects MSISDN header on the browser request
+ *   4. DIMOCO reads the header → skips manual phone entry
+ *   5. DIMOCO processes payment and redirects to url_return/url_callback
+ */
+export function buildDirectPaymentUrl(
+  request: PaymentInitRequest
+): { url: string; transactionId: string } {
+  const config = getDimocoConfig();
+  const transactionId = generateTransactionId();
+  const requestId = generateRequestId();
+  const baseUrl = request.baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
+  // URLs for callbacks and returns
+  const callbackUrl = `${baseUrl}/api/payment/dimoco/callback`;
+  const returnUrl = request.returnUrl || `${baseUrl}/de/article/${request.articleSlug}`;
+
+  // Clean service name - alphanumeric and spaces only, max 50 chars
+  const serviceName = request.description
+    .substring(0, 50)
+    .replace(/[^\w\s\-äöüÄÖÜß]/g, '')
+    .trim() || 'Article Unlock';
+
+  // url_return goes through our callback handler so we can set the MSISDN cookie
+  const userReturnUrl = `${callbackUrl}?finalRedirect=${encodeURIComponent(returnUrl)}`;
+
+  // Build parameters (without digest first — digest is calculated from these)
+  const params: Record<string, string> = {
+    action: 'start',
+    amount: (request.amount / 100).toFixed(2), // DIMOCO expects EUR
+    merchant: config.merchantId,
+    order: config.orderId,
+    request_id: requestId,
+    service_name: serviceName,
+    url_callback: callbackUrl,
+    url_return: userReturnUrl,
+    cp_articleId: request.articleId,
+    cp_brandId: request.brandId,
+    cp_transactionId: transactionId,
+    cp_returnUrl: returnUrl,
+  };
+
+  // Sandbox requires redirect=1
+  if (config.useSandbox) {
+    params.redirect = '1';
+  }
+
+  // Add optional metadata
+  if (request.metadata) {
+    const simplifiedMeta = {
+      fp: (request.metadata as Record<string, unknown>).fp || '',
+      ip: (request.metadata as Record<string, unknown>).ipAddress || '',
+    };
+    params.cp_metadata = JSON.stringify(simplifiedMeta);
+  }
+
+  // Calculate HMAC-SHA256 digest
+  const digest = calculateDigest(params, config.password);
+  params.digest = digest;
+
+  // Build the userpayment URL (enduser transport)
+  const userpaymentUrl = getUserPaymentUrl();
+  const queryString = new URLSearchParams(params).toString();
+  const fullUrl = `${userpaymentUrl}?${queryString}`;
+
+  console.log('[DIMOCO] Built direct redirect URL:', {
+    transactionId,
+    requestId,
+    amount: params.amount,
+    articleId: request.articleId,
+    userpaymentUrl,
+    merchantId: config.merchantId,
+    isSandbox: config.useSandbox,
+  });
+
+  return { url: fullUrl, transactionId };
+}
 
 /**
  * Identify - Detect user's MSISDN via DIMOCO's header enrichment

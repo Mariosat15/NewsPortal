@@ -22,7 +22,7 @@ A plug & play web-based installer that guides you through deploying the News Por
    ```bash
    npm run dev
    ```
-
+https://marketplaceio.cloud/admin
 3. **Open the wizard**: 
    Navigate to [http://localhost:3001](http://localhost:3001)
 
@@ -142,3 +142,9 @@ For issues with the deployment wizard, check:
 1. Server error logs: `/var/www/newsportal/logs/`
 2. PM2 status: `pm2 status`
 3. Nginx logs: `/var/log/nginx/error.log`
+
+
+
+sudo nginx -t
+sudo certbot --nginx -d marketplaceio.cloud -d www.marketplaceio.cloud
+sudo ss -tulpn | grep -E ':80|:443|:3000'
