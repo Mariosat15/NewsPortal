@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth/admin';
 import { getServerBrandConfig } from '@/lib/brand/server';
+import { getBrandId } from '@/lib/brand/server';
+import { getLegalPageRepository } from '@/lib/db';
 import OpenAI from 'openai';
 
-// POST /api/admin/legal-pages/generate - Generate legal content with AI
+// POST /api/admin/legal-pages/generate - Generate legal content with AI or format existing content
 export async function POST(request: NextRequest) {
   try {
     const isAdmin = await verifyAdmin(request);
@@ -12,17 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { pageType, language, customInstructions } = body;
-
-    if (!pageType) {
-      return NextResponse.json(
-        { error: 'Missing required field: pageType' },
-        { status: 400 }
-      );
-    }
-
-    // Get brand config for company info
-    const brand = await getServerBrandConfig();
+    const { pageType, language, customInstructions, action, rawContent, existingPageSlug } = body;
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -33,6 +25,85 @@ export async function POST(request: NextRequest) {
     }
 
     const openai = new OpenAI({ apiKey });
+
+    // ─── ACTION: FORMAT / STYLE existing content with AI ───
+    if (action === 'format') {
+      if (!rawContent || rawContent.trim().length < 10) {
+        return NextResponse.json(
+          { error: 'Please provide some content to format (at least 10 characters)' },
+          { status: 400 }
+        );
+      }
+
+      // Optionally get a reference page's style
+      let styleReference = '';
+      try {
+        const brandId = await getBrandId();
+        const repo = getLegalPageRepository(brandId);
+        const allPages = await repo.findAll({ activeOnly: true });
+        if (allPages.length > 0) {
+          // Use the first existing page as a style reference (trimmed)
+          const refPage = allPages[0];
+          const refContent = refPage.content?.de || refPage.content?.en || '';
+          if (refContent.length > 100) {
+            styleReference = `\n\nHere is an example of the existing styling used on other pages on this website (use this as a style reference for headings, spacing, and structure):\n\`\`\`html\n${refContent.substring(0, 1500)}\n\`\`\``;
+          }
+        }
+      } catch {
+        // Ignore - style reference is optional
+      }
+
+      const lang = (language || 'de') === 'en' ? 'English' : 'German';
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a professional legal document formatter. Your job is to take raw text input (which may be plain text, poorly formatted HTML, or pasted from a Word document) and transform it into clean, well-structured HTML for a legal page on a website.
+
+Rules:
+- Use semantic HTML: <h1> for main title, <h2> for sections, <h3> for subsections, <p> for paragraphs, <ul>/<ol> for lists, <strong> for emphasis, <blockquote> for quoted text.
+- Preserve ALL the original content and meaning. Do not remove or change any information.
+- Fix formatting issues: remove double spaces, fix broken paragraphs, organize into logical sections.
+- Identify section headers and convert them to proper heading tags.
+- Convert plain text lists into proper <ul>/<li> or <ol>/<li> elements.
+- Ensure consistent formatting throughout the document.
+- The output language should be ${lang}.
+- Do not add new content. Only restructure and format what is provided.
+- Do not include any markdown - only valid HTML tags.
+- Do not wrap the output in \`\`\`html code blocks.${styleReference}`,
+          },
+          {
+            role: 'user',
+            content: `Please format and style the following content into clean, professional HTML for a legal page:\n\n${rawContent}`,
+          },
+        ],
+        temperature: 0.2,
+        max_tokens: 6000,
+      });
+
+      const formattedContent = completion.choices[0]?.message?.content || '';
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          content: formattedContent,
+          action: 'format',
+        },
+      });
+    }
+
+    // ─── ACTION: GENERATE new content from template ───
+    if (!pageType) {
+      return NextResponse.json(
+        { error: 'Missing required field: pageType' },
+        { status: 400 }
+      );
+    }
+
+    // Get brand config for company info
+    const brand = await getServerBrandConfig();
 
     // Build prompt based on page type
     const prompts = getPromptForPageType(pageType, brand, language || 'de', customInstructions);
@@ -46,7 +117,8 @@ export async function POST(request: NextRequest) {
 Generate content in HTML format using tags like <h1>, <h2>, <h3>, <p>, <ul>, <li>, <strong>.
 Be thorough but concise. The content should be legally sound but accessible to regular users.
 Use proper legal terminology for ${language === 'en' ? 'English' : 'German'} law.
-Do not include any markdown - only valid HTML tags.`,
+Do not include any markdown - only valid HTML tags.
+Do not wrap the output in \`\`\`html code blocks.`,
         },
         {
           role: 'user',

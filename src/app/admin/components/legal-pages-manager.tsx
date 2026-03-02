@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { RichTextEditor } from './rich-text-editor';
 import { 
   Plus, 
   Edit, 
@@ -22,6 +23,9 @@ import {
   FileText,
   ChevronUp,
   ChevronDown,
+  Wand2,
+  FileCode,
+  FileType,
 } from 'lucide-react';
 
 interface LegalPage {
@@ -42,14 +46,15 @@ interface RiskDisclaimer {
 }
 
 type ViewMode = 'list' | 'edit' | 'create';
+type EditorMode = 'visual' | 'html';
 
 const PAGE_TYPES = [
-  { value: 'impressum', label: 'Impressum / Legal Notice' },
-  { value: 'datenschutz', label: 'Privacy Policy' },
-  { value: 'agb', label: 'Terms & Conditions' },
-  { value: 'widerrufsbelehrung', label: 'Cancellation Policy' },
-  { value: 'hilfe', label: 'Help / FAQ' },
-  { value: 'custom', label: 'Custom Page' },
+  { value: 'impressum', label: 'Impressum / Legal Notice', slug: 'impressum', titleDe: 'Impressum', titleEn: 'Legal Notice' },
+  { value: 'datenschutz', label: 'Privacy Policy / Datenschutzerklärung', slug: 'datenschutz', titleDe: 'Datenschutzerklärung', titleEn: 'Privacy Policy' },
+  { value: 'agb', label: 'Terms & Conditions / AGB', slug: 'agb', titleDe: 'Allgemeine Geschäftsbedingungen', titleEn: 'Terms and Conditions' },
+  { value: 'widerrufsbelehrung', label: 'Cancellation Policy / Widerrufsbelehrung', slug: 'widerrufsbelehrung', titleDe: 'Widerrufsbelehrung', titleEn: 'Cancellation Policy' },
+  { value: 'hilfe', label: 'Help & FAQ / Hilfe', slug: 'hilfe', titleDe: 'Hilfe & FAQ', titleEn: 'Help & FAQ' },
+  { value: 'custom', label: 'Custom Page', slug: '', titleDe: '', titleEn: '' },
 ];
 
 export function LegalPagesManager() {
@@ -58,6 +63,7 @@ export function LegalPagesManager() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editingPage, setEditingPage] = useState<LegalPage | null>(null);
   const [activeTab, setActiveTab] = useState<'pages' | 'footer' | 'disclaimer'>('pages');
+  const [editorMode, setEditorMode] = useState<EditorMode>('visual');
   
   // Form state
   const [formData, setFormData] = useState<{
@@ -78,6 +84,8 @@ export function LegalPagesManager() {
   const [formLang, setFormLang] = useState<'de' | 'en'>('de');
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [formatting, setFormatting] = useState(false);
+  const [showTemplateChooser, setShowTemplateChooser] = useState(false);
 
   // Disclaimer state
   const [disclaimer, setDisclaimer] = useState<RiskDisclaimer>({
@@ -117,7 +125,27 @@ export function LegalPagesManager() {
     }
   }
 
-  function startCreate() {
+  function startCreate(fromTemplate?: string) {
+    if (fromTemplate && fromTemplate !== 'custom') {
+      const tpl = PAGE_TYPES.find(t => t.value === fromTemplate);
+      if (tpl) {
+        setFormData({
+          slug: tpl.slug,
+          title: { de: tpl.titleDe, en: tpl.titleEn },
+          content: { de: '', en: '' },
+          type: 'legal',
+          showInFooter: true,
+          isActive: true,
+        });
+        setEditingPage(null);
+        setViewMode('create');
+        setEditorMode('visual');
+        setShowTemplateChooser(false);
+        // Auto-generate content
+        generateContent(fromTemplate);
+        return;
+      }
+    }
     setFormData({
       slug: '',
       title: { de: '', en: '' },
@@ -128,6 +156,8 @@ export function LegalPagesManager() {
     });
     setEditingPage(null);
     setViewMode('create');
+    setEditorMode('visual');
+    setShowTemplateChooser(false);
   }
 
   function startEdit(page: LegalPage) {
@@ -141,6 +171,7 @@ export function LegalPagesManager() {
     });
     setEditingPage(page);
     setViewMode('edit');
+    setEditorMode('visual');
   }
 
   async function handleSave() {
@@ -216,7 +247,6 @@ export function LegalPagesManager() {
     
     if (newIndex < 0 || newIndex >= footerPages.length) return;
 
-    // Swap order values
     const otherPage = footerPages[newIndex];
     
     try {
@@ -260,7 +290,7 @@ export function LegalPagesManager() {
           },
           title: {
             ...prev.title,
-            [formLang]: prev.title[formLang] || data.data.title[formLang],
+            [formLang]: prev.title[formLang] || data.data.title?.[formLang] || '',
           },
         }));
       } else {
@@ -271,6 +301,46 @@ export function LegalPagesManager() {
       alert('Failed to generate content');
     } finally {
       setGenerating(false);
+    }
+  }
+
+  // ── AI Format & Style Button ──
+  async function handleAIFormat() {
+    const currentContent = formData.content[formLang];
+    if (!currentContent || currentContent.trim().length < 10) {
+      alert('Please add some content first (at least a few sentences) before using AI formatting.');
+      return;
+    }
+
+    setFormatting(true);
+    try {
+      const res = await fetch('/api/admin/legal-pages/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'format',
+          rawContent: currentContent,
+          language: formLang,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setFormData(prev => ({
+          ...prev,
+          content: {
+            ...prev.content,
+            [formLang]: data.data.content,
+          },
+        }));
+      } else {
+        alert(data.error || 'Failed to format content');
+      }
+    } catch (error) {
+      console.error('Failed to format:', error);
+      alert('Failed to format content');
+    } finally {
+      setFormatting(false);
     }
   }
 
@@ -329,7 +399,134 @@ export function LegalPagesManager() {
     }
   }
 
-  // Render editor view
+  // ═══════════════════════════════════════════════
+  //  TEMPLATE CHOOSER (when creating a new page)
+  // ═══════════════════════════════════════════════
+  if (showTemplateChooser) {
+    return (
+      <div>
+        <Button variant="ghost" onClick={() => setShowTemplateChooser(false)} className="mb-4">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Legal Pages
+        </Button>
+
+        <h2 className="text-2xl font-bold mb-2">Create New Legal Page</h2>
+        <p className="text-muted-foreground mb-6">Choose how you want to create your page:</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          {/* Option 1: From Template with AI */}
+          <Card className="border-2 hover:border-primary/50 transition-colors cursor-pointer" onClick={() => {}}>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                  <Sparkles className="h-6 w-6 text-purple-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Generate from Template</CardTitle>
+                  <CardDescription>AI generates a complete legal page for you</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Select a page type and our AI will generate professional, legally compliant content 
+                based on your company information.
+              </p>
+              <div className="space-y-2">
+                {PAGE_TYPES.filter(t => t.value !== 'custom').map((type) => {
+                  const existingSlugs = pages.map(p => p.slug);
+                  const alreadyExists = existingSlugs.includes(type.slug);
+                  return (
+                    <button
+                      key={type.value}
+                      onClick={() => startCreate(type.value)}
+                      disabled={alreadyExists}
+                      className={`w-full text-left px-4 py-3 rounded-lg border transition-colors flex items-center justify-between ${
+                        alreadyExists
+                          ? 'opacity-50 cursor-not-allowed bg-muted'
+                          : 'hover:bg-accent hover:border-primary/30'
+                      }`}
+                    >
+                      <div>
+                        <span className="font-medium text-sm">{type.label}</span>
+                        <span className="text-xs text-muted-foreground ml-2">/{type.slug}</span>
+                      </div>
+                      {alreadyExists ? (
+                        <Badge variant="secondary" className="text-xs">Already exists</Badge>
+                      ) : (
+                        <Sparkles className="h-4 w-4 text-purple-500" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Option 2: From Scratch */}
+          <Card
+            className="border-2 hover:border-primary/50 transition-colors cursor-pointer"
+            onClick={() => startCreate()}
+          >
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                  <FileType className="h-6 w-6 text-blue-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Create from Scratch</CardTitle>
+                  <CardDescription>Write or paste your own content</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Start with a blank page and write your content using our rich text editor. 
+                You can also paste text from Word, Google Docs, or any other editor.
+              </p>
+              <div className="space-y-3">
+                <div className="flex items-start gap-3 text-sm">
+                  <div className="p-1 rounded bg-green-100 dark:bg-green-900/30 mt-0.5">
+                    <FileType className="h-3.5 w-3.5 text-green-600" />
+                  </div>
+                  <div>
+                    <span className="font-medium">Rich Text Editor</span>
+                    <p className="text-muted-foreground text-xs">Edit like Word — bold, headings, lists, links</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 text-sm">
+                  <div className="p-1 rounded bg-purple-100 dark:bg-purple-900/30 mt-0.5">
+                    <Wand2 className="h-3.5 w-3.5 text-purple-600" />
+                  </div>
+                  <div>
+                    <span className="font-medium">AI Styling</span>
+                    <p className="text-muted-foreground text-xs">Paste raw text, then press AI to auto-format</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 text-sm">
+                  <div className="p-1 rounded bg-orange-100 dark:bg-orange-900/30 mt-0.5">
+                    <FileCode className="h-3.5 w-3.5 text-orange-600" />
+                  </div>
+                  <div>
+                    <span className="font-medium">HTML Mode</span>
+                    <p className="text-muted-foreground text-xs">Switch to raw HTML for full control</p>
+                  </div>
+                </div>
+              </div>
+              <Button className="w-full mt-4" variant="outline">
+                <Plus className="h-4 w-4 mr-2" />
+                Start Blank Page
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════════
+  //  EDITOR VIEW (create or edit)
+  // ═══════════════════════════════════════════════
   if (viewMode !== 'list') {
     return (
       <div>
@@ -340,10 +537,39 @@ export function LegalPagesManager() {
 
         <Card>
           <CardHeader>
-            <CardTitle>{viewMode === 'create' ? 'Create Legal Page' : 'Edit Legal Page'}</CardTitle>
-            {editingPage?.isSystem && (
-              <Badge variant="secondary">System Page - Slug cannot be changed</Badge>
-            )}
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>{viewMode === 'create' ? 'Create Legal Page' : 'Edit Legal Page'}</CardTitle>
+                {editingPage?.isSystem && (
+                  <Badge variant="secondary" className="mt-1">System Page — Slug cannot be changed</Badge>
+                )}
+              </div>
+              {/* Editor mode toggle */}
+              <div className="flex items-center border rounded-lg overflow-hidden">
+                <button
+                  className={`px-3 py-1.5 text-sm flex items-center gap-1.5 transition-colors ${
+                    editorMode === 'visual'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'hover:bg-muted'
+                  }`}
+                  onClick={() => setEditorMode('visual')}
+                >
+                  <FileType className="h-3.5 w-3.5" />
+                  Visual
+                </button>
+                <button
+                  className={`px-3 py-1.5 text-sm flex items-center gap-1.5 transition-colors ${
+                    editorMode === 'html'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'hover:bg-muted'
+                  }`}
+                  onClick={() => setEditorMode('html')}
+                >
+                  <FileCode className="h-3.5 w-3.5" />
+                  HTML
+                </button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Slug */}
@@ -387,51 +613,98 @@ export function LegalPagesManager() {
               />
             </div>
 
-            {/* AI Generation */}
-            <div className="flex items-center gap-2">
-              <Label className="whitespace-nowrap">Generate with AI:</Label>
-              <select
-                className="flex-1 px-3 py-2 border rounded-md text-sm"
-                onChange={(e) => {
-                  if (e.target.value) {
-                    generateContent(e.target.value);
-                    // Auto-set slug and title
-                    if (!formData.slug && e.target.value !== 'custom') {
-                      const type = PAGE_TYPES.find(t => t.value === e.target.value);
-                      setFormData(prev => ({
-                        ...prev,
-                        slug: e.target.value,
-                        title: {
-                          de: type?.label.split(' / ')[0] || prev.title?.de || '',
-                          en: type?.label.split(' / ')[1] || type?.label || prev.title?.en || '',
-                        },
-                      }));
+            {/* AI Actions Bar */}
+            <div className="flex flex-wrap items-center gap-2 p-3 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 rounded-lg border border-purple-200/50 dark:border-purple-800/30">
+              <div className="flex items-center gap-2 mr-2">
+                <Sparkles className="h-4 w-4 text-purple-600" />
+                <span className="text-sm font-medium">AI Tools:</span>
+              </div>
+
+              {/* Generate from template */}
+              <div className="flex items-center gap-1">
+                <select
+                  className="text-xs border rounded px-2 py-1.5 bg-background"
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      generateContent(e.target.value);
+                      if (!formData.slug && e.target.value !== 'custom') {
+                        const type = PAGE_TYPES.find(t => t.value === e.target.value);
+                        if (type) {
+                          setFormData(prev => ({
+                            ...prev,
+                            slug: prev.slug || type.slug,
+                            title: {
+                              de: prev.title.de || type.titleDe,
+                              en: prev.title.en || type.titleEn,
+                            },
+                          }));
+                        }
+                      }
+                      e.target.value = '';
                     }
-                  }
-                }}
-                disabled={generating}
+                  }}
+                  disabled={generating}
+                >
+                  <option value="">Generate from template...</option>
+                  {PAGE_TYPES.filter(t => t.value !== 'custom').map(type => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
+                </select>
+                {generating && <Loader2 className="h-4 w-4 animate-spin text-purple-600" />}
+              </div>
+
+              <div className="w-px h-6 bg-border" />
+
+              {/* AI Format Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAIFormat}
+                disabled={formatting || !formData.content[formLang]?.trim()}
+                className="border-purple-300 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/30"
               >
-                <option value="">Select page type to generate...</option>
-                {PAGE_TYPES.map(type => (
-                  <option key={type.value} value={type.value}>{type.label}</option>
-                ))}
-              </select>
-              {generating && <Loader2 className="h-4 w-4 animate-spin" />}
+                {formatting ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Wand2 className="h-3.5 w-3.5 mr-1.5 text-purple-600" />
+                )}
+                {formatting ? 'Formatting...' : 'AI Format & Style'}
+              </Button>
+
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                Paste plain text → press to auto-format
+              </span>
             </div>
 
-            {/* Content */}
+            {/* Content Editor */}
             <div className="space-y-2">
-              <Label>Content ({formLang.toUpperCase()}) - HTML</Label>
-              <textarea
-                value={formData.content[formLang]}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  content: { ...formData.content, [formLang]: e.target.value },
-                })}
-                rows={15}
-                className="w-full px-3 py-2 border rounded-md font-mono text-sm"
-                placeholder="<h1>Title</h1><p>Content...</p>"
-              />
+              <Label>Content ({formLang.toUpperCase()})</Label>
+              
+              {editorMode === 'visual' ? (
+                <RichTextEditor
+                  content={formData.content[formLang]}
+                  onChange={(html) => setFormData({
+                    ...formData,
+                    content: { ...formData.content, [formLang]: html },
+                  })}
+                  placeholder={
+                    formLang === 'de'
+                      ? 'Schreiben Sie Ihren Inhalt hier oder fügen Sie Text aus Word/Google Docs ein...'
+                      : 'Type your content here or paste text from Word/Google Docs...'
+                  }
+                />
+              ) : (
+                <textarea
+                  value={formData.content[formLang]}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    content: { ...formData.content, [formLang]: e.target.value },
+                  })}
+                  rows={20}
+                  className="w-full px-3 py-2 border rounded-md font-mono text-sm bg-gray-50 dark:bg-gray-900"
+                  placeholder="<h1>Title</h1><p>Content...</p>"
+                />
+              )}
             </div>
 
             {/* Options */}
@@ -470,12 +743,14 @@ export function LegalPagesManager() {
     );
   }
 
-  // Main list view with tabs
+  // ═══════════════════════════════════════════════
+  //  MAIN LIST VIEW
+  // ═══════════════════════════════════════════════
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Legal Pages</h1>
-        <Button onClick={startCreate}>
+        <Button onClick={() => setShowTemplateChooser(true)}>
           <Plus className="h-4 w-4 mr-2" />
           New Page
         </Button>
@@ -518,8 +793,10 @@ export function LegalPagesManager() {
               <CardContent className="p-0">
                 <div className="divide-y">
                   {pages.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No legal pages yet. Click "New Page" to create one.
+                    <div className="text-center py-12 text-muted-foreground">
+                      <FileText className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                      <p className="font-medium">No legal pages yet</p>
+                      <p className="text-sm mt-1">Click &quot;New Page&quot; to create one from a template or from scratch.</p>
                     </div>
                   ) : (
                     pages.map((page) => (
