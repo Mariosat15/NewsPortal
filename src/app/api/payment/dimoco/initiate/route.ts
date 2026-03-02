@@ -9,11 +9,12 @@ import { extractIpFromRequest } from '@/lib/services/msisdn-detection';
 const ARTICLE_PRICE_CENTS = parseInt(process.env.ARTICLE_PRICE_CENTS || '99', 10);
 
 // Get the base URL from the request (works with any domain, tunnel, proxy)
-// Priority: NEXT_PUBLIC_APP_URL > X-Forwarded-Host > Host header > request URL
+// Priority: NEXT_PUBLIC_APP_URL > X-Forwarded-Host > Host header
+// NEVER returns localhost — throws instead (DIMOCO cannot redirect to localhost)
 function getBaseUrl(request: NextRequest): string {
   // 1. Explicit env var — most reliable, always correct in production
   const envUrl = process.env.NEXT_PUBLIC_APP_URL;
-  if (envUrl) {
+  if (envUrl && !envUrl.includes('localhost')) {
     console.log('[Payment] Using NEXT_PUBLIC_APP_URL:', envUrl);
     return envUrl.replace(/\/$/, ''); // strip trailing slash
   }
@@ -23,7 +24,8 @@ function getBaseUrl(request: NextRequest): string {
   const forwardedProto = request.headers.get('x-forwarded-proto');
   const host = request.headers.get('host');
   
-  console.log('[Payment] Headers:', {
+  console.log('[Payment] Headers for baseUrl:', {
+    NEXT_PUBLIC_APP_URL: envUrl || '(not set)',
     forwardedHost,
     forwardedProto,
     host,
@@ -31,19 +33,25 @@ function getBaseUrl(request: NextRequest): string {
   });
   
   const effectiveHost = forwardedHost || host;
-  const effectiveProto = forwardedProto || (effectiveHost?.includes('localhost') ? 'http' : 'https');
+  const effectiveProto = forwardedProto || 'https';
   
-  // Only use header-derived URL if it's NOT localhost (behind proxy, host can be localhost)
+  // Use header-derived URL if it's NOT localhost
   if (effectiveHost && !effectiveHost.includes('localhost')) {
     const baseUrl = `${effectiveProto}://${effectiveHost}`;
     console.log('[Payment] Using header-derived base URL:', baseUrl);
     return baseUrl;
   }
   
-  // 3. Fallback to request URL origin (last resort — may be localhost behind proxy)
-  const url = new URL(request.url);
-  console.log('[Payment] WARNING: Falling back to request URL origin:', url.origin);
-  return url.origin;
+  // 3. FAIL instead of returning localhost
+  // Reason: If DIMOCO receives localhost as url_return/url_callback, the user
+  // gets redirected to localhost after payment, which breaks everything.
+  console.error('[Payment] CRITICAL: Cannot determine public base URL!');
+  console.error('[Payment] Set NEXT_PUBLIC_APP_URL in .env (e.g. https://marketplaceio.cloud)');
+  console.error('[Payment] Or ensure Nginx sends X-Forwarded-Host header');
+  throw new Error(
+    'Cannot determine public base URL for payment. ' +
+    'Set NEXT_PUBLIC_APP_URL in your .env file to your public domain.'
+  );
 }
 
 export async function GET(request: NextRequest) {
@@ -180,11 +188,34 @@ export async function GET(request: NextRequest) {
         }
 
         console.log('[Payment] Redirecting browser directly to DIMOCO userpayment');
-        return NextResponse.redirect(directUrl);
+        
+        // Use location.replace via an HTML page instead of 307 redirect.
+        // Reason: A 307 redirect keeps this URL in browser history. If the user
+        // presses "Back" from the DIMOCO page, the browser hits our /api/initiate
+        // again, which re-redirects to DIMOCO — creating an infinite loop.
+        // location.replace() removes the initiate URL from the history stack,
+        // so "Back" takes the user back to the article page instead.
+        const html = `<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<title>Redirecting to payment...</title>
+</head><body>
+<p>Redirecting to payment...</p>
+<script>window.location.replace(${JSON.stringify(directUrl)});</script>
+<noscript><meta http-equiv="refresh" content="0;url=${directUrl.replace(/"/g, '&quot;')}"></noscript>
+</body></html>`;
+        
+        return new NextResponse(html, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+          },
+        });
       } catch (err) {
         console.error('[Payment] Failed to build direct redirect URL:', err);
         return NextResponse.json(
-          { success: false, error: 'Failed to build payment URL' },
+          { success: false, error: err instanceof Error ? err.message : 'Failed to build payment URL' },
           { status: 500 }
         );
       }

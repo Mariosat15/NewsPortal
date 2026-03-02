@@ -169,7 +169,15 @@ export function buildDirectPaymentUrl(
   const config = getDimocoConfig();
   const transactionId = generateTransactionId();
   const requestId = generateRequestId();
-  const baseUrl = request.baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  
+  // Determine base URL — NEVER allow localhost in production
+  let baseUrl = request.baseUrl || process.env.NEXT_PUBLIC_APP_URL || '';
+  if (!baseUrl || baseUrl.includes('localhost')) {
+    console.error('[DIMOCO] CRITICAL: baseUrl is empty or contains localhost:', baseUrl);
+    console.error('[DIMOCO] Set NEXT_PUBLIC_APP_URL in .env to your public domain (e.g. https://marketplaceio.cloud)');
+    // Fail loudly instead of silently using localhost
+    throw new Error('NEXT_PUBLIC_APP_URL must be set to the public domain. Cannot use localhost for DIMOCO payments.');
+  }
 
   // URLs for callbacks and returns
   const callbackUrl = `${baseUrl}/api/payment/dimoco/callback`;
@@ -349,7 +357,13 @@ export async function startPayment(
   const config = getDimocoConfig();
   const transactionId = generateTransactionId();
   const requestId = generateRequestId();
-  const baseUrl = request.baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  
+  // Determine base URL — NEVER allow localhost for real payments
+  let baseUrl = request.baseUrl || process.env.NEXT_PUBLIC_APP_URL || '';
+  if (!baseUrl || baseUrl.includes('localhost')) {
+    console.error('[DIMOCO] baseUrl contains localhost — payment callbacks will fail:', baseUrl);
+    throw new Error('NEXT_PUBLIC_APP_URL must be set. Cannot use localhost for DIMOCO.');
+  }
 
   // URLs for callbacks and returns
   const callbackUrl = `${baseUrl}/api/payment/dimoco/callback`;
