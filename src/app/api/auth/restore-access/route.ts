@@ -26,13 +26,27 @@ export async function GET(request: NextRequest) {
   const slug = request.nextUrl.searchParams.get('slug');
   const returnUrl = request.nextUrl.searchParams.get('returnUrl');
 
-  // Get base URL from request
+  // Get base URL — NEVER allow localhost (DIMOCO identify callback would fail)
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL;
   const forwardedHost = request.headers.get('x-forwarded-host');
-  const forwardedProto = request.headers.get('x-forwarded-proto');
+  const forwardedProto = request.headers.get('x-forwarded-proto') || 'https';
   const host = request.headers.get('host');
-  const effectiveHost = forwardedHost || host;
-  const effectiveProto = forwardedProto || (effectiveHost?.includes('localhost') ? 'http' : 'https');
-  const baseUrl = `${effectiveProto}://${effectiveHost}`;
+  
+  let baseUrl = '';
+  if (envUrl && !envUrl.includes('localhost')) {
+    baseUrl = envUrl.replace(/\/$/, '');
+  } else {
+    const effectiveHost = forwardedHost || host;
+    if (effectiveHost && !effectiveHost.includes('localhost')) {
+      baseUrl = `${forwardedProto}://${effectiveHost}`;
+    }
+  }
+  
+  if (!baseUrl) {
+    console.error('[Restore Access] Cannot determine public URL. Set NEXT_PUBLIC_APP_URL.');
+    // Best effort fallback
+    baseUrl = new URL(request.url).origin;
+  }
 
   const fallbackUrl = returnUrl || (slug ? `${baseUrl}/de/article/${slug}` : baseUrl);
 

@@ -259,6 +259,12 @@ export async function identifyUser(baseUrl: string): Promise<IdentifyResponse> {
   const config = getDimocoConfig();
   const requestId = generateRequestId();
   
+  // Safety: never send localhost URLs to DIMOCO
+  if (!baseUrl || baseUrl.includes('localhost')) {
+    console.error('[DIMOCO] identifyUser called with invalid baseUrl:', baseUrl);
+    return { success: false, error: 'Invalid base URL — NEXT_PUBLIC_APP_URL not configured' };
+  }
+  
   try {
     console.log('[DIMOCO] Calling identify action...');
     

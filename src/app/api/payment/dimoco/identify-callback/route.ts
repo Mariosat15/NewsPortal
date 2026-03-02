@@ -12,6 +12,9 @@ export const dynamic = 'force-dynamic';
  * We store it in cookies and redirect to the article/payment page.
  */
 export async function GET(request: NextRequest) {
+  // Build a safe base URL — NEVER use request.url (which is localhost behind Nginx)
+  const safeBase = getPublicBaseUrl(request);
+
   try {
     const searchParams = request.nextUrl.searchParams;
     
@@ -35,6 +38,7 @@ export async function GET(request: NextRequest) {
       status,
       articleId,
       slug,
+      safeBase,
     });
 
     if (!msisdn) {
@@ -42,7 +46,7 @@ export async function GET(request: NextRequest) {
       
       // Redirect to error page
       const errorUrl = returnUrl || (slug ? `/de/article/${slug}?error=msisdn_detection_failed` : '/');
-      return NextResponse.redirect(new URL(errorUrl, request.url));
+      return NextResponse.redirect(new URL(errorUrl, safeBase));
     }
 
     // Store MSISDN in cookie
@@ -70,23 +74,49 @@ export async function GET(request: NextRequest) {
 
     // If article info provided, redirect to payment initiation
     if (articleId && slug) {
-      const paymentUrl = new URL('/api/payment/dimoco/initiate', request.url);
+      const paymentUrl = new URL('/api/payment/dimoco/initiate', safeBase);
       paymentUrl.searchParams.set('articleId', articleId);
       paymentUrl.searchParams.set('slug', slug);
       if (returnUrl) {
         paymentUrl.searchParams.set('returnUrl', returnUrl);
       }
       
-      console.log('[MSISDN Callback] Redirecting to payment:', paymentUrl.pathname);
+      console.log('[MSISDN Callback] Redirecting to payment:', paymentUrl.toString());
       return NextResponse.redirect(paymentUrl);
     }
 
     // Otherwise, redirect to return URL or article page
     const destination = returnUrl || (slug ? `/de/article/${slug}` : '/');
-    return NextResponse.redirect(new URL(destination, request.url));
+    return NextResponse.redirect(new URL(destination, safeBase));
 
   } catch (error) {
     console.error('[MSISDN Callback] Error:', error);
-    return NextResponse.redirect(new URL('/?error=callback_failed', request.url));
+    return NextResponse.redirect(new URL('/?error=callback_failed', safeBase));
   }
+}
+
+/**
+ * Get the public-facing base URL — NEVER returns localhost.
+ * Priority: NEXT_PUBLIC_APP_URL > X-Forwarded-Host > Host header
+ */
+function getPublicBaseUrl(request: NextRequest): string {
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (envUrl && !envUrl.includes('localhost')) {
+    return envUrl.replace(/\/$/, '');
+  }
+  
+  const forwardedHost = request.headers.get('x-forwarded-host');
+  const forwardedProto = request.headers.get('x-forwarded-proto') || 'https';
+  if (forwardedHost && !forwardedHost.includes('localhost')) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+  
+  const host = request.headers.get('host');
+  if (host && !host.includes('localhost')) {
+    return `https://${host}`;
+  }
+  
+  // Last resort — use request.url but log a warning
+  console.error('[MSISDN Callback] WARNING: Could not determine public URL. Set NEXT_PUBLIC_APP_URL.');
+  return new URL(request.url).origin;
 }

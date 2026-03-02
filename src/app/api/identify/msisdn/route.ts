@@ -87,10 +87,26 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Get base URL from request
+    // Get base URL from request — NEVER allow localhost (DIMOCO would redirect there)
+    const envUrl = process.env.NEXT_PUBLIC_APP_URL;
     const forwardedHost = request.headers.get('x-forwarded-host') || request.headers.get('host');
     const forwardedProto = request.headers.get('x-forwarded-proto') || 'https';
-    const baseUrl = forwardedHost ? `${forwardedProto}://${forwardedHost}` : 'http://localhost:3000';
+    
+    let baseUrl = '';
+    if (envUrl && !envUrl.includes('localhost')) {
+      baseUrl = envUrl.replace(/\/$/, '');
+    } else if (forwardedHost && !forwardedHost.includes('localhost')) {
+      baseUrl = `${forwardedProto}://${forwardedHost}`;
+    }
+    
+    if (!baseUrl) {
+      console.error('[MSISDN Identify] Cannot determine public base URL — skipping identification');
+      console.error('[MSISDN Identify] Set NEXT_PUBLIC_APP_URL in .env');
+      return NextResponse.json({
+        success: false,
+        error: 'Server configuration error: NEXT_PUBLIC_APP_URL not set',
+      });
+    }
 
     // Store return context in a temporary cookie for the callback
     const identifyState = JSON.stringify({
