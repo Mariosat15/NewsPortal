@@ -9,7 +9,16 @@ import { extractIpFromRequest } from '@/lib/services/msisdn-detection';
 const ARTICLE_PRICE_CENTS = parseInt(process.env.ARTICLE_PRICE_CENTS || '99', 10);
 
 // Get the base URL from the request (works with any domain, tunnel, proxy)
+// Priority: NEXT_PUBLIC_APP_URL > X-Forwarded-Host > Host header > request URL
 function getBaseUrl(request: NextRequest): string {
+  // 1. Explicit env var — most reliable, always correct in production
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (envUrl) {
+    console.log('[Payment] Using NEXT_PUBLIC_APP_URL:', envUrl);
+    return envUrl.replace(/\/$/, ''); // strip trailing slash
+  }
+
+  // 2. Proxy headers from Nginx/Cloudflare
   const forwardedHost = request.headers.get('x-forwarded-host');
   const forwardedProto = request.headers.get('x-forwarded-proto');
   const host = request.headers.get('host');
@@ -24,14 +33,16 @@ function getBaseUrl(request: NextRequest): string {
   const effectiveHost = forwardedHost || host;
   const effectiveProto = forwardedProto || (effectiveHost?.includes('localhost') ? 'http' : 'https');
   
-  if (effectiveHost) {
+  // Only use header-derived URL if it's NOT localhost (behind proxy, host can be localhost)
+  if (effectiveHost && !effectiveHost.includes('localhost')) {
     const baseUrl = `${effectiveProto}://${effectiveHost}`;
-    console.log('[Payment] Using base URL:', baseUrl);
+    console.log('[Payment] Using header-derived base URL:', baseUrl);
     return baseUrl;
   }
   
+  // 3. Fallback to request URL origin (last resort — may be localhost behind proxy)
   const url = new URL(request.url);
-  console.log('[Payment] Fallback to URL origin:', url.origin);
+  console.log('[Payment] WARNING: Falling back to request URL origin:', url.origin);
   return url.origin;
 }
 

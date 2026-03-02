@@ -292,6 +292,18 @@ export async function GET(request: NextRequest) {
   // If we have a completed transaction, consider it successful (POST callback already processed)
   const isSuccess = body.status === 'success' || transaction?.status === 'completed';
 
+  // Build a safe base URL — NEVER use request.url (which is localhost behind Nginx)
+  const safeBaseUrl = process.env.NEXT_PUBLIC_APP_URL
+    || (request.headers.get('x-forwarded-host')
+        ? `${request.headers.get('x-forwarded-proto') || 'https'}://${request.headers.get('x-forwarded-host')}`
+        : null)
+    || (request.headers.get('host') && !request.headers.get('host')!.includes('localhost')
+        ? `https://${request.headers.get('host')}`
+        : null)
+    || new URL(request.url).origin;
+
+  console.log('[Payment Callback GET] Safe base URL:', safeBaseUrl);
+
   // Redirect user
   if (isSuccess) {
     // For mock/sandbox payments: Process the unlock if not already done
@@ -320,7 +332,7 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    const url = new URL(redirectUrl, request.url);
+    const url = new URL(redirectUrl, safeBaseUrl);
     url.searchParams.set('unlocked', 'true');
     url.searchParams.set('tid', body.transactionId || '');
     console.log('[Payment Callback] Success - redirecting to:', url.toString());
@@ -343,7 +355,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Payment failed
-  const url = new URL(redirectUrl, request.url);
+  const url = new URL(redirectUrl, safeBaseUrl);
   url.searchParams.set('error', 'payment_failed');
   url.searchParams.set('message', body.errorMessage || 'Payment was not completed');
   console.log('[Payment Callback] Failed - redirecting to:', url.toString());
