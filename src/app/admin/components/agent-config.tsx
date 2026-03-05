@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Play, Settings, Clock, Plus, X, Rss, Brain, FileText, 
   Sliders, Save, Loader2, AlertCircle, CheckCircle, Trash2,
-  Globe, Zap, BookOpen, MessageSquare, Timer, Square
+  Globe, Zap, BookOpen, MessageSquare, Timer, Square, Power
 } from 'lucide-react';
 import { SchedulePicker } from './schedule-picker';
 
@@ -157,7 +157,7 @@ function PipelineProgressCard() {
 }
 
 // Worker Status Card Component
-function WorkerStatusCard({ schedule }: { schedule: string }) {
+function WorkerStatusCard({ schedule, agentsEnabled }: { schedule: string; agentsEnabled: boolean }) {
   const [status, setStatus] = useState<{
     isActive: boolean;
     isRunning: boolean;
@@ -165,6 +165,12 @@ function WorkerStatusCard({ schedule }: { schedule: string }) {
     scheduleDescription: string;
     lastRun: string | null;
     lastResult: { success: boolean; articlesPublished: number; error?: string } | null;
+    cronFireCount: number;
+  } | null>(null);
+  const [diagnostics, setDiagnostics] = useState<{
+    openaiKeySet: boolean;
+    agentsEnabled: boolean;
+    brandId: string;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [activating, setActivating] = useState(false);
@@ -183,6 +189,9 @@ function WorkerStatusCard({ schedule }: { schedule: string }) {
       const data = await res.json();
       if (data.success && data.worker) {
         setStatus(data.worker);
+      }
+      if (data.diagnostics) {
+        setDiagnostics(data.diagnostics);
       }
     } catch (error) {
       console.error('Failed to fetch worker status:', error);
@@ -221,6 +230,12 @@ function WorkerStatusCard({ schedule }: { schedule: string }) {
     }
   }
 
+  // Determine if there are blockers preventing article generation
+  const blockers: string[] = [];
+  if (!agentsEnabled) blockers.push('Agents are disabled — toggle "Enable Agents" below and save');
+  if (diagnostics && !diagnostics.openaiKeySet) blockers.push('OPENAI_API_KEY is not set in .env');
+  if (status && !status.isActive) blockers.push('Worker is not active — click Activate');
+
   return (
     <Card>
       <CardHeader>
@@ -240,6 +255,21 @@ function WorkerStatusCard({ schedule }: { schedule: string }) {
           </div>
         ) : status ? (
           <>
+            {/* Blockers Warning */}
+            {blockers.length > 0 && (
+              <div className="p-4 rounded-lg border bg-amber-50 border-amber-200">
+                <p className="font-medium text-amber-800 mb-2 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  Articles won&apos;t generate automatically because:
+                </p>
+                <ul className="text-sm text-amber-700 space-y-1">
+                  {blockers.map((b, i) => (
+                    <li key={i}>• {b}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Worker Status */}
             <div className={`p-4 rounded-lg border ${status.isActive ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
               <div className="flex items-center justify-between mb-2">
@@ -283,7 +313,7 @@ function WorkerStatusCard({ schedule }: { schedule: string }) {
             {/* Last Run Info */}
             {status.lastRun && (
               <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm font-medium mb-1">Last Run</p>
+                <p className="text-sm font-medium mb-1">Last Scheduled Run</p>
                 <p className="text-xs text-muted-foreground">
                   {new Date(status.lastRun).toLocaleString()}
                 </p>
@@ -298,10 +328,30 @@ function WorkerStatusCard({ schedule }: { schedule: string }) {
               </div>
             )}
 
-            {/* Schedule Info */}
-            <div className="text-sm text-muted-foreground">
-              <p>Configure the schedule in the <strong>Topics</strong> tab below.</p>
-              <p className="mt-1 font-mono text-xs bg-gray-100 px-2 py-1 rounded">Cron: {status.currentSchedule || schedule}</p>
+            {/* Diagnostics */}
+            <div className="p-3 bg-gray-50 rounded-lg space-y-1.5">
+              <p className="text-sm font-medium">Diagnostics</p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${agentsEnabled ? 'bg-green-500' : 'bg-red-500'}`} />
+                  Agents: {agentsEnabled ? 'Enabled' : 'Disabled'}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${diagnostics?.openaiKeySet ? 'bg-green-500' : 'bg-red-500'}`} />
+                  OpenAI Key: {diagnostics?.openaiKeySet ? 'Set' : 'Missing'}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${status.isActive ? 'bg-green-500' : 'bg-red-500'}`} />
+                  Worker: {status.isActive ? 'Active' : 'Inactive'}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Clock className="h-3 w-3 text-muted-foreground" />
+                  Cron triggers: {status.cronFireCount || 0}
+                </div>
+              </div>
+              <p className="mt-1 font-mono text-xs bg-gray-100 px-2 py-1 rounded">
+                Cron: {status.currentSchedule || schedule}
+              </p>
             </div>
           </>
         ) : (
@@ -854,6 +904,42 @@ export function AgentConfig() {
       {/* Run Pipeline Tab */}
       {activeTab === 'run' && (
         <div className="grid gap-6 lg:grid-cols-2">
+          {/* Enable Agents Toggle — top of page, full width */}
+          <Card className={`lg:col-span-2 ${settings.enabled ? 'border-green-200' : 'border-red-200 bg-red-50/50'}`}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Power className={`h-6 w-6 ${settings.enabled ? 'text-green-600' : 'text-red-500'}`} />
+                  <div>
+                    <p className="font-bold text-lg">
+                      {settings.enabled ? 'Agents Enabled' : 'Agents Disabled'}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {settings.enabled
+                        ? 'The worker will automatically generate articles based on the schedule.'
+                        : 'Articles will NOT be generated automatically. Enable this to start scheduled generation.'}
+                    </p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.enabled}
+                    onChange={(e) => setSettings({ ...settings, enabled: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-14 h-7 bg-gray-200 peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-green-600"></div>
+                </label>
+              </div>
+              {!settings.enabled && (
+                <div className="mt-3 p-3 bg-red-100 border border-red-200 rounded-lg text-sm text-red-700">
+                  <strong>⚠️ Important:</strong> With agents disabled, the scheduled worker will not produce any articles. 
+                  Toggle this ON and click <strong>&quot;Save All Settings&quot;</strong> to start automatic article generation.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Article Language Selection - Prominent Card */}
           <Card className="lg:col-span-2">
             <CardHeader>
@@ -993,7 +1079,7 @@ export function AgentConfig() {
             </CardContent>
           </Card>
 
-          <WorkerStatusCard schedule={settings.cronSchedule} />
+          <WorkerStatusCard schedule={settings.cronSchedule} agentsEnabled={settings.enabled} />
 
           <PipelineProgressCard />
 

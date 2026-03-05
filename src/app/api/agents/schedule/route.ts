@@ -69,11 +69,17 @@ export async function GET(request: NextRequest) {
         scheduleDescription: describeSchedule(workerStatus.currentSchedule),
         lastRun: workerStatus.lastRun,
         lastResult: workerStatus.lastResult,
+        cronFireCount: workerStatus.cronFireCount,
       },
       config: {
         enabled: config.enabled,
         cronExpression: config.cronSchedule,
         schedule: describeSchedule(config.cronSchedule),
+      },
+      diagnostics: {
+        openaiKeySet: !!process.env.OPENAI_API_KEY,
+        brandId: getBrandIdSync(),
+        agentsEnabled: config.enabled,
       },
     });
   } catch (error) {

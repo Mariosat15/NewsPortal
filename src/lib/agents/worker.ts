@@ -17,6 +17,7 @@ let isRunning = false;
 let lastRun: Date | null = null;
 let lastResult: { success: boolean; articlesPublished: number; error?: string } | null = null;
 let currentSchedule = '0 */6 * * *'; // Default: every 6 hours
+let cronFireCount = 0;
 
 // Get brand ID (simplified for worker)
 function getBrandId(): string {
@@ -39,6 +40,18 @@ async function loadScheduleFromDB(): Promise<string> {
   return '0 */6 * * *';
 }
 
+// Load full agent config from database for diagnostics
+async function loadAgentConfigFromDB(): Promise<Record<string, unknown> | null> {
+  try {
+    const brandId = getBrandId();
+    const collection = await getCollection(brandId, 'settings');
+    const agentConfig = await collection.findOne({ key: 'agentConfig' });
+    return (agentConfig?.value as Record<string, unknown>) || null;
+  } catch {
+    return null;
+  }
+}
+
 // Check if agents are enabled
 async function areAgentsEnabled(): Promise<boolean> {
   try {
@@ -55,20 +68,36 @@ async function areAgentsEnabled(): Promise<boolean> {
 
 // Run the pipeline
 async function runPipeline() {
+  cronFireCount++;
+  const fireTime = new Date().toISOString();
+  console.log(`[Worker] ⏰ Cron fired (#${cronFireCount}) at ${fireTime} (schedule: ${currentSchedule})`);
+
   if (isRunning) {
-    console.log('[Worker] Pipeline already running, skipping...');
+    console.log('[Worker] ⚠️ Pipeline already running, skipping this trigger');
     return;
   }
 
   // Check if enabled
   const enabled = await areAgentsEnabled();
   if (!enabled) {
-    console.log('[Worker] Agents disabled, skipping run');
+    console.log('[Worker] ⚠️ Agents DISABLED in settings, skipping run. Enable in Admin → AI Agents → toggle "Enable Agents"');
+    return;
+  }
+
+  // Check OPENAI_API_KEY before starting
+  if (!process.env.OPENAI_API_KEY) {
+    console.error('[Worker] ❌ OPENAI_API_KEY not set! Cannot generate articles. Set it in your .env file.');
+    lastResult = {
+      success: false,
+      articlesPublished: 0,
+      error: 'OPENAI_API_KEY is not configured',
+    };
     return;
   }
 
   isRunning = true;
-  console.log(`[Worker] Starting scheduled pipeline run at ${new Date().toISOString()}`);
+  console.log(`[Worker] 🚀 Starting scheduled pipeline run at ${fireTime}`);
+  console.log(`[Worker] Brand: ${getBrandId()}, Schedule: ${currentSchedule}`);
 
   try {
     const brandId = getBrandId();
@@ -81,7 +110,12 @@ async function runPipeline() {
       error: log.errors.length > 0 ? log.errors.join(', ') : undefined,
     };
 
-    console.log(`[Worker] Pipeline completed: ${log.itemsSuccessful} articles published`);
+    if (log.itemsSuccessful > 0) {
+      console.log(`[Worker] ✅ Pipeline completed: ${log.itemsSuccessful} articles published`);
+    } else {
+      console.log(`[Worker] ⚠️ Pipeline completed but 0 articles published. Errors: ${log.errors.join(', ') || 'none'}`);
+      console.log(`[Worker] Metadata:`, JSON.stringify(log.metadata, null, 2));
+    }
     
     // Save last run to database
     try {
@@ -104,7 +138,7 @@ async function runPipeline() {
       console.error('[Worker] Failed to save last run:', e);
     }
   } catch (error) {
-    console.error('[Worker] Pipeline error:', error);
+    console.error('[Worker] ❌ Pipeline error:', error);
     lastResult = {
       success: false,
       articlesPublished: 0,
@@ -125,7 +159,7 @@ function startWorker(schedule: string) {
 
   // Validate cron expression
   if (!cron.validate(schedule)) {
-    console.error(`[Worker] Invalid cron expression: ${schedule}, using default`);
+    console.error(`[Worker] ❌ Invalid cron expression: "${schedule}", falling back to default "0 */6 * * *"`);
     schedule = '0 */6 * * *';
   }
 
@@ -136,8 +170,32 @@ function startWorker(schedule: string) {
     timezone: 'Europe/Berlin', // Default timezone
   });
 
-  console.log(`[Worker] Started with schedule: ${schedule}`);
-  console.log(`[Worker] Next runs will be based on cron: ${schedule}`);
+  console.log(`[Worker] ✅ Cron started: "${schedule}" (timezone: Europe/Berlin)`);
+  console.log(`[Worker] ${describeScheduleHuman(schedule)}`);
+}
+
+// Human-readable schedule description
+function describeScheduleHuman(cronExpression: string): string {
+  const parts = cronExpression.split(' ');
+  if (parts.length !== 5) return `Next run: based on cron "${cronExpression}"`;
+  
+  const [minute, hour] = parts;
+  
+  if (minute === '*' && hour === '*') return 'Next run: every minute';
+  if (minute.startsWith('*/')) {
+    const mins = parseInt(minute.slice(2), 10);
+    return `Next run: every ${mins} minute${mins > 1 ? 's' : ''}`;
+  }
+  if (minute === '0' && hour.startsWith('*/')) {
+    const hours = parseInt(hour.slice(2), 10);
+    return `Next run: every ${hours} hour${hours > 1 ? 's' : ''} at :00`;
+  }
+  if (minute === '0' && hour === '*') return 'Next run: every hour at :00';
+  if (minute === '0' && !hour.includes('*')) {
+    return `Next run: daily at ${hour}:00`;
+  }
+  
+  return `Next run: based on cron "${cronExpression}"`;
 }
 
 // Stop the worker
@@ -145,7 +203,7 @@ function stopWorker() {
   if (scheduledTask) {
     scheduledTask.stop();
     scheduledTask = null;
-    console.log('[Worker] Stopped');
+    console.log('[Worker] 🛑 Stopped');
   }
 }
 
@@ -153,7 +211,7 @@ function stopWorker() {
 async function restartWithNewSchedule() {
   const newSchedule = await loadScheduleFromDB();
   if (newSchedule !== currentSchedule) {
-    console.log(`[Worker] Schedule changed from "${currentSchedule}" to "${newSchedule}"`);
+    console.log(`[Worker] 🔄 Schedule changed: "${currentSchedule}" → "${newSchedule}"`);
     startWorker(newSchedule);
   }
 }
@@ -165,37 +223,57 @@ export async function initializeWorker() {
     return;
   }
 
-  // Don't run in development with hot reload (optional - remove if you want it in dev)
-  // if (process.env.NODE_ENV === 'development') {
-  //   console.log('[Worker] Skipping in development mode');
-  //   return;
-  // }
-
-  console.log('[Worker] Initializing...');
+  console.log('[Worker] 🔧 Initializing...');
 
   try {
+    // --- Startup Health Check ---
+    const brandId = getBrandId();
+    console.log(`[Worker] Brand ID: ${brandId}`);
+
+    // Check OPENAI_API_KEY
+    if (process.env.OPENAI_API_KEY) {
+      console.log(`[Worker] ✅ OPENAI_API_KEY: configured (${process.env.OPENAI_API_KEY.slice(0, 8)}...)`);
+    } else {
+      console.error('[Worker] ❌ OPENAI_API_KEY: NOT SET — articles cannot be generated!');
+    }
+
+    // Load and display DB config
+    const dbConfig = await loadAgentConfigFromDB();
+    if (dbConfig) {
+      console.log(`[Worker] DB Config → enabled: ${dbConfig.enabled}, schedule: "${dbConfig.cronSchedule}", language: ${dbConfig.defaultLanguage || 'de'}, maxArticles: ${dbConfig.maxArticlesPerRun}`);
+      if (dbConfig.enabled === false) {
+        console.log('[Worker] ⚠️ Agents are DISABLED in the database. The cron will fire but skip execution.');
+        console.log('[Worker] To enable: go to Admin → AI Agents → toggle "Enable Agents" → Save Settings');
+      }
+    } else {
+      console.log('[Worker] No agent config found in DB, using defaults');
+    }
+
+    // Load schedule
     const schedule = await loadScheduleFromDB();
     startWorker(schedule);
 
-    // Check for schedule changes every 5 minutes
-    setInterval(restartWithNewSchedule, 5 * 60 * 1000);
+    // Check for schedule changes every 2 minutes (was 5 min, reduced for faster sync)
+    setInterval(restartWithNewSchedule, 2 * 60 * 1000);
     
     // Load last run info from DB
     try {
-      const brandId = getBrandId();
       const collection = await getCollection(brandId, 'settings');
       const lastRunDoc = await collection.findOne({ key: 'workerLastRun' });
       if (lastRunDoc?.value) {
         lastRun = new Date(lastRunDoc.value.timestamp);
         lastResult = lastRunDoc.value.result;
+        console.log(`[Worker] Last run: ${lastRun.toISOString()}, result: ${lastResult?.success ? 'success' : 'failed'} (${lastResult?.articlesPublished || 0} articles)`);
+      } else {
+        console.log('[Worker] No previous run recorded');
       }
     } catch (e) {
       // Ignore
     }
 
-    console.log('[Worker] Initialized successfully');
+    console.log('[Worker] ✅ Initialized successfully');
   } catch (error) {
-    console.error('[Worker] Failed to initialize:', error);
+    console.error('[Worker] ❌ Failed to initialize:', error);
   }
 }
 
@@ -207,6 +285,7 @@ export function getWorkerStatus() {
     currentSchedule,
     lastRun,
     lastResult,
+    cronFireCount,
   };
 }
 
@@ -229,13 +308,35 @@ export async function triggerManualRun() {
   return lastResult;
 }
 
-// Update schedule (called from admin)
+// Update schedule immediately (called from admin API)
 export async function updateSchedule(newSchedule: string) {
   if (!cron.validate(newSchedule)) {
     throw new Error(`Invalid cron expression: ${newSchedule}`);
   }
+  console.log(`[Worker] 🔄 Schedule update requested: "${currentSchedule}" → "${newSchedule}"`);
   startWorker(newSchedule);
   return { success: true, schedule: newSchedule };
+}
+
+// Sync worker with DB config (call after admin saves agentConfig)
+export async function syncWorkerFromDB() {
+  console.log('[Worker] 🔄 Syncing with DB config...');
+  const newSchedule = await loadScheduleFromDB();
+  if (newSchedule !== currentSchedule) {
+    console.log(`[Worker] Schedule changed: "${currentSchedule}" → "${newSchedule}"`);
+    startWorker(newSchedule);
+  }
+  
+  // Verify enabled state
+  const enabled = await areAgentsEnabled();
+  console.log(`[Worker] Agents enabled: ${enabled}`);
+  
+  return { 
+    synced: true, 
+    schedule: newSchedule, 
+    enabled,
+    workerActive: scheduledTask !== null,
+  };
 }
 
 // Export for testing

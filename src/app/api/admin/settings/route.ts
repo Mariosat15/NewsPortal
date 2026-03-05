@@ -141,6 +141,18 @@ export async function POST(request: NextRequest) {
     // Clear the settings cache so new values are loaded
     clearSettingsCache();
 
+    // If agentConfig was updated, sync the worker's cron schedule immediately
+    if (body.agentConfig) {
+      try {
+        const { syncWorkerFromDB } = await import('@/lib/agents/worker');
+        const syncResult = await syncWorkerFromDB();
+        console.log('[Settings] Worker synced after agentConfig save:', syncResult);
+      } catch (syncError) {
+        // Don't fail the save if worker sync fails
+        console.error('[Settings] Failed to sync worker after agentConfig save:', syncError);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Settings saved to database successfully',
