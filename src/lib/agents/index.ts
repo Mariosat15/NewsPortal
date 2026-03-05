@@ -27,4 +27,5 @@ export {
   triggerManualRun,
   updateSchedule,
   ensureWorkerRunning,
+  syncWorkerFromDB,
 } from './worker';

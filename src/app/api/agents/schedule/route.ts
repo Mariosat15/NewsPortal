@@ -1,43 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getSchedulerConfig, describeSchedule } from '@/lib/agents/scheduler';
-import { getWorkerStatus, triggerManualRun, updateSchedule, ensureWorkerRunning, stopWorker } from '@/lib/agents/worker';
+import { getWorkerStatus, triggerManualRun, syncWorkerFromDB } from '@/lib/agents/worker';
 import { verifyAdmin } from '@/lib/auth/admin';
 
 // GET /api/agents/schedule - Get schedule status
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const triggerRun = searchParams.get('trigger') === 'true';
-  const startWorkerParam = searchParams.get('start') === 'true';
-  const stopWorkerParam = searchParams.get('stop') === 'true';
   const secret = searchParams.get('secret');
   const brandId = getBrandIdSync();
   
   try {
     const config = await getSchedulerConfig(brandId);
-    let workerStatus = getWorkerStatus();
-    
-    // If stop parameter is set, stop the worker
-    if (stopWorkerParam) {
-      stopWorker();
-      console.log('[API] Worker stop requested');
-      workerStatus = getWorkerStatus();
-      return NextResponse.json({
-        success: true,
-        stopped: true,
-        worker: {
-          isActive: workerStatus.isActive,
-          isRunning: workerStatus.isRunning,
-        },
-      });
-    }
-    
-    // If start parameter is set, ensure worker is running
-    if (startWorkerParam) {
-      const result = await ensureWorkerRunning();
-      console.log('[API] Worker start requested:', result);
-      workerStatus = getWorkerStatus();
-    }
+    const workerStatus = getWorkerStatus();
     
     // If trigger parameter is set with valid secret, trigger a manual run
     if (triggerRun && secret === process.env.ADMIN_SECRET) {
@@ -59,7 +35,7 @@ export async function GET(request: NextRequest) {
       });
     }
     
-    // Return worker status
+    // Return worker status (read-only)
     return NextResponse.json({
       success: true,
       worker: {
@@ -78,7 +54,6 @@ export async function GET(request: NextRequest) {
       },
       diagnostics: {
         openaiKeySet: !!process.env.OPENAI_API_KEY,
-        brandId: getBrandIdSync(),
         agentsEnabled: config.enabled,
       },
     });
@@ -121,14 +96,9 @@ export async function POST(request: NextRequest) {
       { upsert: true }
     );
     
-    // Update the internal worker with new schedule
-    if (cronSchedule) {
-      try {
-        await updateSchedule(cronSchedule);
-      } catch (e) {
-        console.error('Failed to update worker schedule:', e);
-      }
-    }
+    // Sync worker: starts or stops based on enabled state
+    const syncResult = await syncWorkerFromDB();
+    console.log('[API] Worker synced after schedule update:', syncResult);
     
     const newConfig = await getSchedulerConfig(brandId);
     const workerStatus = getWorkerStatus();

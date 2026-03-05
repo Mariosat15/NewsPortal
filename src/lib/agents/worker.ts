@@ -207,12 +207,30 @@ function stopWorker() {
   }
 }
 
-// Restart with new schedule
-async function restartWithNewSchedule() {
-  const newSchedule = await loadScheduleFromDB();
-  if (newSchedule !== currentSchedule) {
-    console.log(`[Worker] 🔄 Schedule changed: "${currentSchedule}" → "${newSchedule}"`);
-    startWorker(newSchedule);
+// Periodic sync: checks enabled state AND schedule from DB
+async function syncFromDBPeriodic() {
+  try {
+    const enabled = await areAgentsEnabled();
+    const newSchedule = await loadScheduleFromDB();
+    
+    if (!enabled && scheduledTask) {
+      console.log('[Worker] 🛑 Periodic sync: agents disabled, stopping worker');
+      stopWorker();
+      return;
+    }
+    
+    if (enabled && !scheduledTask) {
+      console.log('[Worker] ✅ Periodic sync: agents enabled, starting worker');
+      startWorker(newSchedule);
+      return;
+    }
+    
+    if (enabled && newSchedule !== currentSchedule) {
+      console.log(`[Worker] 🔄 Periodic sync: schedule changed "${currentSchedule}" → "${newSchedule}"`);
+      startWorker(newSchedule);
+    }
+  } catch {
+    // Ignore periodic sync errors
   }
 }
 
@@ -249,12 +267,19 @@ export async function initializeWorker() {
       console.log('[Worker] No agent config found in DB, using defaults');
     }
 
-    // Load schedule
+    // Only start the cron if agents are enabled
+    const agentsEnabled = dbConfig?.enabled !== false;
     const schedule = await loadScheduleFromDB();
-    startWorker(schedule);
+    
+    if (agentsEnabled) {
+      startWorker(schedule);
+    } else {
+      currentSchedule = schedule; // Remember schedule but don't start cron
+      console.log('[Worker] ⏸️ Agents disabled — cron NOT started. Enable in Admin → AI Agents to begin.');
+    }
 
-    // Check for schedule changes every 2 minutes (was 5 min, reduced for faster sync)
-    setInterval(restartWithNewSchedule, 2 * 60 * 1000);
+    // Check for config changes every 2 minutes (syncs enabled state + schedule)
+    setInterval(syncFromDBPeriodic, 2 * 60 * 1000);
     
     // Load last run info from DB
     try {
@@ -319,22 +344,41 @@ export async function updateSchedule(newSchedule: string) {
 }
 
 // Sync worker with DB config (call after admin saves agentConfig)
+// This is the KEY function: it starts or stops the worker based on the enabled flag
 export async function syncWorkerFromDB() {
   console.log('[Worker] 🔄 Syncing with DB config...');
+  
+  const enabled = await areAgentsEnabled();
   const newSchedule = await loadScheduleFromDB();
-  if (newSchedule !== currentSchedule) {
-    console.log(`[Worker] Schedule changed: "${currentSchedule}" → "${newSchedule}"`);
-    startWorker(newSchedule);
+  
+  if (!enabled) {
+    // === AGENTS DISABLED → STOP the cron job completely ===
+    if (scheduledTask) {
+      console.log('[Worker] 🛑 Agents DISABLED — stopping cron job');
+      stopWorker();
+    } else {
+      console.log('[Worker] Agents disabled, worker already stopped');
+    }
+    return { 
+      synced: true, 
+      schedule: newSchedule, 
+      enabled: false,
+      workerActive: false,
+    };
   }
   
-  // Verify enabled state
-  const enabled = await areAgentsEnabled();
-  console.log(`[Worker] Agents enabled: ${enabled}`);
+  // === AGENTS ENABLED → ensure worker is running with correct schedule ===
+  if (newSchedule !== currentSchedule || scheduledTask === null) {
+    console.log(`[Worker] ✅ Agents ENABLED — starting cron "${newSchedule}"`);
+    startWorker(newSchedule);
+  } else {
+    console.log(`[Worker] Agents enabled, worker already running with schedule "${currentSchedule}"`);
+  }
   
   return { 
     synced: true, 
     schedule: newSchedule, 
-    enabled,
+    enabled: true,
     workerActive: scheduledTask !== null,
   };
 }

@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Play, Settings, Clock, Plus, X, Rss, Brain, FileText, 
   Sliders, Save, Loader2, AlertCircle, CheckCircle, Trash2,
-  Globe, Zap, BookOpen, MessageSquare, Timer, Square, Power
+  Globe, Zap, BookOpen, MessageSquare, Timer, Power
 } from 'lucide-react';
 import { SchedulePicker } from './schedule-picker';
 
@@ -156,7 +156,7 @@ function PipelineProgressCard() {
   );
 }
 
-// Worker Status Card Component
+// Worker Status Card — read-only display, controlled entirely by the Enable toggle + Save
 function WorkerStatusCard({ schedule, agentsEnabled }: { schedule: string; agentsEnabled: boolean }) {
   const [status, setStatus] = useState<{
     isActive: boolean;
@@ -170,15 +170,11 @@ function WorkerStatusCard({ schedule, agentsEnabled }: { schedule: string; agent
   const [diagnostics, setDiagnostics] = useState<{
     openaiKeySet: boolean;
     agentsEnabled: boolean;
-    brandId: string;
   } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activating, setActivating] = useState(false);
-  const [stopping, setStopping] = useState(false);
 
   useEffect(() => {
     fetchStatus();
-    // Refresh status every 10 seconds
     const interval = setInterval(fetchStatus, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -187,12 +183,8 @@ function WorkerStatusCard({ schedule, agentsEnabled }: { schedule: string; agent
     try {
       const res = await fetch('/api/agents/schedule');
       const data = await res.json();
-      if (data.success && data.worker) {
-        setStatus(data.worker);
-      }
-      if (data.diagnostics) {
-        setDiagnostics(data.diagnostics);
-      }
+      if (data.success && data.worker) setStatus(data.worker);
+      if (data.diagnostics) setDiagnostics(data.diagnostics);
     } catch (error) {
       console.error('Failed to fetch worker status:', error);
     } finally {
@@ -200,173 +192,104 @@ function WorkerStatusCard({ schedule, agentsEnabled }: { schedule: string; agent
     }
   }
 
-  async function activateWorker() {
-    setActivating(true);
-    try {
-      const res = await fetch('/api/agents/schedule?start=true');
-      await res.json();
-      // Wait a bit and refresh status
-      await new Promise(r => setTimeout(r, 1000));
-      await fetchStatus();
-    } catch (error) {
-      console.error('Failed to activate worker:', error);
-    } finally {
-      setActivating(false);
-    }
-  }
-
-  async function stopWorkerHandler() {
-    setStopping(true);
-    try {
-      const res = await fetch('/api/agents/schedule?stop=true');
-      await res.json();
-      // Wait a bit and refresh status
-      await new Promise(r => setTimeout(r, 1000));
-      await fetchStatus();
-    } catch (error) {
-      console.error('Failed to stop worker:', error);
-    } finally {
-      setStopping(false);
-    }
-  }
-
-  // Determine if there are blockers preventing article generation
-  const blockers: string[] = [];
-  if (!agentsEnabled) blockers.push('Agents are disabled — toggle "Enable Agents" below and save');
-  if (diagnostics && !diagnostics.openaiKeySet) blockers.push('OPENAI_API_KEY is not set in .env');
-  if (status && !status.isActive) blockers.push('Worker is not active — click Activate');
-
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Timer className="h-5 w-5" />
-          Automatic Scheduling
+          Scheduling Status
         </CardTitle>
         <CardDescription>
-          Internal worker runs automatically based on schedule
+          Automatic article generation status
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading worker status...
+            Loading...
           </div>
-        ) : status ? (
+        ) : (
           <>
-            {/* Blockers Warning */}
-            {blockers.length > 0 && (
-              <div className="p-4 rounded-lg border bg-amber-50 border-amber-200">
-                <p className="font-medium text-amber-800 mb-2 flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4" />
-                  Articles won&apos;t generate automatically because:
-                </p>
-                <ul className="text-sm text-amber-700 space-y-1">
-                  {blockers.map((b, i) => (
-                    <li key={i}>• {b}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Worker Status */}
-            <div className={`p-4 rounded-lg border ${status.isActive ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className={`w-3 h-3 rounded-full ${status.isActive ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                  <p className={`font-medium ${status.isActive ? 'text-green-800' : 'text-red-800'}`}>
-                    {status.isActive ? 'Worker Active' : 'Worker Inactive'}
+            {/* Main status indicator */}
+            <div className={`p-4 rounded-lg border ${
+              agentsEnabled && status?.isActive 
+                ? 'bg-green-50 border-green-200' 
+                : 'bg-gray-50 border-gray-200'
+            }`}>
+              <div className="flex items-center gap-3">
+                <span className={`w-3 h-3 rounded-full ${
+                  agentsEnabled && status?.isActive 
+                    ? 'bg-green-500 animate-pulse' 
+                    : 'bg-gray-400'
+                }`} />
+                <div>
+                  <p className={`font-medium ${
+                    agentsEnabled && status?.isActive ? 'text-green-800' : 'text-gray-600'
+                  }`}>
+                    {agentsEnabled && status?.isActive 
+                      ? 'Scheduling Active'
+                      : !agentsEnabled
+                        ? 'Scheduling Off'
+                        : 'Waiting for next save...'}
                   </p>
+                  {agentsEnabled && status?.isActive && (
+                    <p className="text-sm text-green-700 mt-0.5">
+                      {status.scheduleDescription || `Cron: ${schedule}`}
+                    </p>
+                  )}
+                  {!agentsEnabled && (
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      Toggle &quot;Enable Agents&quot; above and save to start
+                    </p>
+                  )}
                 </div>
-                {!status.isActive ? (
-                  <Button size="sm" onClick={activateWorker} disabled={activating}>
-                    {activating ? (
-                      <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Starting...</>
-                    ) : (
-                      <><Play className="h-3 w-3 mr-1" /> Activate</>
-                    )}
-                  </Button>
-                ) : (
-                  <Button size="sm" variant="destructive" onClick={stopWorkerHandler} disabled={stopping || status.isRunning}>
-                    {stopping ? (
-                      <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Stopping...</>
-                    ) : (
-                      <><Square className="h-3 w-3 mr-1" /> Stop</>
-                    )}
-                  </Button>
-                )}
               </div>
-              {status.isActive && (
-                <p className="text-sm text-green-700">
-                  Schedule: <strong>{status.scheduleDescription || schedule}</strong>
-                </p>
-              )}
-              {status.isRunning && (
-                <p className="text-sm text-blue-600 mt-1 flex items-center gap-1">
+              {status?.isRunning && (
+                <p className="text-sm text-blue-600 mt-2 flex items-center gap-1">
                   <Loader2 className="h-3 w-3 animate-spin" />
-                  Currently running pipeline...
+                  Pipeline running right now...
                 </p>
               )}
             </div>
 
-            {/* Last Run Info */}
-            {status.lastRun && (
+            {/* Last Run */}
+            {status?.lastRun && (
               <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm font-medium mb-1">Last Scheduled Run</p>
+                <p className="text-sm font-medium mb-1">Last Run</p>
                 <p className="text-xs text-muted-foreground">
                   {new Date(status.lastRun).toLocaleString()}
                 </p>
                 {status.lastResult && (
-                  <div className={`mt-2 text-xs ${status.lastResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                  <p className={`mt-1 text-xs ${status.lastResult.success ? 'text-green-600' : 'text-red-600'}`}>
                     {status.lastResult.success 
-                      ? `✓ Published ${status.lastResult.articlesPublished} articles`
-                      : `✗ Failed: ${status.lastResult.error || 'Unknown error'}`
+                      ? `✓ ${status.lastResult.articlesPublished} articles published`
+                      : `✗ ${status.lastResult.error || 'Failed'}`
                     }
-                  </div>
+                  </p>
                 )}
               </div>
             )}
 
-            {/* Diagnostics */}
-            <div className="p-3 bg-gray-50 rounded-lg space-y-1.5">
-              <p className="text-sm font-medium">Diagnostics</p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${agentsEnabled ? 'bg-green-500' : 'bg-red-500'}`} />
-                  Agents: {agentsEnabled ? 'Enabled' : 'Disabled'}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${diagnostics?.openaiKeySet ? 'bg-green-500' : 'bg-red-500'}`} />
-                  OpenAI Key: {diagnostics?.openaiKeySet ? 'Set' : 'Missing'}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${status.isActive ? 'bg-green-500' : 'bg-red-500'}`} />
-                  Worker: {status.isActive ? 'Active' : 'Inactive'}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Clock className="h-3 w-3 text-muted-foreground" />
-                  Cron triggers: {status.cronFireCount || 0}
-                </div>
+            {/* Quick diagnostics */}
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="flex items-center gap-1.5 p-2 bg-gray-50 rounded">
+                <span className={`w-2 h-2 rounded-full ${diagnostics?.openaiKeySet ? 'bg-green-500' : 'bg-red-500'}`} />
+                OpenAI: {diagnostics?.openaiKeySet ? 'Ready' : 'Missing key'}
               </div>
-              <p className="mt-1 font-mono text-xs bg-gray-100 px-2 py-1 rounded">
-                Cron: {status.currentSchedule || schedule}
-              </p>
+              <div className="flex items-center gap-1.5 p-2 bg-gray-50 rounded">
+                <Clock className="h-3 w-3 text-muted-foreground" />
+                Runs: {status?.cronFireCount || 0}
+              </div>
             </div>
+
+            {/* Missing OpenAI warning */}
+            {diagnostics && !diagnostics.openaiKeySet && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                <strong>⚠️</strong> OPENAI_API_KEY is not set in your .env file. Articles cannot be generated.
+              </div>
+            )}
           </>
-        ) : (
-          <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-            <p className="text-sm text-yellow-700 mb-3">
-              Worker status unavailable. Click below to start it.
-            </p>
-            <Button size="sm" onClick={activateWorker} disabled={activating}>
-              {activating ? (
-                <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Starting...</>
-              ) : (
-                <><Play className="h-3 w-3 mr-1" /> Start Worker</>
-              )}
-            </Button>
-          </div>
         )}
       </CardContent>
     </Card>
@@ -840,7 +763,8 @@ export function AgentConfig() {
       
       if (response.ok) {
         if (!silent) {
-          setSaveResult({ success: true, message: 'Settings saved successfully!' });
+          const action = settings.enabled ? 'saved & worker started' : 'saved & worker stopped';
+          setSaveResult({ success: true, message: `Settings ${action}!` });
           setTimeout(() => setSaveResult(null), 3000);
         }
       } else {
