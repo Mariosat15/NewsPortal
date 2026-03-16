@@ -95,6 +95,8 @@ export class TrackingRepository {
     if (input.lastPageUrl) updateFields.lastPageUrl = input.lastPageUrl;
     if (input.enteredPortal !== undefined) updateFields.enteredPortal = input.enteredPortal;
     if (input.purchaseCompleted !== undefined) updateFields.purchaseCompleted = input.purchaseCompleted;
+    if (input.landingPageSlug) updateFields.landingPageSlug = input.landingPageSlug;
+    if (input.landingPageId) updateFields.landingPageId = input.landingPageId;
 
     const updateOps: Record<string, unknown> = { $set: updateFields };
     
@@ -117,11 +119,19 @@ export class TrackingRepository {
   async getOrCreateSession(input: VisitorSessionCreateInput): Promise<VisitorSession> {
     const existing = await this.findSession(input.sessionId);
     if (existing) {
-      // Update last seen and increment page views
-      const updated = await this.updateSession(input.sessionId, {
+      // Update last seen, increment page views, and update landing page info if provided
+      const updateInput: VisitorSessionUpdateInput = {
         lastSeenAt: new Date(),
         pageViews: 1,
-      });
+      };
+      // Always update LP slug/id if provided (ensures tracking works for LP visits)
+      if (input.landingPageSlug) {
+        updateInput.landingPageSlug = input.landingPageSlug;
+      }
+      if (input.landingPageId) {
+        updateInput.landingPageId = input.landingPageId;
+      }
+      const updated = await this.updateSession(input.sessionId, updateInput);
       return updated || existing;
     }
     return this.createSession(input);

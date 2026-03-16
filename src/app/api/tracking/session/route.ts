@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     // Get or create session
     const session = await trackingRepo.getOrCreateSession(sessionInput);
 
-    // IMPORTANT: Always update network type (it might have been UNKNOWN at creation)
+    // IMPORTANT: Always update network type and landing page info
     const updateData: Record<string, unknown> = {
       networkType,
       lastSeenAt: new Date(),
@@ -85,6 +85,19 @@ export async function POST(request: NextRequest) {
     
     if (pageUrl) {
       updateData.lastPageUrl = pageUrl;
+    }
+
+    // Always update landing page slug/id when provided (ensures LP tracking works
+    // even if the session was created without one or with a different one)
+    if (landingPageSlug) {
+      updateData.landingPageSlug = landingPageSlug;
+    }
+    if (landingPageId) {
+      try {
+        updateData.landingPageId = new ObjectId(landingPageId);
+      } catch {
+        // Invalid ObjectId, skip
+      }
     }
 
     await trackingRepo.updateSession(sessionId, updateData);

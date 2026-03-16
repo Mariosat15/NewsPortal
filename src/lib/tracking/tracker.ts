@@ -132,7 +132,12 @@ export async function initTracker(config: TrackerConfig = {}): Promise<string> {
     return '';
   }
 
-  const sessionId = getOrCreateSessionId();
+  const baseSessionId = getOrCreateSessionId();
+  // Create a unique session ID per landing page so each LP gets its own tracking record.
+  // Without this, all LP visits share the same session and only the first LP gets credit.
+  const sessionId = config.landingPageSlug
+    ? `${baseSessionId}__${config.landingPageSlug}`
+    : baseSessionId;
   const utmParams = getUtmParams();
 
   state = {

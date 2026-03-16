@@ -74,4 +74,6 @@ export interface VisitorSessionUpdateInput {
   enteredPortal?: boolean;
   lastPageUrl?: string;
   purchaseCompleted?: boolean;
+  landingPageSlug?: string;
+  landingPageId?: ObjectId;
 }
