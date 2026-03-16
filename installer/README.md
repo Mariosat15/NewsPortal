@@ -9,6 +9,7 @@ A plug & play web-based installer that guides you through deploying the News Por
 - **Auto-Configuration**: Generates all config files (.env, nginx, PM2)
 - **SSL Setup**: Automatically obtains Let's Encrypt certificates
 - **Real-Time Progress**: Watch the deployment in real-time
+-*** admin ex : https://marketplaceio.cloud/admin**
 
 ## Quick Start
 
@@ -22,7 +23,7 @@ A plug & play web-based installer that guides you through deploying the News Por
    ```bash
    npm run dev
    ```
-https://marketplaceio.cloud/admin
+
 3. **Open the wizard**: 
    Navigate to [http://localhost:3001](http://localhost:3001)
 

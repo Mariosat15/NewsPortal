@@ -6,6 +6,7 @@ export interface ServerConfig {
   password?: string;
   privateKey?: string;
   deployPath: string;
+  repoUrl: string;  // GitHub repository URL to clone/pull from
   skipAptWait?: boolean;  // Skip waiting for apt/dpkg (useful for re-deployments)
 }
 

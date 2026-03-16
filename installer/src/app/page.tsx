@@ -52,6 +52,7 @@ const initialConfig: DeploymentConfig = {
     password: '',
     privateKey: '',
     deployPath: '/var/www/newsportal',
+    repoUrl: 'https://github.com/Mariosat15/NewsPortal.git',
   },
   domain: {
     brandId: '',

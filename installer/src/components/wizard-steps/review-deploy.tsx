@@ -23,6 +23,7 @@ export function ReviewDeployStep({ config }: ReviewDeployStepProps) {
         { label: 'User', value: config.server.username || 'Not set', valid: !!config.server.username },
         { label: 'Auth', value: config.server.authMethod === 'key' ? 'SSH Key' : 'Password', valid: true },
         { label: 'Deploy Path', value: config.server.deployPath || 'Not set', valid: !!config.server.deployPath },
+        { label: 'Git Repo', value: config.server.repoUrl || 'Default (Mariosat15/NewsPortal)', valid: true },
       ],
     },
     {

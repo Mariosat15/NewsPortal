@@ -2,8 +2,8 @@ import { SSHClient } from './ssh-client';
 import { DeploymentConfig } from './types';
 import { setupCloudflare, CLOUDFLARE_IPV4_RANGES, CLOUDFLARE_IPV6_RANGES } from './cloudflare';
 
-// GitHub repo URL for cloning
-const REPO_URL = 'https://github.com/Mariosat15/NewsPortal.git';
+// Default GitHub repo URL for cloning (used if none configured)
+const DEFAULT_REPO_URL = 'https://github.com/Mariosat15/NewsPortal.git';
 
 // Node.js version to install (use LTS)
 const NODE_VERSION = '20';
@@ -226,6 +226,7 @@ export async function deployToServer(
   });
 
   const deployPath = config.server.deployPath;
+  const repoUrl = config.server.repoUrl || DEFAULT_REPO_URL;
   const brandId = config.domain.brandId;
   const domain = config.domain.domain;
   const sslEmail = config.domain.sslEmail || config.admin.adminEmail;
@@ -354,10 +355,10 @@ export async function deployToServer(
       await ssh.exec(`sudo mkdir -p ${deployPath}`);
       await ssh.exec(`sudo chown -R $(whoami):$(whoami) ${deployPath}`);
       
-      onProgress({ stepId: 'upload', status: 'running', log: `Cloning from ${REPO_URL}...` });
+      onProgress({ stepId: 'upload', status: 'running', log: `Cloning from ${repoUrl}...` });
       
       // Git writes progress to stderr, so we check exit code and look for actual errors
-      const cloneResult = await ssh.exec(`git clone --progress ${REPO_URL} ${deployPath} 2>&1`);
+      const cloneResult = await ssh.exec(`git clone --progress ${repoUrl} ${deployPath} 2>&1`);
       
       // Check for actual failure indicators
       const hasError = cloneResult.exitCode !== 0 || 

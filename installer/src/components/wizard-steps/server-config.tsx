@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { ServerConfig } from '@/lib/types';
-import { Server, Key, Lock, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Server, Key, Lock, Loader2, CheckCircle, XCircle, GitBranch } from 'lucide-react';
 import { useState } from 'react';
 
 interface ServerConfigStepProps {
@@ -142,6 +142,22 @@ export function ServerConfigStep({ config, onChange, onTestConnection }: ServerC
         />
         <p className="text-xs text-muted-foreground">
           The directory where the application will be deployed
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="repoUrl" className="flex items-center gap-2">
+          <GitBranch className="h-4 w-4" />
+          Git Repository URL
+        </Label>
+        <Input
+          id="repoUrl"
+          placeholder="https://github.com/username/repo.git"
+          value={config.repoUrl}
+          onChange={(e) => onChange({ ...config, repoUrl: e.target.value })}
+        />
+        <p className="text-xs text-muted-foreground">
+          The GitHub repository to clone. Change this if deploying from your own fork.
         </p>
       </div>
 
