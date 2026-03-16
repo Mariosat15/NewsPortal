@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
-  RefreshCw, Loader2, Eye, Users, Globe, Smartphone, Monitor,
-  Clock, MapPin, MousePointer, ArrowRight, Phone, Search,
-  TrendingUp, Calendar, Filter, ChevronDown, ChevronUp, X, Download,
+  RefreshCw, Loader2, Users, Globe, Smartphone, Monitor,
+  Clock, MapPin, MousePointer, Phone, Search,
+  Calendar, Filter, ChevronDown, ChevronUp, X, Download,
   ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 
@@ -73,6 +73,8 @@ interface Stats {
   captureRate: number;
 }
 
+type NetworkFilter = 'ALL' | 'MOBILE_DATA' | 'WIFI' | 'UNKNOWN';
+
 export function TrackingAnalytics() {
   const [sessions, setSessions] = useState<VisitorSession[]>([]);
   const [events, setEvents] = useState<TrackingEvent[]>([]);
@@ -82,10 +84,10 @@ export function TrackingAnalytics() {
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [selectedSession, setSelectedSession] = useState<VisitorSession | null>(null);
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
-  const [selectedPage, setSelectedPage] = useState<string | null>(null); // Filter by page slug
-  const [mobileOnly, setMobileOnly] = useState(true); // Default to showing only mobile data visits
+  const [selectedPage, setSelectedPage] = useState<string | null>(null);
+  const [networkFilter, setNetworkFilter] = useState<NetworkFilter>('ALL');
+  const [visibleCount, setVisibleCount] = useState(50);
   
   // Sorting state
   type SortField = 'lastSeen' | 'firstSeen' | 'msisdn' | 'visits' | 'referrer' | 'network' | 'carrier' | 'page';
@@ -96,11 +98,16 @@ export function TrackingAnalytics() {
     loadData();
   }, []);
 
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [search, dateFrom, dateTo, networkFilter, selectedPage]);
+
   const loadData = async () => {
     setLoading(true);
     try {
-      // Fetch sessions
-      const sessionsRes = await fetch('/api/admin/tracking/sessions');
+      // Fetch ALL sessions (limit=0 means no limit)
+      const sessionsRes = await fetch('/api/admin/tracking/sessions?limit=0');
       const sessionsData = sessionsRes.ok ? await sessionsRes.json() : { sessions: [] };
       
       // Fetch events
@@ -119,19 +126,20 @@ export function TrackingAnalytics() {
       setEvents(eventsList);
       setLandingPageStats(lpStatsList);
 
-      // Calculate stats
+      // Use server-side aggregate counts for accuracy
+      const serverMobile = sessionsData.totalMobile ?? 0;
+      const serverWifi = sessionsData.totalWifi ?? 0;
+
       const uniqueIps = new Set(sessionsList.map((s: VisitorSession) => s.ip)).size;
       const msisdnCount = sessionsList.filter((s: VisitorSession) => s.msisdn).length;
-      const mobileCount = sessionsList.filter((s: VisitorSession) => s.networkType === 'MOBILE_DATA').length;
-      const wifiCount = sessionsList.filter((s: VisitorSession) => s.networkType === 'WIFI').length;
 
       setStats({
         totalSessions: sessionsList.length,
         totalEvents: eventsList.length,
         uniqueVisitors: uniqueIps,
         msisdnCaptured: msisdnCount,
-        mobileDataVisits: mobileCount,
-        wifiVisits: wifiCount,
+        mobileDataVisits: serverMobile,
+        wifiVisits: serverWifi,
         captureRate: sessionsList.length > 0 ? (msisdnCount / sessionsList.length) * 100 : 0,
       });
     } catch (error) {
@@ -147,41 +155,35 @@ export function TrackingAnalytics() {
       const fromDate = new Date(dateFrom);
       fromDate.setHours(0, 0, 0, 0);
       const sessionDate = new Date(session.firstSeenAt);
-      if (sessionDate < fromDate) {
-        return false;
-      }
+      if (sessionDate < fromDate) return false;
     }
     
     if (dateTo) {
       const toDate = new Date(dateTo);
       toDate.setHours(23, 59, 59, 999);
       const sessionDate = new Date(session.lastSeenAt);
-      if (sessionDate > toDate) {
-        return false;
-      }
+      if (sessionDate > toDate) return false;
     }
 
-    // Filter by mobile only
-    if (mobileOnly && session.networkType !== 'MOBILE_DATA') {
-      return false;
+    // Network type filter
+    if (networkFilter !== 'ALL') {
+      if (networkFilter === 'UNKNOWN') {
+        if (session.networkType && session.networkType !== 'UNKNOWN') return false;
+      } else {
+        if (session.networkType !== networkFilter) return false;
+      }
     }
 
     // Filter by selected page
     if (selectedPage) {
       if (selectedPage === 'main-site') {
-        // Main site = sessions without landing page
-        if (session.landingPageSlug) {
-          return false;
-        }
+        if (session.landingPageSlug) return false;
       } else {
-        // Landing page filter
-        if (session.landingPageSlug !== selectedPage) {
-          return false;
-        }
+        if (session.landingPageSlug !== selectedPage) return false;
       }
     }
 
-    // Filter by search (searches multiple fields)
+    // Filter by search
     if (search) {
       const searchLower = search.toLowerCase();
       const searchableFields = [
@@ -199,10 +201,7 @@ export function TrackingAnalytics() {
         session.device?.os,
       ].filter(Boolean).map(f => f!.toLowerCase());
       
-      const matchesSearch = searchableFields.some(field => field.includes(searchLower));
-      if (!matchesSearch) {
-        return false;
-      }
+      if (!searchableFields.some(field => field.includes(searchLower))) return false;
     }
     return true;
   });
@@ -229,11 +228,11 @@ export function TrackingAnalytics() {
   const getNetworkBadge = (network: string) => {
     switch (network) {
       case 'MOBILE_DATA':
-        return <Badge className="bg-blue-100 text-blue-700">Mobile Data</Badge>;
+        return <Badge className="bg-blue-100 text-blue-700">📱 Mobile Data</Badge>;
       case 'WIFI':
-        return <Badge className="bg-purple-100 text-purple-700">WiFi</Badge>;
+        return <Badge className="bg-purple-100 text-purple-700">📶 WiFi</Badge>;
       default:
-        return <Badge className="bg-gray-100 text-gray-600">Unknown</Badge>;
+        return <Badge className="bg-gray-100 text-gray-600">❓ Unknown</Badge>;
     }
   };
 
@@ -262,7 +261,6 @@ export function TrackingAnalytics() {
     const groups = new Map<string, VisitorSession[]>();
     
     sessionList.forEach(session => {
-      // Use MSISDN as key if available, otherwise use IP
       const key = session.msisdn || `ip_${session.ip}`;
       if (!groups.has(key)) {
         groups.set(key, []);
@@ -270,42 +268,24 @@ export function TrackingAnalytics() {
       groups.get(key)!.push(session);
     });
 
-    // Convert to array and sort by latest activity
-    return Array.from(groups.entries()).map(([key, sessions]) => {
-      // Sort sessions by lastSeenAt descending
-      sessions.sort((a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime());
-      const latestSession = sessions[0];
-      
-      // Get unique landing pages
-      const landingPages = [...new Set(sessions.map(s => s.landingPageSlug).filter(Boolean))] as string[];
-      
-      // Sum total page views
-      const totalVisits = sessions.reduce((sum, s) => sum + (s.pageViews || 1), 0);
-      
-      // Get earliest first seen
-      const firstSeenAt = sessions.reduce((earliest, s) => {
+    return Array.from(groups.entries()).map(([key, groupSessions]) => {
+      groupSessions.sort((a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime());
+      const latestSession = groupSessions[0];
+      const landingPages = [...new Set(groupSessions.map(s => s.landingPageSlug).filter(Boolean))] as string[];
+      const totalVisits = groupSessions.reduce((sum, s) => sum + (s.pageViews || 1), 0);
+      const firstSeenAt = groupSessions.reduce((earliest, s) => {
         const sDate = new Date(s.firstSeenAt).getTime();
         const eDate = new Date(earliest).getTime();
         return sDate < eDate ? s.firstSeenAt : earliest;
-      }, sessions[0].firstSeenAt);
+      }, groupSessions[0].firstSeenAt);
 
-      return {
-        key,
-        msisdn: latestSession.msisdn || null,
-        sessions,
-        latestSession,
-        totalVisits,
-        landingPages,
-        firstSeenAt,
-      };
+      return { key, msisdn: latestSession.msisdn || null, sessions: groupSessions, latestSession, totalVisits, landingPages, firstSeenAt };
     });
   };
 
-  // Sort grouped sessions based on current sort settings
   const sortGroups = (groups: SessionGroup[]): SessionGroup[] => {
     return [...groups].sort((a, b) => {
       let comparison = 0;
-      
       switch (sortField) {
         case 'lastSeen':
           comparison = new Date(a.latestSession.lastSeenAt).getTime() - new Date(b.latestSession.lastSeenAt).getTime();
@@ -313,43 +293,46 @@ export function TrackingAnalytics() {
         case 'firstSeen':
           comparison = new Date(a.firstSeenAt).getTime() - new Date(b.firstSeenAt).getTime();
           break;
-        case 'msisdn':
+        case 'msisdn': {
           const msisdnA = a.msisdn || '';
           const msisdnB = b.msisdn || '';
           comparison = msisdnA.localeCompare(msisdnB);
           break;
+        }
         case 'visits':
           comparison = a.totalVisits - b.totalVisits;
           break;
-        case 'referrer':
+        case 'referrer': {
           const refA = a.latestSession.referrer || '';
           const refB = b.latestSession.referrer || '';
           comparison = refA.localeCompare(refB);
           break;
-        case 'network':
+        }
+        case 'network': {
           const netA = a.latestSession.networkType || '';
           const netB = b.latestSession.networkType || '';
           comparison = netA.localeCompare(netB);
           break;
-        case 'carrier':
+        }
+        case 'carrier': {
           const carrierA = a.latestSession.carrier || '';
           const carrierB = b.latestSession.carrier || '';
           comparison = carrierA.localeCompare(carrierB);
           break;
-        case 'page':
+        }
+        case 'page': {
           const pageA = a.latestSession.landingPageSlug || 'Main Site';
           const pageB = b.latestSession.landingPageSlug || 'Main Site';
           comparison = pageA.localeCompare(pageB);
           break;
+        }
         default:
           comparison = new Date(a.latestSession.lastSeenAt).getTime() - new Date(b.latestSession.lastSeenAt).getTime();
       }
-      
       return sortDirection === 'asc' ? comparison : -comparison;
     });
   };
 
-  // Toggle sort - if same field, toggle direction; if different field, set to desc
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -359,7 +342,6 @@ export function TrackingAnalytics() {
     }
   };
 
-  // Get sort icon for a field
   const getSortIcon = (field: SortField) => {
     if (sortField !== field) {
       return <ArrowUpDown className="h-3 w-3 ml-1 opacity-50" />;
@@ -369,67 +351,38 @@ export function TrackingAnalytics() {
       : <ArrowDown className="h-3 w-3 ml-1" />;
   };
 
-  // Get sorted and grouped data
   const getSortedGroupedData = () => {
     return sortGroups(groupSessionsByMsisdn(filteredSessions));
   };
 
-  // Export visitor sessions to CSV (uses current sort order)
+  // Export visitor sessions to CSV
   const exportToCSV = () => {
     const groupedData = getSortedGroupedData();
-    
-    // CSV Headers
     const headers = [
-      'Mobile Number (MSISDN)',
-      'IP Address',
-      'Network Type',
-      'Carrier',
-      'Device Type',
-      'Browser',
-      'OS',
-      'Current Page',
-      'Landing Pages Visited',
-      'Referrer',
-      'UTM Source',
-      'UTM Medium',
-      'UTM Campaign',
-      'Total Visits',
-      'Total Sessions',
-      'First Seen',
-      'Last Seen',
-      'MSISDN Confidence',
-      'User Agent'
+      'Mobile Number (MSISDN)', 'IP Address', 'Network Type', 'Carrier',
+      'Device Type', 'Browser', 'OS', 'Current Page', 'Landing Pages Visited',
+      'Referrer', 'UTM Source', 'UTM Medium', 'UTM Campaign',
+      'Total Visits', 'Total Sessions', 'First Seen', 'Last Seen',
+      'MSISDN Confidence', 'User Agent'
     ];
 
-    // CSV Rows
     const rows = groupedData.map(group => {
       const session = group.latestSession;
-      // Format MSISDN as text for Excel (prefix with ' to prevent scientific notation)
       const msisdnForExcel = group.msisdn ? `'${group.msisdn}` : 'Not detected';
       return [
-        msisdnForExcel,
-        session.ip || '',
-        session.networkType || 'UNKNOWN',
-        session.carrier || '',
-        session.device?.type || '',
-        session.device?.browser || '',
+        msisdnForExcel, session.ip || '', session.networkType || 'UNKNOWN',
+        session.carrier || '', session.device?.type || '', session.device?.browser || '',
         session.device?.os || '',
         session.landingPageSlug ? `/lp/${session.landingPageSlug}` : 'Main Site',
         group.landingPages.map(lp => `/lp/${lp}`).join('; ') || 'None',
-        session.referrer || '',
-        session.utm?.source || '',
-        session.utm?.medium || '',
-        session.utm?.campaign || '',
-        group.totalVisits.toString(),
-        group.sessions.length.toString(),
+        session.referrer || '', session.utm?.source || '', session.utm?.medium || '',
+        session.utm?.campaign || '', group.totalVisits.toString(), group.sessions.length.toString(),
         new Date(group.firstSeenAt).toLocaleString('de-DE'),
         new Date(session.lastSeenAt).toLocaleString('de-DE'),
-        session.msisdnConfidence || 'NONE',
-        session.userAgent || ''
+        session.msisdnConfidence || 'NONE', session.userAgent || ''
       ];
     });
 
-    // Escape CSV values
     const escapeCSV = (value: string) => {
       if (value.includes(',') || value.includes('"') || value.includes('\n')) {
         return `"${value.replace(/"/g, '""')}"`;
@@ -437,32 +390,20 @@ export function TrackingAnalytics() {
       return value;
     };
 
-    // Build CSV content
     const csvContent = [
       headers.map(escapeCSV).join(','),
       ...rows.map(row => row.map(escapeCSV).join(','))
     ].join('\n');
 
-    // Add BOM for Excel UTF-8 compatibility
     const BOM = '\uFEFF';
     const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
     
-    // Generate filename with date and filter info
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    let filename = `visitor-sessions-${dateStr}`;
-    if (selectedPage) {
-      filename += `-${selectedPage}`;
-    }
-    if (dateFrom) {
-      filename += `-from-${dateFrom}`;
-    }
-    if (dateTo) {
-      filename += `-to-${dateTo}`;
-    }
+    let filename = `visitor-sessions-${new Date().toISOString().split('T')[0]}`;
+    if (selectedPage) filename += `-${selectedPage}`;
+    if (dateFrom) filename += `-from-${dateFrom}`;
+    if (dateTo) filename += `-to-${dateTo}`;
     filename += '.csv';
 
-    // Download
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
@@ -482,6 +423,11 @@ export function TrackingAnalytics() {
       </div>
     );
   }
+
+  const sortedGroupedData = getSortedGroupedData();
+  const totalGroupCount = sortedGroupedData.length;
+  const visibleGroups = sortedGroupedData.slice(0, visibleCount);
+  const remainingCount = totalGroupCount - visibleCount;
 
   return (
     <div>
@@ -537,7 +483,7 @@ export function TrackingAnalytics() {
         </div>
       )}
 
-      {/* Page Performance - Clickable to filter visitors */}
+      {/* Page Performance */}
       {landingPageStats.length > 0 && (
         <Card className="mb-6">
           <CardHeader className="py-3 px-4 border-b">
@@ -546,12 +492,7 @@ export function TrackingAnalytics() {
                 Page Performance (Click to filter visitors)
               </CardTitle>
               {selectedPage && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setSelectedPage(null)}
-                  className="text-xs"
-                >
+                <Button variant="outline" size="sm" onClick={() => setSelectedPage(null)} className="text-xs">
                   <X className="h-3 w-3 mr-1" />
                   Clear Filter
                 </Button>
@@ -568,22 +509,13 @@ export function TrackingAnalytics() {
                     <th className="text-center p-3 text-sm font-medium text-gray-500">Visits</th>
                     <th className="text-center p-3 text-sm font-medium text-gray-500">Unique</th>
                     <th className="text-center p-3 text-sm font-medium text-gray-500">
-                      <div className="flex items-center justify-center gap-1">
-                        <Phone className="h-3 w-3" />
-                        MSISDN
-                      </div>
+                      <div className="flex items-center justify-center gap-1"><Phone className="h-3 w-3" />MSISDN</div>
                     </th>
                     <th className="text-center p-3 text-sm font-medium text-gray-500">
-                      <div className="flex items-center justify-center gap-1">
-                        <Smartphone className="h-3 w-3" />
-                        Mobile
-                      </div>
+                      <div className="flex items-center justify-center gap-1"><Smartphone className="h-3 w-3" />Mobile</div>
                     </th>
                     <th className="text-center p-3 text-sm font-medium text-gray-500">
-                      <div className="flex items-center justify-center gap-1">
-                        <Globe className="h-3 w-3" />
-                        WiFi
-                      </div>
+                      <div className="flex items-center justify-center gap-1"><Globe className="h-3 w-3" />WiFi</div>
                     </th>
                     <th className="text-center p-3 text-sm font-medium text-gray-500">Rate</th>
                     <th className="text-left p-3 text-sm font-medium text-gray-500">Source</th>
@@ -654,7 +586,7 @@ export function TrackingAnalytics() {
             <div className="relative flex-1 w-full md:max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by session ID, IP, phone, or page..."
+                placeholder="Search by session ID, IP, phone, carrier, or page..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10"
@@ -675,24 +607,25 @@ export function TrackingAnalytics() {
                 className="w-36 h-9"
               />
             </div>
-            {/* Mobile Only Filter */}
-            <label className="flex items-center gap-2 cursor-pointer select-none ml-2">
-              <input
-                type="checkbox"
-                checked={mobileOnly}
-                onChange={(e) => setMobileOnly(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span className="text-sm text-gray-700 flex items-center gap-1">
-                <Smartphone className="h-3.5 w-3.5" />
-                Mobile Data Only
-              </span>
-            </label>
+            {/* Network Type Filter Dropdown */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-600 whitespace-nowrap">Network:</label>
+              <select
+                value={networkFilter}
+                onChange={(e) => setNetworkFilter(e.target.value as NetworkFilter)}
+                className="h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="ALL">All Networks</option>
+                <option value="MOBILE_DATA">📱 Mobile Data Only</option>
+                <option value="WIFI">📶 WiFi Only</option>
+                <option value="UNKNOWN">❓ Unknown Only</option>
+              </select>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Sessions List - Grouped by MSISDN */}
+      {/* Sessions List */}
       <Card>
         <CardHeader className="py-3 px-4 border-b">
           <div className="flex justify-between items-center flex-wrap gap-2">
@@ -704,28 +637,27 @@ export function TrackingAnalytics() {
                   {selectedPage === 'main-site' ? 'Main Site' : `/lp/${selectedPage}`}
                 </Badge>
               )}
+              {networkFilter !== 'ALL' && (
+                <Badge variant="default" className="bg-indigo-600">
+                  {networkFilter === 'MOBILE_DATA' ? '📱 Mobile' : networkFilter === 'WIFI' ? '📶 WiFi' : '❓ Unknown'}
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">
-                {filteredSessions.length} sessions | {groupSessionsByMsisdn(filteredSessions).length} unique visitors
+                Showing {Math.min(visibleCount, totalGroupCount)} of {totalGroupCount} visitors ({filteredSessions.length} sessions)
+                {totalGroupCount !== groupSessionsByMsisdn(sessions).length && (
+                  <span className="text-gray-400"> | {groupSessionsByMsisdn(sessions).length} total</span>
+                )}
               </span>
               {selectedPage && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => setSelectedPage(null)}
-                  className="text-xs h-7"
-                >
+                <Button variant="ghost" size="sm" onClick={() => setSelectedPage(null)} className="text-xs h-7">
                   Show All
                 </Button>
               )}
-              {/* Export Button */}
               <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={exportToCSV}
-                disabled={filteredSessions.length === 0}
-                className="text-xs h-7"
+                variant="outline" size="sm" onClick={exportToCSV}
+                disabled={filteredSessions.length === 0} className="text-xs h-7"
               >
                 <Download className="h-3 w-3 mr-1" />
                 Export CSV
@@ -741,16 +673,17 @@ export function TrackingAnalytics() {
               <p className="text-sm">
                 {selectedPage 
                   ? `No visitors for ${selectedPage === 'main-site' ? 'Main Site' : `/lp/${selectedPage}`}` 
-                  : 'Sessions will appear when visitors land on your pages'}
+                  : networkFilter !== 'ALL'
+                    ? `No ${networkFilter.replace('_', ' ').toLowerCase()} sessions found`
+                    : 'Sessions will appear when visitors land on your pages'}
               </p>
-              {selectedPage && (
+              {(selectedPage || networkFilter !== 'ALL') && (
                 <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setSelectedPage(null)}
+                  variant="outline" size="sm" 
+                  onClick={() => { setSelectedPage(null); setNetworkFilter('ALL'); }}
                   className="mt-4"
                 >
-                  Show All Visitors
+                  Clear All Filters
                 </Button>
               )}
             </div>
@@ -758,59 +691,35 @@ export function TrackingAnalytics() {
             <div className="divide-y">
               {/* Sortable Header Row */}
               <div className="px-4 py-2 bg-gray-50 border-b flex items-center gap-4 text-xs font-medium text-gray-600">
-                <div className="w-8"></div> {/* Device icon space */}
-                <button 
-                  onClick={() => toggleSort('msisdn')}
-                  className="flex items-center hover:text-gray-900 min-w-[140px]"
-                >
+                <div className="w-8"></div>
+                <button onClick={() => toggleSort('msisdn')} className="flex items-center hover:text-gray-900 min-w-[140px]">
                   Phone/IP {getSortIcon('msisdn')}
                 </button>
-                <button 
-                  onClick={() => toggleSort('network')}
-                  className="flex items-center hover:text-gray-900 min-w-[80px]"
-                >
+                <button onClick={() => toggleSort('network')} className="flex items-center hover:text-gray-900 min-w-[80px]">
                   Network {getSortIcon('network')}
                 </button>
-                <button 
-                  onClick={() => toggleSort('carrier')}
-                  className="flex items-center hover:text-gray-900 min-w-[70px]"
-                >
+                <button onClick={() => toggleSort('carrier')} className="flex items-center hover:text-gray-900 min-w-[70px]">
                   Carrier {getSortIcon('carrier')}
                 </button>
-                <button 
-                  onClick={() => toggleSort('page')}
-                  className="flex items-center hover:text-gray-900 min-w-[80px]"
-                >
+                <button onClick={() => toggleSort('page')} className="flex items-center hover:text-gray-900 min-w-[80px]">
                   Page {getSortIcon('page')}
                 </button>
-                <button 
-                  onClick={() => toggleSort('referrer')}
-                  className="flex items-center hover:text-gray-900 flex-1"
-                >
+                <button onClick={() => toggleSort('referrer')} className="flex items-center hover:text-gray-900 flex-1">
                   Referrer {getSortIcon('referrer')}
                 </button>
-                <button 
-                  onClick={() => toggleSort('visits')}
-                  className="flex items-center hover:text-gray-900 min-w-[60px]"
-                >
+                <button onClick={() => toggleSort('visits')} className="flex items-center hover:text-gray-900 min-w-[60px]">
                   Visits {getSortIcon('visits')}
                 </button>
-                <button 
-                  onClick={() => toggleSort('firstSeen')}
-                  className="flex items-center hover:text-gray-900 min-w-[90px]"
-                >
+                <button onClick={() => toggleSort('firstSeen')} className="flex items-center hover:text-gray-900 min-w-[90px]">
                   First Seen {getSortIcon('firstSeen')}
                 </button>
-                <button 
-                  onClick={() => toggleSort('lastSeen')}
-                  className="flex items-center hover:text-gray-900 min-w-[90px]"
-                >
+                <button onClick={() => toggleSort('lastSeen')} className="flex items-center hover:text-gray-900 min-w-[90px]">
                   Last Seen {getSortIcon('lastSeen')}
                 </button>
               </div>
-              {getSortedGroupedData().slice(0, 50).map((group) => (
+
+              {visibleGroups.map((group) => (
                 <div key={group.key} className="hover:bg-gray-50">
-                  {/* Session Row */}
                   <div 
                     className="p-4 cursor-pointer flex items-center justify-between"
                     onClick={() => setExpandedSession(expandedSession === group.key ? null : group.key)}
@@ -837,7 +746,6 @@ export function TrackingAnalytics() {
                         </div>
                         <div className="flex items-center gap-4 text-sm text-gray-500 mt-1 flex-wrap">
                           <span>{group.latestSession.device?.browser} on {group.latestSession.device?.os}</span>
-                          {/* Show current page/landing page */}
                           {group.latestSession.landingPageSlug ? (
                             <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
                               📍 /lp/{group.latestSession.landingPageSlug}
@@ -847,14 +755,12 @@ export function TrackingAnalytics() {
                               📍 Main Site
                             </Badge>
                           )}
-                          {/* Show other landing pages visited */}
                           {group.landingPages.length > 0 && !group.landingPages.includes(group.latestSession.landingPageSlug || '') && (
                             <span className="text-blue-600 text-xs">
                               Also: {group.landingPages.filter(lp => lp !== group.latestSession.landingPageSlug).map(lp => `/lp/${lp}`).join(', ')}
                             </span>
                           )}
                         </div>
-                        {/* Referrer - where they came from */}
                         {group.latestSession.referrer && (
                           <div className="text-xs text-orange-600 mt-1 truncate max-w-lg" title={group.latestSession.referrer}>
                             <span className="text-gray-500 mr-1">Came from:</span>
@@ -931,14 +837,12 @@ export function TrackingAnalytics() {
                           </div>
                         )}
                       </div>
-                      {/* Referrer - Full URL */}
                       {group.latestSession.referrer && (
                         <div className="border-t pt-2 mt-2">
                           <p className="text-xs text-gray-500 uppercase mb-1">Referrer (Full URL)</p>
                           <p className="text-sm text-orange-600 break-all">{group.latestSession.referrer}</p>
                         </div>
                       )}
-                      {/* Landing Pages Visited */}
                       {group.landingPages.length > 0 && (
                         <div className="border-t pt-2 mt-2">
                           <p className="text-xs text-gray-500 uppercase mb-1">Landing Pages Visited</p>
@@ -956,6 +860,29 @@ export function TrackingAnalytics() {
                   )}
                 </div>
               ))}
+
+              {/* Pagination: Load More / Show All */}
+              {remainingCount > 0 && (
+                <div className="p-4 text-center border-t bg-gray-50 flex items-center justify-center gap-4">
+                  <span className="text-sm text-muted-foreground">
+                    Showing {Math.min(visibleCount, totalGroupCount)} of {totalGroupCount} visitors ({remainingCount} more)
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setVisibleCount(prev => prev + 50)}
+                  >
+                    Load 50 More
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setVisibleCount(totalGroupCount)}
+                  >
+                    Show All ({totalGroupCount})
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

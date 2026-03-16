@@ -16,9 +16,11 @@ export async function GET(request: NextRequest) {
     
     // Get query params
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '100');
+    const limitParam = searchParams.get('limit');
+    const limit = limitParam !== null ? parseInt(limitParam) : 100;
     const offset = parseInt(searchParams.get('offset') || '0');
     const search = searchParams.get('search');
+    const networkType = searchParams.get('networkType');
     
     // Build query
     const query: Record<string, unknown> = {};
@@ -28,17 +30,38 @@ export async function GET(request: NextRequest) {
         { ip: { $regex: search, $options: 'i' } },
         { msisdn: { $regex: search, $options: 'i' } },
         { landingPageSlug: { $regex: search, $options: 'i' } },
+        { carrier: { $regex: search, $options: 'i' } },
       ];
     }
 
-    const sessions = await collection
+    // Network type filter
+    if (networkType && networkType !== 'ALL') {
+      query.networkType = networkType;
+    }
+
+    // Fetch sessions - limit=0 means no limit (fetch all)
+    const cursor = collection
       .find(query)
       .sort({ lastSeenAt: -1 })
-      .skip(offset)
-      .limit(limit)
-      .toArray();
+      .skip(offset);
+    
+    if (limit > 0) {
+      cursor.limit(limit);
+    }
 
+    const sessions = await cursor.toArray();
     const total = await collection.countDocuments(query);
+
+    // Aggregate network type counts across ALL data (not just current page)
+    const totalMobile = await collection.countDocuments({ networkType: 'MOBILE_DATA' });
+    const totalWifi = await collection.countDocuments({ networkType: 'WIFI' });
+    const totalUnknown = await collection.countDocuments({
+      $or: [
+        { networkType: 'UNKNOWN' },
+        { networkType: { $exists: false } },
+        { networkType: null },
+      ],
+    });
 
     return NextResponse.json({
       success: true,
@@ -46,6 +69,9 @@ export async function GET(request: NextRequest) {
       total,
       limit,
       offset,
+      totalMobile,
+      totalWifi,
+      totalUnknown,
     });
   } catch (error) {
     console.error('Error fetching sessions:', error);

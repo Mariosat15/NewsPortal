@@ -9,7 +9,8 @@ import {
   Search, Download, Eye, Phone, Mail, User, Calendar,
   CreditCard, RefreshCw, Loader2, X, ChevronDown, ChevronUp,
   DollarSign, Clock, CheckCircle, XCircle, RotateCcw,
-  Globe, Shield, Activity, TrendingUp, Users
+  Globe, Shield, Activity, TrendingUp, Users,
+  Smartphone, Monitor, Wifi
 } from 'lucide-react';
 
 interface Transaction {
@@ -21,6 +22,24 @@ interface Transaction {
   currency: string;
   status: string;
   unlockedAt: string;
+  metadata?: {
+    operator?: string;
+    carrier?: string;
+    browser?: string;
+    os?: string;
+    ipAddress?: string;
+    networkType?: string;
+    [key: string]: unknown;
+  };
+}
+
+interface SessionInfo {
+  carrier?: string;
+  networkType?: string;
+  browser?: string;
+  os?: string;
+  ip?: string;
+  device?: string;
 }
 
 interface Person {
@@ -43,6 +62,8 @@ interface Person {
   status: 'active' | 'inactive';
   // Related data
   transactions: Transaction[];
+  // Session enrichment
+  sessionInfo?: SessionInfo;
 }
 
 interface Stats {
@@ -67,7 +88,6 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
   useEffect(() => {
     if (initialSearch) {
       setSearch(initialSearch);
-      // Trigger search after a brief delay to let component mount
       setTimeout(() => {
         onSearchComplete?.();
       }, 100);
@@ -85,79 +105,97 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
   async function loadPeople() {
     setLoading(true);
     try {
-      // Fetch users, customers, and transactions in parallel
-      const [usersRes, customersRes, transactionsRes] = await Promise.all([
+      // Fetch users, customers, transactions, AND sessions in parallel
+      const [usersRes, customersRes, transactionsRes, sessionsRes] = await Promise.all([
         fetch('/api/admin/users?limit=1000'),
         fetch('/api/admin/customers?limit=1000'),
         fetch('/api/admin/transactions?limit=1000'),
+        fetch('/api/admin/tracking/sessions?limit=0'),
       ]);
 
       const usersData = usersRes.ok ? await usersRes.json() : {};
       const customersData = customersRes.ok ? await customersRes.json() : {};
       const transactionsData = transactionsRes.ok ? await transactionsRes.json() : {};
+      const sessionsData = sessionsRes.ok ? await sessionsRes.json() : { sessions: [] };
 
-      console.log('Users API response:', usersData);
-      console.log('Customers API response:', customersData);
-      console.log('Transactions API response:', transactionsData);
-
-      // Handle different API response formats
       const users = usersData.data?.users || usersData.users || [];
       const customers = customersData.customers || customersData.data?.customers || [];
       const transactions = transactionsData.data?.transactions || transactionsData.transactions || [];
+      const sessionsList = sessionsData.sessions || [];
 
-      console.log('Parsed users:', users.length);
-      console.log('Parsed customers:', customers.length);
-      console.log('Parsed transactions:', transactions.length);
+      // Build session lookup maps: by MSISDN and by IP
+      const sessionByMsisdn = new Map<string, SessionInfo>();
+      const sessionByIp = new Map<string, SessionInfo>();
+
+      interface RawSession {
+        msisdn?: string;
+        normalizedMsisdn?: string;
+        ip?: string;
+        carrier?: string;
+        networkType?: string;
+        device?: { type?: string; browser?: string; os?: string };
+        lastSeenAt?: string;
+      }
+
+      sessionsList.forEach((s: RawSession) => {
+        const info: SessionInfo = {
+          carrier: s.carrier,
+          networkType: s.networkType,
+          browser: s.device?.browser,
+          os: s.device?.os,
+          ip: s.ip,
+          device: s.device?.type,
+        };
+        const normalizedPhone = s.normalizedMsisdn || s.msisdn?.replace(/\D/g, '') || '';
+        if (normalizedPhone) {
+          // Keep the latest session info per MSISDN
+          if (!sessionByMsisdn.has(normalizedPhone)) {
+            sessionByMsisdn.set(normalizedPhone, info);
+          }
+        }
+        if (s.ip) {
+          if (!sessionByIp.has(s.ip)) {
+            sessionByIp.set(s.ip, info);
+          }
+        }
+      });
 
       // Create a map to merge by phone number, email, or user ID
       const peopleMap = new Map<string, Person>();
-      
-      // Helper maps for quick lookup
-      const userIdMap = new Map<string, string>(); // userId -> peopleMap key
-      const emailMap = new Map<string, string>(); // email -> peopleMap key
-      const phoneMap = new Map<string, string>(); // normalizedPhone -> peopleMap key
+      const userIdMap = new Map<string, string>();
+      const emailMap = new Map<string, string>();
+      const phoneMap = new Map<string, string>();
 
-      // Process users first - merge users with same phone number
+      // Process users first
       users.forEach((user: { _id: string; email?: string; name?: string; msisdn?: string; authType?: string; createdAt?: string; lastActiveAt?: string; visitCount?: number }) => {
         const normalizedPhone = user.msisdn?.replace(/\D/g, '') || '';
         
-        // Check if a user with the same phone already exists
         let existingKey: string | null = null;
         if (normalizedPhone && phoneMap.has(normalizedPhone)) {
           existingKey = phoneMap.get(normalizedPhone)!;
         }
         
         if (existingKey) {
-          // Merge with existing user (same phone, different registration method)
           const existing = peopleMap.get(existingKey)!;
-          console.log('[People] Merging user by phone:', user.email || user.msisdn, 'into', existingKey);
-          
-          // Prefer email registration data over phone registration
           if (user.email && !existing.email) {
             existing.email = user.email;
-            existing.id = user.email; // Update primary key to email
+            existing.id = user.email;
             existing.authType = 'email';
           }
           if (user.name && !existing.name) {
             existing.name = user.name;
           }
-          // Keep the older firstSeen
           if (user.createdAt && new Date(user.createdAt) < new Date(existing.firstSeen)) {
             existing.firstSeen = user.createdAt;
           }
-          // Keep the newer lastSeen
           if (user.lastActiveAt && new Date(user.lastActiveAt) > new Date(existing.lastSeen)) {
             existing.lastSeen = user.lastActiveAt;
           }
           existing.visitCount = Math.max(existing.visitCount, user.visitCount || 1);
-          
-          // Update lookup maps with new data
           if (user._id) userIdMap.set(user._id, existingKey);
           if (user.email) emailMap.set(user.email.toLowerCase(), existingKey);
         } else {
-          // New user entry
           const key = user.email || user.msisdn || user._id;
-          
           const person: Person = {
             id: key,
             type: 'user',
@@ -177,56 +215,34 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
           };
           
           peopleMap.set(key, person);
-          
-          // Build lookup maps
           if (user._id) userIdMap.set(user._id, key);
           if (user.email) emailMap.set(user.email.toLowerCase(), key);
           if (normalizedPhone) phoneMap.set(normalizedPhone, key);
         }
       });
 
-      // Process customers and merge with existing users
+      // Process customers
       customers.forEach((customer: { msisdn: string; normalizedMsisdn?: string; totalBillingAmount?: number; totalBilling?: number; totalPurchases?: number; visitCount?: number; firstSeen?: string; lastSeen?: string; firstSeenAt?: string; lastSeenAt?: string; userId?: string; userEmail?: string }) => {
         const normalizedPhone = customer.normalizedMsisdn || customer.msisdn?.replace(/\D/g, '') || '';
-        // totalBillingAmount is stored in cents
         const totalBillingCents = customer.totalBillingAmount || customer.totalBilling || 0;
         const firstSeen = customer.firstSeen || customer.firstSeenAt;
         const lastSeen = customer.lastSeen || customer.lastSeenAt;
         
-        console.log('[People] Customer:', customer.msisdn, {
-          totalBillingAmount: customer.totalBillingAmount,
-          totalBilling: customer.totalBilling,
-          totalBillingCents,
-          inEuros: totalBillingCents / 100,
-          userId: customer.userId,
-          userEmail: customer.userEmail,
-        });
-        
-        // Check if this customer matches an existing user by phone, userId, or email
         let existingKey: string | null = null;
-        
-        // Match by userId first (most reliable)
         if (customer.userId && userIdMap.has(customer.userId)) {
           existingKey = userIdMap.get(customer.userId)!;
-        }
-        // Then by email
-        else if (customer.userEmail && emailMap.has(customer.userEmail.toLowerCase())) {
+        } else if (customer.userEmail && emailMap.has(customer.userEmail.toLowerCase())) {
           existingKey = emailMap.get(customer.userEmail.toLowerCase())!;
-        }
-        // Then by phone number
-        else if (normalizedPhone && phoneMap.has(normalizedPhone)) {
+        } else if (normalizedPhone && phoneMap.has(normalizedPhone)) {
           existingKey = phoneMap.get(normalizedPhone)!;
         }
 
         if (existingKey) {
-          // Merge with existing user
           const existing = peopleMap.get(existingKey)!;
           existing.type = 'both';
-          // totalBillingCents is in cents, convert to euros
           existing.totalSpent = totalBillingCents / 100;
           existing.transactionCount = customer.totalPurchases || existing.transactionCount;
           existing.visitCount = Math.max(existing.visitCount, customer.visitCount || 0);
-          // Add phone if not already present
           if (!existing.msisdn && customer.msisdn) {
             existing.msisdn = customer.msisdn;
             existing.normalizedMsisdn = normalizedPhone;
@@ -237,10 +253,8 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
           if (lastSeen && new Date(lastSeen) > new Date(existing.lastSeen)) {
             existing.lastSeen = lastSeen;
           }
-          // Update lookup maps
           if (normalizedPhone) phoneMap.set(normalizedPhone, existingKey);
         } else {
-          // New customer-only entry
           const key = normalizedPhone || customer.msisdn;
           peopleMap.set(key, {
             id: key,
@@ -249,7 +263,6 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
             email: customer.userEmail,
             msisdn: customer.msisdn,
             normalizedMsisdn: normalizedPhone,
-            // totalBillingCents is in cents, convert to euros
             totalSpent: totalBillingCents / 100,
             transactionCount: customer.totalPurchases || 0,
             visitCount: customer.visitCount || 1,
@@ -258,25 +271,22 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
             status: 'active',
             transactions: [],
           });
-          // Update lookup maps
           if (normalizedPhone) phoneMap.set(normalizedPhone, key);
           if (customer.userId) userIdMap.set(customer.userId, key);
           if (customer.userEmail) emailMap.set(customer.userEmail.toLowerCase(), key);
         }
       });
 
-      // Add transactions to people - match by phone, userId, or email from metadata
-      transactions.forEach((tx: Transaction & { normalizedMsisdn?: string; msisdn?: string; metadata?: { userId?: string; userEmail?: string } }) => {
+      // Add transactions to people
+      transactions.forEach((tx: Transaction & { normalizedMsisdn?: string; msisdn?: string; metadata?: { userId?: string; userEmail?: string; operator?: string; carrier?: string; [key: string]: unknown } }) => {
         const normalizedPhone = tx.normalizedMsisdn || tx.msisdn?.replace(/\D/g, '') || '';
         const txUserId = tx.metadata?.userId;
         const txUserEmail = tx.metadata?.userEmail;
         
-        // Find matching person by userId, email, or phone
         let targetKey: string | null = null;
-        
-        if (txUserId && userIdMap.has(txUserId)) {
+        if (txUserId && typeof txUserId === 'string' && userIdMap.has(txUserId)) {
           targetKey = userIdMap.get(txUserId)!;
-        } else if (txUserEmail && emailMap.has(txUserEmail.toLowerCase())) {
+        } else if (txUserEmail && typeof txUserEmail === 'string' && emailMap.has(txUserEmail.toLowerCase())) {
           targetKey = emailMap.get(txUserEmail.toLowerCase())!;
         } else if (normalizedPhone && phoneMap.has(normalizedPhone)) {
           targetKey = phoneMap.get(normalizedPhone)!;
@@ -286,11 +296,24 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
           const person = peopleMap.get(targetKey);
           if (person) {
             person.transactions.push(tx);
-            // Don't increment transactionCount here if already set from customer
             if (person.transactionCount === 0) {
               person.transactionCount++;
             }
-            // Note: totalSpent already comes from customer.totalBilling
+          }
+        }
+      });
+
+      // Enrich people with session data (carrier, network, browser, OS, IP)
+      peopleMap.forEach((person) => {
+        const normalizedPhone = person.normalizedMsisdn || '';
+        // Try to match by MSISDN first, then by IP from transactions
+        if (normalizedPhone && sessionByMsisdn.has(normalizedPhone)) {
+          person.sessionInfo = sessionByMsisdn.get(normalizedPhone);
+        } else {
+          // Try to find by IP from transaction metadata
+          const txWithIp = person.transactions.find(t => t.metadata?.ipAddress);
+          if (txWithIp?.metadata?.ipAddress && sessionByIp.has(txWithIp.metadata.ipAddress)) {
+            person.sessionInfo = sessionByIp.get(txWithIp.metadata.ipAddress);
           }
         }
       });
@@ -302,7 +325,6 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
 
       setPeople(peopleArray);
 
-      // Calculate stats
       setStats({
         totalPeople: peopleArray.length,
         totalUsers: peopleArray.filter(p => p.type === 'user' || p.type === 'both').length,
@@ -323,22 +345,19 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
   }
 
   const filteredPeople = people.filter(person => {
-    // Search filter
     if (search) {
       const searchLower = search.toLowerCase();
       const matches = 
         person.email?.toLowerCase().includes(searchLower) ||
         person.name?.toLowerCase().includes(searchLower) ||
         person.msisdn?.includes(search) ||
-        person.normalizedMsisdn?.includes(search);
+        person.normalizedMsisdn?.includes(search) ||
+        person.sessionInfo?.carrier?.toLowerCase().includes(searchLower);
       if (!matches) return false;
     }
-
-    // Type filter
     if (filter === 'users' && person.type === 'customer') return false;
     if (filter === 'customers' && person.type === 'user') return false;
     if (filter === 'paying' && person.totalSpent === 0) return false;
-
     return true;
   });
 
@@ -379,16 +398,34 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
     return <Badge className="bg-yellow-100 text-yellow-700"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
   }
 
+  function getNetworkBadge(networkType?: string) {
+    if (!networkType) return null;
+    switch (networkType) {
+      case 'MOBILE_DATA':
+        return <Badge className="bg-blue-100 text-blue-700 text-xs"><Smartphone className="h-3 w-3 mr-1" />Mobile</Badge>;
+      case 'WIFI':
+        return <Badge className="bg-purple-100 text-purple-700 text-xs"><Wifi className="h-3 w-3 mr-1" />WiFi</Badge>;
+      default:
+        return <Badge className="bg-gray-100 text-gray-600 text-xs">Unknown</Badge>;
+    }
+  }
+
+  function getTxOperator(tx: Transaction): string | null {
+    return tx.metadata?.operator as string || tx.metadata?.carrier as string || null;
+  }
+
   async function handleExport() {
     try {
       const csvContent = [
-        ['ID', 'Type', 'Name', 'Email', 'Phone', 'Total Spent', 'Transactions', 'Visits', 'First Seen', 'Last Seen'].join(','),
+        ['ID', 'Type', 'Name', 'Email', 'Phone', 'Carrier', 'Network', 'Total Spent', 'Transactions', 'Visits', 'First Seen', 'Last Seen'].join(','),
         ...filteredPeople.map(p => [
           p.id,
           p.type,
           p.name || '',
           p.email || '',
           p.msisdn || '',
+          p.sessionInfo?.carrier || '',
+          p.sessionInfo?.networkType || '',
           p.totalSpent.toFixed(2),
           p.transactionCount,
           p.visitCount,
@@ -403,6 +440,7 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
       a.href = url;
       a.download = `people-export-${new Date().toISOString().split('T')[0]}.csv`;
       a.click();
+      window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Export failed:', error);
     }
@@ -491,7 +529,7 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name, email, or phone..."
+                placeholder="Search by name, email, phone, or carrier..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10"
@@ -534,7 +572,7 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
                     className="p-4 cursor-pointer flex items-center gap-4"
                     onClick={() => toggleRow(person.id)}
                   >
-                    {/* Avatar/Icon */}
+                    {/* Avatar */}
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold ${
                       person.type === 'both' ? 'bg-purple-500' :
                       person.type === 'user' ? 'bg-blue-500' : 'bg-green-500'
@@ -551,6 +589,14 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
                           {person.name || person.email || person.msisdn || 'Unknown'}
                         </span>
                         {getTypeBadge(person.type)}
+                        {/* Carrier & Network badges in the row */}
+                        {person.sessionInfo?.carrier && (
+                          <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                            <Globe className="h-3 w-3 mr-1" />
+                            {person.sessionInfo.carrier}
+                          </Badge>
+                        )}
+                        {getNetworkBadge(person.sessionInfo?.networkType)}
                       </div>
                       <div className="text-sm text-muted-foreground flex items-center gap-3 flex-wrap mt-1">
                         {person.email && (
@@ -642,7 +688,61 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
                         )}
                       </div>
 
-                      {/* Transactions */}
+                      {/* Session Info Cards (Carrier, Network, Browser/OS, IP) */}
+                      {person.sessionInfo && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                          {person.sessionInfo.carrier && (
+                            <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                              <p className="text-xs text-orange-600 flex items-center gap-1">
+                                <Globe className="h-3 w-3" /> Carrier
+                              </p>
+                              <p className="font-bold text-orange-800">{person.sessionInfo.carrier}</p>
+                            </div>
+                          )}
+                          {person.sessionInfo.networkType && (
+                            <div className={`p-3 rounded-lg border ${
+                              person.sessionInfo.networkType === 'MOBILE_DATA' 
+                                ? 'bg-blue-50 border-blue-200' 
+                                : 'bg-purple-50 border-purple-200'
+                            }`}>
+                              <p className={`text-xs flex items-center gap-1 ${
+                                person.sessionInfo.networkType === 'MOBILE_DATA' ? 'text-blue-600' : 'text-purple-600'
+                              }`}>
+                                {person.sessionInfo.networkType === 'MOBILE_DATA' 
+                                  ? <Smartphone className="h-3 w-3" /> 
+                                  : <Wifi className="h-3 w-3" />
+                                } Network Type
+                              </p>
+                              <p className={`font-bold ${
+                                person.sessionInfo.networkType === 'MOBILE_DATA' ? 'text-blue-800' : 'text-purple-800'
+                              }`}>
+                                {person.sessionInfo.networkType === 'MOBILE_DATA' ? 'Mobile Data' : 
+                                 person.sessionInfo.networkType === 'WIFI' ? 'WiFi' : 'Unknown'}
+                              </p>
+                            </div>
+                          )}
+                          {(person.sessionInfo.browser || person.sessionInfo.os) && (
+                            <div className="p-3 bg-gray-50 rounded-lg border">
+                              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Monitor className="h-3 w-3" /> Browser / OS
+                              </p>
+                              <p className="font-medium text-sm">
+                                {person.sessionInfo.browser || '?'} on {person.sessionInfo.os || '?'}
+                              </p>
+                            </div>
+                          )}
+                          {person.sessionInfo.ip && (
+                            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                              <p className="text-xs text-blue-600 flex items-center gap-1">
+                                <Shield className="h-3 w-3" /> IP Address
+                              </p>
+                              <p className="font-mono text-sm text-blue-800">{person.sessionInfo.ip}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Transactions with Operator/Network columns */}
                       {person.transactions.length > 0 ? (
                         <div>
                           <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
@@ -656,18 +756,44 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
                                   <th className="text-left p-2 font-medium">Date</th>
                                   <th className="text-left p-2 font-medium">Article</th>
                                   <th className="text-left p-2 font-medium">Amount</th>
+                                  <th className="text-left p-2 font-medium">Operator</th>
+                                  <th className="text-left p-2 font-medium">Network / Device</th>
                                   <th className="text-left p-2 font-medium">Status</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {person.transactions.slice(0, 5).map((tx) => (
-                                  <tr key={tx._id} className="border-t">
-                                    <td className="p-2">{new Date(tx.unlockedAt).toLocaleDateString()}</td>
-                                    <td className="p-2 truncate max-w-48">{tx.articleTitle || tx.articleId}</td>
-                                    <td className="p-2 font-medium">{formatAmount(tx.amount / 100)}</td>
-                                    <td className="p-2">{getStatusBadge(tx.status)}</td>
-                                  </tr>
-                                ))}
+                                {person.transactions.slice(0, 5).map((tx) => {
+                                  const op = getTxOperator(tx);
+                                  return (
+                                    <tr key={tx._id} className="border-t">
+                                      <td className="p-2">{new Date(tx.unlockedAt).toLocaleDateString()}</td>
+                                      <td className="p-2 truncate max-w-32">{tx.articleTitle || tx.articleId}</td>
+                                      <td className="p-2 font-medium">{formatAmount(tx.amount / 100)}</td>
+                                      <td className="p-2">
+                                        {op ? (
+                                          <span className="text-orange-700 text-xs font-medium">{op}</span>
+                                        ) : (
+                                          <span className="text-gray-400 text-xs">—</span>
+                                        )}
+                                      </td>
+                                      <td className="p-2">
+                                        <div className="flex items-center gap-1">
+                                          {op ? (
+                                            <Badge className="bg-blue-100 text-blue-700 text-xs">
+                                              <Smartphone className="h-2.5 w-2.5 mr-0.5" />Mobile
+                                            </Badge>
+                                          ) : null}
+                                          {tx.metadata?.browser && (
+                                            <span className="text-xs text-gray-500">
+                                              {tx.metadata.browser}{tx.metadata.os ? ` / ${tx.metadata.os}` : ''}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="p-2">{getStatusBadge(tx.status)}</td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
                             {person.transactions.length > 5 && (
@@ -724,8 +850,15 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
                   <CardTitle>
                     {selectedPerson.name || selectedPerson.email || selectedPerson.msisdn}
                   </CardTitle>
-                  <div className="flex gap-2 mt-1">
+                  <div className="flex gap-2 mt-1 flex-wrap">
                     {getTypeBadge(selectedPerson.type)}
+                    {selectedPerson.sessionInfo?.carrier && (
+                      <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                        <Globe className="h-3 w-3 mr-1" />
+                        {selectedPerson.sessionInfo.carrier}
+                      </Badge>
+                    )}
+                    {getNetworkBadge(selectedPerson.sessionInfo?.networkType)}
                   </div>
                 </div>
               </div>
@@ -753,6 +886,47 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
                   </div>
                 )}
               </div>
+
+              {/* Network / Session Info in Profile Modal */}
+              {selectedPerson.sessionInfo && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {selectedPerson.sessionInfo.carrier && (
+                    <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                      <p className="text-xs text-orange-600 flex items-center gap-1"><Globe className="h-3 w-3" /> Carrier</p>
+                      <p className="font-bold text-orange-800">{selectedPerson.sessionInfo.carrier}</p>
+                    </div>
+                  )}
+                  {selectedPerson.sessionInfo.networkType && (
+                    <div className={`p-3 rounded-lg border ${
+                      selectedPerson.sessionInfo.networkType === 'MOBILE_DATA' 
+                        ? 'bg-blue-50 border-blue-200' : 'bg-purple-50 border-purple-200'
+                    }`}>
+                      <p className={`text-xs flex items-center gap-1 ${
+                        selectedPerson.sessionInfo.networkType === 'MOBILE_DATA' ? 'text-blue-600' : 'text-purple-600'
+                      }`}>
+                        {selectedPerson.sessionInfo.networkType === 'MOBILE_DATA' 
+                          ? <Smartphone className="h-3 w-3" /> : <Wifi className="h-3 w-3" />} Network
+                      </p>
+                      <p className="font-bold">
+                        {selectedPerson.sessionInfo.networkType === 'MOBILE_DATA' ? 'Mobile Data' : 
+                         selectedPerson.sessionInfo.networkType === 'WIFI' ? 'WiFi' : 'Unknown'}
+                      </p>
+                    </div>
+                  )}
+                  {(selectedPerson.sessionInfo.browser || selectedPerson.sessionInfo.os) && (
+                    <div className="p-3 bg-gray-50 rounded-lg border">
+                      <p className="text-xs text-muted-foreground flex items-center gap-1"><Monitor className="h-3 w-3" /> Browser / OS</p>
+                      <p className="font-medium text-sm">{selectedPerson.sessionInfo.browser} on {selectedPerson.sessionInfo.os}</p>
+                    </div>
+                  )}
+                  {selectedPerson.sessionInfo.ip && (
+                    <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <p className="text-xs text-blue-600 flex items-center gap-1"><Shield className="h-3 w-3" /> IP Address</p>
+                      <p className="font-mono text-sm">{selectedPerson.sessionInfo.ip}</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Stats */}
               <div className="grid grid-cols-4 gap-4">
@@ -790,7 +964,7 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
                 </div>
               </div>
 
-              {/* All Transactions */}
+              {/* All Transactions with Operator/Network columns */}
               <div>
                 <h4 className="font-semibold mb-3 flex items-center gap-2">
                   <CreditCard className="h-5 w-5" />
@@ -804,24 +978,50 @@ export function PeopleManager({ initialSearch, onSearchComplete }: PeopleManager
                           <th className="text-left p-3 font-medium">Date</th>
                           <th className="text-left p-3 font-medium">Transaction ID</th>
                           <th className="text-left p-3 font-medium">Article</th>
+                          <th className="text-left p-3 font-medium">Operator</th>
+                          <th className="text-left p-3 font-medium">Network / Device</th>
                           <th className="text-right p-3 font-medium">Amount</th>
                           <th className="text-left p-3 font-medium">Status</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {selectedPerson.transactions.map((tx) => (
-                          <tr key={tx._id} className="border-t hover:bg-gray-50">
-                            <td className="p-3">{new Date(tx.unlockedAt).toLocaleString()}</td>
-                            <td className="p-3">
-                              <code className="text-xs bg-gray-100 px-2 py-1 rounded">
-                                {tx.transactionId.slice(0, 16)}...
-                              </code>
-                            </td>
-                            <td className="p-3 max-w-48 truncate">{tx.articleTitle || tx.articleId}</td>
-                            <td className="p-3 text-right font-medium">{formatAmount(tx.amount / 100)}</td>
-                            <td className="p-3">{getStatusBadge(tx.status)}</td>
-                          </tr>
-                        ))}
+                        {selectedPerson.transactions.map((tx) => {
+                          const op = getTxOperator(tx);
+                          return (
+                            <tr key={tx._id} className="border-t hover:bg-gray-50">
+                              <td className="p-3">{new Date(tx.unlockedAt).toLocaleString()}</td>
+                              <td className="p-3">
+                                <code className="text-xs bg-gray-100 px-2 py-1 rounded">
+                                  {tx.transactionId.slice(0, 16)}...
+                                </code>
+                              </td>
+                              <td className="p-3 max-w-32 truncate">{tx.articleTitle || tx.articleId}</td>
+                              <td className="p-3">
+                                {op ? (
+                                  <span className="text-orange-700 text-xs font-medium">{op}</span>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">—</span>
+                                )}
+                              </td>
+                              <td className="p-3">
+                                <div className="flex items-center gap-1">
+                                  {op && (
+                                    <Badge className="bg-blue-100 text-blue-700 text-xs">
+                                      <Smartphone className="h-2.5 w-2.5 mr-0.5" />Mobile
+                                    </Badge>
+                                  )}
+                                  {tx.metadata?.browser && (
+                                    <span className="text-xs text-gray-500">
+                                      {tx.metadata.browser}{tx.metadata.os ? ` / ${tx.metadata.os}` : ''}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-3 text-right font-medium">{formatAmount(tx.amount / 100)}</td>
+                              <td className="p-3">{getStatusBadge(tx.status)}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
