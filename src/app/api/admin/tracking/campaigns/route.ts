@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       {
         $match: {
           firstSeenAt: { $gte: dateFrom },
-          [groupBy === 'source' ? 'utm.source' : groupBy === 'medium' ? 'utm.medium' : 'utm.campaign']: { $exists: true, $ne: null, $ne: '' },
+          [groupBy === 'source' ? 'utm.source' : groupBy === 'medium' ? 'utm.medium' : 'utm.campaign']: { $exists: true, $nin: [null, ''] },
         },
       },
       {
