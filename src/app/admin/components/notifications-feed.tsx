@@ -30,7 +30,6 @@ export function NotificationsFeed() {
   const [loading, setLoading] = useState(false);
   const [unread, setUnread] = useState(0);
   const lastSeenRef = useRef<string | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
@@ -59,17 +58,6 @@ export function NotificationsFeed() {
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
-  // Close on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    if (open) document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
   const handleOpen = () => {
     setOpen(prev => !prev);
     if (!open) {
@@ -92,7 +80,7 @@ export function NotificationsFeed() {
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative">
       <Button variant="ghost" size="icon" onClick={handleOpen} className="relative">
         <Bell className="h-4 w-4" />
         {unread > 0 && (
@@ -103,36 +91,44 @@ export function NotificationsFeed() {
       </Button>
 
       {open && (
-        <div className="absolute right-0 top-10 w-96 max-h-[480px] bg-white rounded-xl shadow-2xl border overflow-hidden z-50">
-          <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50/80">
-            <h3 className="text-sm font-semibold">Notifications</h3>
-            {loading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-          </div>
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-[60]"
+            onClick={() => setOpen(false)}
+          />
+          {/* Dropdown — fixed so it isn't clipped by the sidebar */}
+          <div className="fixed left-64 top-2 w-96 max-h-[480px] bg-white rounded-xl shadow-2xl border overflow-hidden z-[70]">
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50/80">
+              <h3 className="text-sm font-semibold">Notifications</h3>
+              {loading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+            </div>
 
-          <div className="overflow-y-auto max-h-[420px] divide-y">
-            {notifications.length === 0 && (
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                No recent notifications
-              </div>
-            )}
-
-            {notifications.map(n => (
-              <div
-                key={n.id}
-                className={`flex items-start gap-3 px-4 py-3 hover:bg-muted/40 transition-colors ${TYPE_COLORS[n.type] || ''}`}
-              >
-                <span className="text-lg flex-shrink-0 mt-0.5">{n.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{n.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">{n.description}</p>
+            <div className="overflow-y-auto max-h-[420px] divide-y">
+              {notifications.length === 0 && (
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  No recent notifications
                 </div>
-                <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0">
-                  {timeAgo(n.timestamp)}
-                </span>
-              </div>
-            ))}
+              )}
+
+              {notifications.map(n => (
+                <div
+                  key={n.id}
+                  className={`flex items-start gap-3 px-4 py-3 hover:bg-muted/40 transition-colors ${TYPE_COLORS[n.type] || ''}`}
+                >
+                  <span className="text-lg flex-shrink-0 mt-0.5">{n.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{n.title}</p>
+                    <p className="text-xs text-muted-foreground truncate">{n.description}</p>
+                  </div>
+                  <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0">
+                    {timeAgo(n.timestamp)}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

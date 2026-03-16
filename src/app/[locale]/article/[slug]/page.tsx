@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { Paywall } from '@/components/article/paywall';
 import { ShareButtons } from '@/components/article/share-buttons';
+import { BackButton } from '@/components/article/back-button';
 import { Badge } from '@/components/ui/badge';
 import { getArticleRepository, getUnlockRepository } from '@/lib/db';
 import { getCollection } from '@/lib/db/mongodb';
@@ -236,6 +237,9 @@ export default async function ArticlePage({
   return (
     <div className="min-h-screen bg-white">
       <article className="container px-4 py-6 max-w-3xl mx-auto">
+          {/* Back button */}
+          <BackButton label={t('article.back') ?? 'Back'} locale={locale} />
+
           {/* Hero image */}
           <div className="relative aspect-[16/9] w-full mb-6 rounded-lg overflow-hidden">
             <Image
