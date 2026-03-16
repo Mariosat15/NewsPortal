@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { 
   FileText, Users, CreditCard, TrendingUp, Activity, BarChart3, 
   ArrowUpRight, ArrowDownRight, Target, DollarSign, UserPlus, ShoppingCart,
-  Repeat, Eye, Zap, RefreshCw, Calendar, Radio
+  Repeat, Eye, Zap, RefreshCw, Calendar, Radio, Wifi, Smartphone, Monitor, Globe
 } from 'lucide-react';
 import {
   LineChart,
@@ -286,6 +286,101 @@ function LiveEquityChart({ days }: { days: number }) {
   );
 }
 
+// ── Live Visitors Widget ──
+function LiveVisitorsCard() {
+  const [data, setData] = useState<{
+    totalActive: number;
+    byLandingPage: { slug: string; count: number }[];
+    network: { mobile: number; wifi: number; unknown: number };
+    device: { mobile: number; desktop: number; tablet: number; unknown: number };
+  } | null>(null);
+
+  const fetchLive = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/tracking/live');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) setData(json.data);
+      }
+    } catch { /* non-critical */ }
+  }, []);
+
+  useEffect(() => {
+    fetchLive();
+    const interval = setInterval(fetchLive, 10000); // Refresh every 10s
+    return () => clearInterval(interval);
+  }, [fetchLive]);
+
+  return (
+    <Card className="border-l-4 border-l-cyan-500 overflow-hidden">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500" />
+            </span>
+            Live Visitors
+          </CardTitle>
+          <span className="text-3xl font-bold text-cyan-600">{data?.totalActive ?? '—'}</span>
+        </div>
+        <CardDescription>Active in the last 5 minutes</CardDescription>
+      </CardHeader>
+      {data && data.totalActive > 0 && (
+        <CardContent className="pt-0">
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            {/* Network breakdown */}
+            <div className="space-y-1">
+              <p className="font-medium text-muted-foreground uppercase tracking-wider">Network</p>
+              <div className="flex items-center gap-1.5">
+                <Smartphone className="h-3 w-3 text-blue-500" />
+                <span>Mobile: {data.network.mobile}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Wifi className="h-3 w-3 text-green-500" />
+                <span>WiFi: {data.network.wifi}</span>
+              </div>
+              {data.network.unknown > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <Globe className="h-3 w-3 text-gray-400" />
+                  <span>Unknown: {data.network.unknown}</span>
+                </div>
+              )}
+            </div>
+            {/* Device breakdown */}
+            <div className="space-y-1">
+              <p className="font-medium text-muted-foreground uppercase tracking-wider">Device</p>
+              <div className="flex items-center gap-1.5">
+                <Monitor className="h-3 w-3 text-purple-500" />
+                <span>Desktop: {data.device.desktop}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Smartphone className="h-3 w-3 text-orange-500" />
+                <span>Mobile: {data.device.mobile}</span>
+              </div>
+              {data.device.tablet > 0 && (
+                <span>Tablet: {data.device.tablet}</span>
+              )}
+            </div>
+          </div>
+          {/* Top landing pages */}
+          {data.byLandingPage.length > 0 && (
+            <div className="mt-3 pt-3 border-t space-y-1">
+              <p className="font-medium text-muted-foreground uppercase tracking-wider text-xs">Active On</p>
+              {data.byLandingPage.slice(0, 5).map(lp => (
+                <div key={lp.slug} className="flex items-center justify-between text-xs">
+                  <span className="truncate max-w-[180px]">{lp.slug === 'main-site' ? 'Main Site' : `/lp/${lp.slug}`}</span>
+                  <Badge variant="outline" className="text-xs h-5">{lp.count}</Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
 export function DashboardOverview() {
   const [stats, setStats] = useState<Stats>({
     totalArticles: 0,
@@ -389,8 +484,13 @@ export function DashboardOverview() {
         </div>
       </div>
 
-      {/* Live Equity / PnL Chart */}
-      <LiveEquityChart days={daysFilter} />
+      {/* Top row: Equity + Live Visitors */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="md:col-span-2">
+          <LiveEquityChart days={daysFilter} />
+        </div>
+        <LiveVisitorsCard />
+      </div>
 
       {/* Main Stats Cards */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">

@@ -20,6 +20,21 @@ export interface UtmParams {
   term?: string;
 }
 
+export interface GeoLocation {
+  country?: string;
+  countryCode?: string;
+  region?: string;
+  regionName?: string;
+  city?: string;
+  zip?: string;
+  lat?: number;
+  lon?: number;
+  timezone?: string;
+  isp?: string;
+  org?: string;
+  as?: string;
+}
+
 export type MsisdnConfidence = 'CONFIRMED' | 'UNCONFIRMED' | 'NONE';
 export type NetworkType = 'MOBILE_DATA' | 'WIFI' | 'UNKNOWN';
 
@@ -47,6 +62,7 @@ export interface VisitorSession {
   enteredPortal: boolean;
   lastPageUrl?: string;
   purchaseCompleted?: boolean;
+  geo?: GeoLocation;
 }
 
 export interface VisitorSessionCreateInput {
@@ -59,6 +75,7 @@ export interface VisitorSessionCreateInput {
   device: DeviceInfo;
   referrer?: string;
   utm?: UtmParams;
+  geo?: GeoLocation;
 }
 
 export interface VisitorSessionUpdateInput {
@@ -76,4 +93,5 @@ export interface VisitorSessionUpdateInput {
   purchaseCompleted?: boolean;
   landingPageSlug?: string;
   landingPageId?: ObjectId;
+  geo?: GeoLocation;
 }

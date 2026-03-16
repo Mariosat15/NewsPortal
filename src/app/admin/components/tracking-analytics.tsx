@@ -11,6 +11,7 @@ import {
   Calendar, Filter, ChevronDown, ChevronUp, X, Download,
   ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
+import { CohortAnalysis } from './cohort-analysis';
 
 interface VisitorSession {
   _id: string;
@@ -887,6 +888,9 @@ export function TrackingAnalytics() {
           )}
         </CardContent>
       </Card>
+
+      {/* Cohort Retention Analysis */}
+      <CohortAnalysis />
     </div>
   );
 }

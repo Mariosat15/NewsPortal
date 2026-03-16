@@ -36,9 +36,14 @@ import { LandingPagesManager } from './landing-pages-manager';
 import { TrackingAnalytics } from './tracking-analytics';
 import { CategoriesManager } from './categories-manager';
 import { LegalPagesManager } from './legal-pages-manager';
-import { FolderOpen } from 'lucide-react';
+import { CampaignDashboard } from './campaign-dashboard';
+import { ActivityLog } from './activity-log';
+import { ScheduledReports } from './scheduled-reports';
+import { GlobalSearch } from './global-search';
+import { NotificationsFeed } from './notifications-feed';
+import { FolderOpen, History, Target, Search, CalendarClock } from 'lucide-react';
 
-type TabType = 'overview' | 'articles' | 'categories' | 'users' | 'transactions' | 'billing' | 'agents' | 'landing-pages' | 'analytics' | 'templates' | 'images' | 'settings' | 'legal';
+type TabType = 'overview' | 'articles' | 'categories' | 'users' | 'transactions' | 'billing' | 'agents' | 'landing-pages' | 'analytics' | 'campaigns' | 'templates' | 'images' | 'settings' | 'legal' | 'activity-log' | 'scheduled-reports';
 
 interface NavSection {
   title: string;
@@ -79,6 +84,7 @@ const navSections: NavSection[] = [
     items: [
       { id: 'landing-pages', label: 'Landing Pages', icon: Rocket },
       { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+      { id: 'campaigns', label: 'Campaigns', icon: Target },
     ],
   },
   {
@@ -87,6 +93,8 @@ const navSections: NavSection[] = [
     items: [
       { id: 'agents', label: 'AI Agents', icon: Bot },
       { id: 'legal', label: 'Legal Pages', icon: Scale },
+      { id: 'activity-log', label: 'Activity Log', icon: History },
+      { id: 'scheduled-reports', label: 'Scheduled Reports', icon: CalendarClock },
       { id: 'settings', label: 'Settings', icon: Settings },
     ],
   },
@@ -119,6 +127,14 @@ export function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Global Search (Cmd+K) */}
+      <GlobalSearch onNavigate={(tab, search) => {
+        setActiveTab(tab as TabType);
+        if (tab === 'users' && search) {
+          setPersonSearch(search);
+        }
+      }} />
+
       {/* Sidebar */}
       <aside
         className={cn(
@@ -130,13 +146,28 @@ export function AdminDashboard() {
           {sidebarOpen && (
             <span className="font-bold text-lg">Admin Panel</span>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            {sidebarOpen && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
+                  title="Search (Ctrl+K)"
+                >
+                  <Search className="h-4 w-4" />
+                </Button>
+                <NotificationsFeed />
+              </>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
 
         <nav className="p-3 space-y-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 140px)' }}>
@@ -208,9 +239,12 @@ export function AdminDashboard() {
           {activeTab === 'agents' && <AgentConfig />}
           {activeTab === 'landing-pages' && <LandingPagesManager />}
           {activeTab === 'analytics' && <TrackingAnalytics />}
+          {activeTab === 'campaigns' && <CampaignDashboard />}
           {activeTab === 'images' && <ImageSources />}
           {activeTab === 'templates' && <TemplateManager />}
           {activeTab === 'legal' && <LegalPagesManager />}
+          {activeTab === 'activity-log' && <ActivityLog />}
+          {activeTab === 'scheduled-reports' && <ScheduledReports />}
           {activeTab === 'settings' && <BrandingSettings />}
         </div>
       </main>

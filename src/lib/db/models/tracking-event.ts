@@ -9,6 +9,8 @@ export type TrackingEventType =
   | 'click_image'
   | 'enter_portal'
   | 'article_view'
+  | 'paywall_shown'       // Fired when paywall overlay is displayed
+  | 'payment_started'     // Fired when payment flow is initiated
   | 'article_purchase'
   | 'video_play'
   | 'video_complete'

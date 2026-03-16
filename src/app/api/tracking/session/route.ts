@@ -5,9 +5,20 @@ import { parseUserAgent, extractIpFromRequest } from '@/lib/services/msisdn-dete
 import { detectNetworkType } from '@/lib/services/carrier-ip-ranges';
 import { VisitorSessionCreateInput, UtmParams, DeviceInfo } from '@/lib/db/models/visitor-session';
 import { ObjectId } from 'mongodb';
+import { lookupGeo } from '@/lib/services/geo-lookup';
+import { trackingLimiter } from '@/lib/utils/rate-limiter';
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit by IP
+    const clientIp = extractIpFromRequest(request);
+    const rateResult = trackingLimiter.check(clientIp);
+    if (!rateResult.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((rateResult.resetAt - Date.now()) / 1000)) } }
+      );
+    }
     const brandId = await getBrandId();
     const body = await request.json();
 
@@ -57,6 +68,9 @@ export async function POST(request: NextRequest) {
       term: utm?.term || utm?.utm_term,
     };
 
+    // Geo-enrich IP (cached, so repeated calls for same IP are free)
+    const geo = await lookupGeo(ip);
+
     // Create input
     const sessionInput: VisitorSessionCreateInput = {
       sessionId,
@@ -68,6 +82,7 @@ export async function POST(request: NextRequest) {
       device: deviceInfo,
       referrer,
       utm: utmParams,
+      geo: geo || undefined,
     };
 
     // Get or create session
@@ -85,6 +100,11 @@ export async function POST(request: NextRequest) {
     
     if (pageUrl) {
       updateData.lastPageUrl = pageUrl;
+    }
+
+    // Update geo if we have it and session doesn't yet
+    if (geo && !session.geo) {
+      updateData.geo = geo;
     }
 
     // Always update landing page slug/id when provided (ensures LP tracking works

@@ -3,7 +3,7 @@ import { TemplateDefinition } from '../types';
 export const economistTemplate: TemplateDefinition = {
   id: 'economist',
   name: 'Economist',
-  description: 'Traditional business newspaper style with classic masthead design',
+  description: 'Timeless business broadsheet with a warm parchment background, signature red accents, and classical serif typography. The refined editorial layout conveys authority and intellectual gravitas.',
   preview: '/templates/economist-preview.png',
   category: 'financial',
   
@@ -38,18 +38,18 @@ export const economistTemplate: TemplateDefinition = {
       error: '#e3120b',
     },
     dark: {
-      primary: '#ff5252',
-      secondary: '#90caf9',
-      accent: '#ff5252',
+      primary: '#ff6b6b',
+      secondary: '#8ecae6',
+      accent: '#ff6b6b',
       background: '#1a1917',
-      surface: '#252422',
-      surfaceAlt: '#302e2b',
+      surface: '#262422',
+      surfaceAlt: '#332f2a',
       text: '#f5f1eb',
       textMuted: '#a09a90',
       border: '#3d3a35',
       success: '#4ade80',
       warning: '#fbbf24',
-      error: '#ff5252',
+      error: '#ff6b6b',
     },
   },
   

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatPrice } from '@/lib/utils';
 import { storeDeviceInfo } from '@/lib/utils/device-fingerprint';
+import { track } from '@/lib/tracking/tracker';
 
 interface PaywallProps {
   articleId: string;
@@ -60,7 +61,14 @@ export function Paywall({
       }
     }
     detectNetwork();
-  }, []);
+
+    // Track paywall_shown event for conversion funnel accuracy
+    track('paywall_shown', {
+      articleId,
+      articleSlug,
+      priceInCents,
+    }).catch(() => { /* non-critical */ });
+  }, [articleId, articleSlug, priceInCents]);
 
   // Check for restore error/success in URL params on mount
   useEffect(() => {
@@ -90,6 +98,13 @@ export function Paywall({
   }, [locale]);
 
   const handleUnlock = () => {
+    // Track payment_started event for conversion funnel accuracy
+    track('payment_started', {
+      articleId,
+      articleSlug,
+      priceInCents,
+    }).catch(() => { /* non-critical */ });
+
     // Collect device fingerprint before payment
     const deviceInfo = storeDeviceInfo();
     console.log('[Payment] Device fingerprint collected:', deviceInfo.deviceFingerprint);

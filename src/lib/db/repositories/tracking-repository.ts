@@ -64,6 +64,7 @@ export class TrackingRepository {
       device: input.device,
       referrer: input.referrer,
       utm: input.utm || {},
+      geo: input.geo || undefined,
       msisdnConfidence: 'NONE',
       networkType: 'UNKNOWN',
       pageViews: 1,
@@ -97,6 +98,7 @@ export class TrackingRepository {
     if (input.purchaseCompleted !== undefined) updateFields.purchaseCompleted = input.purchaseCompleted;
     if (input.landingPageSlug) updateFields.landingPageSlug = input.landingPageSlug;
     if (input.landingPageId) updateFields.landingPageId = input.landingPageId;
+    if (input.geo) updateFields.geo = input.geo;
 
     const updateOps: Record<string, unknown> = { $set: updateFields };
     
@@ -130,6 +132,9 @@ export class TrackingRepository {
       }
       if (input.landingPageId) {
         updateInput.landingPageId = input.landingPageId;
+      }
+      if (input.geo) {
+        updateInput.geo = input.geo;
       }
       const updated = await this.updateSession(input.sessionId, updateInput);
       return updated || existing;

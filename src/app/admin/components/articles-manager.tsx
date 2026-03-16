@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Edit, Trash2, Eye, ArrowLeft } from 'lucide-react';
+import {
+  Plus, Search, Edit, Trash2, Eye, ArrowLeft,
+  CheckSquare, Square, XCircle, Loader2,
+} from 'lucide-react';
 import { ArticleEditor } from './article-editor';
 
 interface Article {
@@ -34,6 +37,10 @@ export function ArticlesManager() {
   const [totalPages, setTotalPages] = useState(1);
   const [mode, setMode] = useState<'list' | 'create' | 'edit'>('list');
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
+
+  // ── Bulk selection state ──
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   useEffect(() => {
     fetchArticles();
@@ -110,6 +117,50 @@ export function ArticlesManager() {
     setEditingArticle(null);
   };
 
+  // ── Bulk helpers ──
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredArticles.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredArticles.map(a => a._id)));
+    }
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const executeBulk = async (action: string, value?: string) => {
+    if (selectedIds.size === 0) return;
+    const label = action === 'delete'
+      ? `Delete ${selectedIds.size} article(s)?`
+      : `${action} ${selectedIds.size} article(s)${value ? ` → ${value}` : ''}?`;
+    if (!confirm(label)) return;
+
+    setBulkLoading(true);
+    try {
+      const res = await fetch('/api/admin/articles/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ids: Array.from(selectedIds), value }),
+      });
+      if (res.ok) {
+        clearSelection();
+        await fetchArticles();
+      }
+    } catch (error) {
+      console.error('Bulk action failed:', error);
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   const filteredArticles = articles.filter(a => 
     a.title.toLowerCase().includes(search.toLowerCase()) ||
     a.category.toLowerCase().includes(search.toLowerCase())
@@ -159,6 +210,42 @@ export function ArticlesManager() {
               />
             </div>
           </div>
+
+          {/* ── Bulk Actions Bar ── */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-2 mt-3 p-2.5 bg-blue-50 border border-blue-200 rounded-lg flex-wrap">
+              <span className="text-sm font-medium text-blue-700 mr-1">
+                {selectedIds.size} selected
+              </span>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={bulkLoading}
+                onClick={() => executeBulk('changeStatus', 'published')}>
+                Publish
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={bulkLoading}
+                onClick={() => executeBulk('changeStatus', 'draft')}>
+                Draft
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={bulkLoading}
+                onClick={() => executeBulk('changeStatus', 'archived')}>
+                Archive
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={bulkLoading}
+                onClick={() => {
+                  const cat = prompt('Enter new category:');
+                  if (cat) executeBulk('changeCategory', cat);
+                }}>
+                Change Category
+              </Button>
+              <Button size="sm" variant="destructive" className="h-7 text-xs" disabled={bulkLoading}
+                onClick={() => executeBulk('delete')}>
+                {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Trash2 className="h-3 w-3 mr-1" />}
+                Delete
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs ml-auto" onClick={clearSelection}>
+                <XCircle className="h-3 w-3 mr-1" /> Clear
+              </Button>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -172,11 +259,38 @@ export function ArticlesManager() {
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Select-all row */}
+              <div className="flex items-center gap-2 px-4 text-xs text-muted-foreground">
+                <button onClick={toggleSelectAll} className="flex items-center gap-1 hover:text-foreground transition-colors">
+                  {selectedIds.size === filteredArticles.length && filteredArticles.length > 0
+                    ? <CheckSquare className="h-4 w-4 text-blue-600" />
+                    : <Square className="h-4 w-4" />
+                  }
+                  {selectedIds.size === filteredArticles.length && filteredArticles.length > 0
+                    ? 'Deselect all'
+                    : 'Select all'
+                  }
+                </button>
+              </div>
+
               {filteredArticles.map((article) => (
                 <div
                   key={article._id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                  className={`flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors ${
+                    selectedIds.has(article._id) ? 'ring-2 ring-blue-300 bg-blue-50/30' : ''
+                  }`}
                 >
+                  {/* Checkbox */}
+                  <button
+                    className="mr-3 flex-shrink-0"
+                    onClick={() => toggleSelect(article._id)}
+                  >
+                    {selectedIds.has(article._id)
+                      ? <CheckSquare className="h-4 w-4 text-blue-600" />
+                      : <Square className="h-4 w-4 text-muted-foreground" />
+                    }
+                  </button>
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="text-sm font-normal truncate max-w-md">{article.title}</h3>

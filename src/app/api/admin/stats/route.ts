@@ -4,6 +4,7 @@ import { getUnlockRepository } from '@/lib/db';
 import { getCollection } from '@/lib/db/mongodb';
 import { verifyAdmin } from '@/lib/auth/admin';
 import { ObjectId } from 'mongodb';
+import { getCachedOrCompute } from '@/lib/utils/api-cache';
 
 // GET /api/admin/stats - Get dashboard statistics
 export async function GET(request: NextRequest) {
@@ -19,6 +20,25 @@ export async function GET(request: NextRequest) {
     // Get date range from query params (default 7 days, max 90)
     const searchParams = request.nextUrl.searchParams;
     const days = Math.min(Math.max(parseInt(searchParams.get('days') || '7', 10), 1), 365);
+
+    // Reason: Cache expensive aggregation results for 30 seconds per days value
+    const cacheKey = `stats:${brandId}:${days}`;
+    const data = await getCachedOrCompute(cacheKey, 30, async () => {
+      return computeStats(brandId, unlockRepo, days);
+    });
+
+    return NextResponse.json({ success: true, data });
+  } catch (error) {
+    console.error('Stats error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch stats' },
+      { status: 500 }
+    );
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function computeStats(brandId: string, unlockRepo: any, days: number) {
 
     // Calculate dates
     const now = new Date();
@@ -228,11 +248,12 @@ export async function GET(request: NextRequest) {
       unlocks: item.count || 0,
     }));
 
-    // ── Conversion funnel ──
+    // ── Conversion funnel (real event-based data) ──
     const completedUnlocks = await unlocksCollection.countDocuments({ status: 'completed' });
+    const eventsCollection = await getCollection(brandId, 'tracking_events');
 
     // Customer stats via aggregation
-    const [customerStatsAgg, returningStatsAgg] = await Promise.all([
+    const [customerStatsAgg, returningStatsAgg, realPaywallShown, realPaymentStarted] = await Promise.all([
       unlocksCollection.aggregate([
         { $match: { status: 'completed' } },
         { $group: { _id: '$msisdn' } },
@@ -244,19 +265,28 @@ export async function GET(request: NextRequest) {
         { $match: { count: { $gt: 1 } } },
         { $count: 'total' },
       ]).toArray(),
+      // Reason: Count real paywall_shown events if available, fallback to estimate
+      eventsCollection.countDocuments({ type: 'paywall_shown' }),
+      eventsCollection.countDocuments({ type: 'payment_started' }),
     ]);
 
     const actualCustomers = customerStatsAgg[0]?.total || 0;
     const returningCustomers = returningStatsAgg[0]?.total || 0;
 
-    const paywallShown = completedUnlocks > 0 ? Math.max(completedUnlocks * 3, totalPageViews > 0 ? Math.floor(totalPageViews * 0.4) : completedUnlocks * 3) : 0;
-    const paymentStarted = completedUnlocks > 0 ? Math.max(completedUnlocks, Math.floor(paywallShown * 0.5)) : 0;
+    // Use real event counts if available, otherwise use estimates for backward compat
+    const paywallShown = realPaywallShown > 0
+      ? realPaywallShown
+      : (completedUnlocks > 0 ? Math.max(completedUnlocks * 3, totalPageViews > 0 ? Math.floor(totalPageViews * 0.4) : completedUnlocks * 3) : 0);
+
+    const paymentStarted = realPaymentStarted > 0
+      ? realPaymentStarted
+      : (completedUnlocks > 0 ? Math.max(completedUnlocks, Math.floor(paywallShown * 0.5)) : 0);
 
     const conversionFunnel = [
       { stage: 'Page Views', value: totalPageViews || completedUnlocks * 10, color: '#3b82f6' },
-      { stage: 'Paywall Shown', value: paywallShown, color: '#8b5cf6' },
-      { stage: 'Payment Started', value: paymentStarted, color: '#f59e0b' },
-      { stage: 'Completed', value: completedUnlocks, color: '#22c55e' },
+      { stage: 'Paywall Shown', value: paywallShown, color: '#8b5cf6', isReal: realPaywallShown > 0 },
+      { stage: 'Payment Started', value: paymentStarted, color: '#f59e0b', isReal: realPaymentStarted > 0 },
+      { stage: 'Completed', value: completedUnlocks, color: '#22c55e', isReal: true },
     ];
 
     // ── Landing page performance ──
@@ -338,43 +368,33 @@ export async function GET(request: NextRequest) {
       ? (unlockStats.totalRevenue / 100 / actualCustomers).toFixed(2)
       : '0';
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        // Core stats
-        totalArticles: articleCounts,
-        recentArticles: recentArticleCount,
-        totalUsers: userCounts,
-        recentUsers: recentUserCount,
-        totalRevenue: unlockStats.totalRevenue,
-        totalUnlocks: unlockStats.totalUnlocks,
-        totalCustomers: actualCustomers,
-        returningCustomers,
+    return {
+      // Core stats
+      totalArticles: articleCounts,
+      recentArticles: recentArticleCount,
+      totalUsers: userCounts,
+      recentUsers: recentUserCount,
+      totalRevenue: unlockStats.totalRevenue,
+      totalUnlocks: unlockStats.totalUnlocks,
+      totalCustomers: actualCustomers,
+      returningCustomers,
 
-        // Charts data
-        topArticles,
-        viewsByCategory,
-        revenueByDay,
-        userGrowth,
-        transactionsByStatus,
-        articleRevenueData,
-        conversionFunnel,
-        lpPerformance,
-        weekOverWeek: periodComparison,
+      // Charts data
+      topArticles,
+      viewsByCategory,
+      revenueByDay,
+      userGrowth,
+      transactionsByStatus,
+      articleRevenueData,
+      conversionFunnel,
+      lpPerformance,
+      weekOverWeek: periodComparison,
 
-        // Conversion metrics
-        conversionRate,
-        avgRevenuePerUser,
+      // Conversion metrics
+      conversionRate,
+      avgRevenuePerUser,
 
-        // Current filter
-        daysFilter: days,
-      },
-    });
-  } catch (error) {
-    console.error('Stats error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch stats' },
-      { status: 500 }
-    );
-  }
+      // Current filter
+      daysFilter: days,
+    };
 }
