@@ -32,9 +32,17 @@ export async function GET() {
         }).toArray();
         
         const uniqueIps = new Set(sessions.map(s => s.ip)).size;
-        const msisdnCaptured = sessions.filter(s => s.msisdn).length;
-        const mobileDataCount = sessions.filter(s => s.networkType === 'MOBILE_DATA').length;
-        const wifiCount = sessions.filter(s => s.networkType === 'WIFI').length;
+        // Count unique MSISDNs, not session count
+        const uniqueMsisdns = new Set(sessions.filter(s => s.msisdn).map(s => s.msisdn)).size;
+        // Sum pageViews from sessions with each network type (consistent with visitor list)
+        const mobileDataVisits = sessions
+          .filter(s => s.networkType === 'MOBILE_DATA')
+          .reduce((sum: number, s) => sum + (s.pageViews || 1), 0);
+        const wifiVisits = sessions
+          .filter(s => s.networkType === 'WIFI')
+          .reduce((sum: number, s) => sum + (s.pageViews || 1), 0);
+        // Total visits = sum of all pageViews across sessions
+        const totalVisits = sessions.reduce((sum: number, s) => sum + (s.pageViews || 1), 0);
         
         // Find top source
         const sourceCounts: Record<string, number> = {};
@@ -49,12 +57,12 @@ export async function GET() {
           slug: lp.slug,
           name: lp.name,
           type: 'landing_page',
-          totalVisits: sessions.length,
+          totalVisits,
           uniqueVisitors: uniqueIps,
-          msisdnCaptured,
-          mobileDataVisits: mobileDataCount,
-          wifiVisits: wifiCount,
-          conversionRate: sessions.length > 0 ? (msisdnCaptured / sessions.length) * 100 : 0,
+          msisdnCaptured: uniqueMsisdns,
+          mobileDataVisits,
+          wifiVisits,
+          conversionRate: uniqueIps > 0 ? (uniqueMsisdns / uniqueIps) * 100 : 0,
           topSource: topSource || 'direct',
         };
       })
@@ -87,9 +95,20 @@ export async function GET() {
     });
 
     const mainSiteUniqueIps = new Set(uniqueMainSiteSessions.map(s => s.ip)).size;
-    const mainSiteMsisdn = uniqueMainSiteSessions.filter(s => s.msisdn).length;
-    const mainSiteMobile = uniqueMainSiteSessions.filter(s => s.networkType === 'MOBILE_DATA').length;
-    const mainSiteWifi = uniqueMainSiteSessions.filter(s => s.networkType === 'WIFI').length;
+    // Count unique MSISDNs, not session count
+    const mainSiteUniqueMsisdns = new Set(
+      uniqueMainSiteSessions.filter(s => s.msisdn).map(s => s.msisdn)
+    ).size;
+    // Sum pageViews from sessions with each network type (consistent with visitor list)
+    const mainSiteMobile = uniqueMainSiteSessions
+      .filter(s => s.networkType === 'MOBILE_DATA')
+      .reduce((sum: number, s) => sum + (s.pageViews || 1), 0);
+    const mainSiteWifi = uniqueMainSiteSessions
+      .filter(s => s.networkType === 'WIFI')
+      .reduce((sum: number, s) => sum + (s.pageViews || 1), 0);
+    // Total visits = sum of all pageViews
+    const mainSiteTotalVisits = uniqueMainSiteSessions
+      .reduce((sum: number, s) => sum + (s.pageViews || 1), 0);
 
     // Main site source counts
     const mainSourceCounts: Record<string, number> = {};
@@ -104,12 +123,12 @@ export async function GET() {
       slug: 'main-site',
       name: 'Main Site (Direct)',
       type: 'main_site',
-      totalVisits: uniqueMainSiteSessions.length,
+      totalVisits: mainSiteTotalVisits,
       uniqueVisitors: mainSiteUniqueIps,
-      msisdnCaptured: mainSiteMsisdn,
+      msisdnCaptured: mainSiteUniqueMsisdns,
       mobileDataVisits: mainSiteMobile,
       wifiVisits: mainSiteWifi,
-      conversionRate: uniqueMainSiteSessions.length > 0 ? (mainSiteMsisdn / uniqueMainSiteSessions.length) * 100 : 0,
+      conversionRate: mainSiteUniqueIps > 0 ? (mainSiteUniqueMsisdns / mainSiteUniqueIps) * 100 : 0,
       topSource: mainTopSource || 'direct',
     };
 
