@@ -102,6 +102,25 @@ NEXT_PUBLIC_APP_URL=https://${config.domain.domain}
 `;
 }
 
+/**
+ * Generate the security headers snippet file content.
+ * Reason: We write this to /etc/nginx/snippets/security-headers.conf
+ * and include it in both the HTTP and HTTPS server blocks, so headers
+ * survive Certbot's config modifications.
+ */
+export function generateSecurityHeadersSnippet(): string {
+  return `# Security Headers — managed by NewsPortal installer
+# Included via: include /etc/nginx/snippets/security-headers.conf;
+
+add_header X-Frame-Options "SAMEORIGIN" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-XSS-Protection "1; mode=block" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self' https:; frame-src 'self' https:; media-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self' https:;" always;
+`;
+}
+
 export function generateNginxConfig(config: DeploymentConfig): string {
   const domain = config.domain.domain;
   const port = 3000;
@@ -130,13 +149,8 @@ server {
     listen [::]:80;
     server_name ${domain} www.${domain};
 ${cloudflareRealIpBlock}
-    # Security Headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self' https:; frame-src 'self' https:; media-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self' https:;" always;
+    # Security Headers (from shared snippet — survives Certbot rewrites)
+    include /etc/nginx/snippets/security-headers.conf;
 
     # Gzip Compression
     gzip on;
@@ -486,7 +500,16 @@ export async function deployToServer(
     }
 
     // Ensure Nginx directories exist
-    await ssh.exec('sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled');
+    await ssh.exec('sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets');
+
+    // Upload shared security headers snippet
+    // Reason: Certbot rewrites the nginx config when adding SSL, which can lose
+    // inline add_header directives. By using an include snippet, the headers
+    // survive Certbot modifications and are shared across HTTP + HTTPS blocks.
+    onProgress({ stepId: 'nginx', status: 'running', log: 'Installing security headers snippet...' });
+    const securitySnippet = generateSecurityHeadersSnippet();
+    await ssh.uploadFile(securitySnippet, '/tmp/security-headers.conf');
+    await ssh.exec('sudo mv /tmp/security-headers.conf /etc/nginx/snippets/security-headers.conf');
 
     // Upload Nginx config
     const nginxConfig = generateNginxConfig(config);
@@ -532,6 +555,34 @@ export async function deployToServer(
       onProgress({ stepId: 'ssl', status: 'running', log: 'SSL setup note: Certificate may require DNS propagation. Site will work on HTTP.' });
     } else {
       onProgress({ stepId: 'ssl', status: 'running', log: 'SSL certificate installed successfully' });
+    }
+
+    // Ensure security headers snippet is included in the HTTPS server block
+    // Reason: Certbot creates a new 443 server block that doesn't inherit our
+    // add_header directives. We inject the include if it's missing.
+    const nginxSitePath = `/etc/nginx/sites-available/newsportal-${brandId}`;
+    const hasSnippetInSSL = await ssh.exec(
+      `grep -c 'include /etc/nginx/snippets/security-headers.conf' ${nginxSitePath} 2>/dev/null || echo "0"`
+    );
+    const snippetCount = parseInt(hasSnippetInSSL.stdout.trim(), 10) || 0;
+
+    if (snippetCount < 2) {
+      // The snippet include exists only in the HTTP block (or not at all).
+      // Inject it into the SSL (443) server block created by Certbot.
+      onProgress({ stepId: 'ssl', status: 'running', log: 'Injecting security headers into HTTPS block...' });
+      await ssh.exec(
+        `sudo sed -i '/listen 443 ssl/a\\    include /etc/nginx/snippets/security-headers.conf;' ${nginxSitePath}`
+      );
+
+      // Test and reload
+      const postSslTest = await ssh.exec('sudo nginx -t 2>&1');
+      if (postSslTest.exitCode === 0) {
+        await ssh.exec('sudo systemctl reload nginx');
+        onProgress({ stepId: 'ssl', status: 'running', log: 'Security headers applied to HTTPS block' });
+      } else {
+        // Revert if nginx test fails (safety net)
+        onProgress({ stepId: 'ssl', status: 'running', log: 'Warning: Could not inject headers into HTTPS block. Manual setup may be needed.' });
+      }
     }
 
     onProgress({ stepId: 'ssl', status: 'completed', message: 'SSL configured' });
