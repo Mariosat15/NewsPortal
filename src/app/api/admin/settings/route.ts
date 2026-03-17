@@ -3,6 +3,7 @@ import { getBrandIdSync, clearSettingsCache } from '@/lib/brand/server';
 import { getCollection } from '@/lib/db/mongodb';
 import { seedDefaultSettings } from '@/lib/db/seed';
 import { verifyAdmin } from '@/lib/auth/admin';
+import bcrypt from 'bcryptjs';
 
 interface Settings {
   key: string;
@@ -121,13 +122,23 @@ export async function POST(request: NextRequest) {
     for (const [key, value] of Object.entries(body)) {
       if (key === 'id') continue; // Skip the brand ID - it's read-only
       
+      // SECURITY: Hash admin password before storing in database
+      let processedValue = value;
+      if (key === 'admin' && typeof value === 'object' && value !== null) {
+        const adminVal = value as { email?: string; password?: string; passwordHashed?: boolean };
+        if (adminVal.password && adminVal.password.trim() !== '') {
+          const hashedPw = await bcrypt.hash(adminVal.password, 12);
+          processedValue = { ...adminVal, password: hashedPw, passwordHashed: true };
+        }
+      }
+
       updates.push(
         collection.updateOne(
           { key },
           { 
             $set: { 
               key, 
-              value, 
+              value: processedValue, 
               updatedAt: new Date() 
             } 
           },

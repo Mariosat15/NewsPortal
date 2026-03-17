@@ -4,6 +4,7 @@ import { getUserRepository, getCustomerRepository, getTrackingRepository } from 
 import { extractIpFromRequest } from '@/lib/services/msisdn-detection';
 import { detectNetworkType } from '@/lib/services/carrier-ip-ranges';
 import { normalizePhoneNumber } from '@/lib/utils/phone';
+import { trackingLimiter } from '@/lib/utils/rate-limiter';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,16 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit by IP
+    const clientIp = extractIpFromRequest(request);
+    const rateResult = trackingLimiter.check(clientIp);
+    if (!rateResult.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((rateResult.resetAt - Date.now()) / 1000)) } }
+      );
+    }
+
     const body = await request.json();
     const { 
       msisdn,

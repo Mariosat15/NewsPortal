@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { detectNetworkType } from '@/lib/services/carrier-ip-ranges';
 import { extractIpFromRequest } from '@/lib/services/msisdn-detection';
+import { apiLimiter } from '@/lib/utils/rate-limiter';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,15 @@ export async function GET(request: NextRequest) {
   try {
     // Extract IP from request headers
     const ip = extractIpFromRequest(request);
+
+    // Rate limit by IP (60/min)
+    const rateResult = apiLimiter.check(ip);
+    if (!rateResult.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests', networkType: 'UNKNOWN', isMobileNetwork: false },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((rateResult.resetAt - Date.now()) / 1000)) } }
+      );
+    }
     
     // Log headers for debugging
     const cfIp = request.headers.get('cf-connecting-ip');

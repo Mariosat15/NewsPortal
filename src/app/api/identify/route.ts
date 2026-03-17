@@ -2,11 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getBrandIdSync } from '@/lib/brand/server';
 import { getUserRepository } from '@/lib/db';
 import { headers } from 'next/headers';
+import { trackingLimiter } from '@/lib/utils/rate-limiter';
 
 // POST /api/identify - Hidden identification endpoint
 // This endpoint is used by the hidden identification page to track users
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit by IP
+    const headersList = await headers();
+    const clientIp = headersList.get('x-forwarded-for')?.split(',')[0]?.trim() || 
+                     headersList.get('x-real-ip') || 'unknown';
+    const rateResult = trackingLimiter.check(clientIp);
+    if (!rateResult.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((rateResult.resetAt - Date.now()) / 1000)) } }
+      );
+    }
+
     const body = await request.json();
     const brandId = getBrandIdSync();
     const userRepo = getUserRepository(brandId);

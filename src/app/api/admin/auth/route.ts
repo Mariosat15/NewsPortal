@@ -4,10 +4,24 @@ import { getBrandIdSync } from '@/lib/brand/server';
 import { getCollection } from '@/lib/db/mongodb';
 import { seedDefaultSettings } from '@/lib/db/seed';
 import { verifyAdmin } from '@/lib/auth/admin';
+import { authLimiter } from '@/lib/utils/rate-limiter';
+import { extractIpFromRequest } from '@/lib/services/msisdn-detection';
+import bcrypt from 'bcryptjs';
 
 // POST /api/admin/auth - Admin login
 export async function POST(request: NextRequest) {
   try {
+    // SECURITY: Rate limit login attempts (15 per 15 minutes per IP)
+    const clientIp = extractIpFromRequest(request);
+    const rateResult = authLimiter.check(clientIp);
+    if (!rateResult.allowed) {
+      console.log('[Admin Auth] Rate limited IP:', clientIp);
+      return NextResponse.json(
+        { success: false, error: 'Too many login attempts. Try again later.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((rateResult.resetAt - Date.now()) / 1000)) } }
+      );
+    }
+
     const { email, password } = await request.json();
 
     // SECURITY: Admin credentials MUST be set in env vars. No hardcoded defaults.
@@ -26,6 +40,7 @@ export async function POST(request: NextRequest) {
     // Check if admin settings have been changed in database
     let adminEmail = envEmail;
     let adminPassword = envPassword;
+    let isDbPasswordHashed = false;
     
     try {
       const brandId = getBrandIdSync();
@@ -38,13 +53,14 @@ export async function POST(request: NextRequest) {
       // Check for custom admin credentials in database
       const adminSetting = await settingsCollection.findOne({ key: 'admin' });
       if (adminSetting?.value && typeof adminSetting.value === 'object') {
-        const adminSettings = adminSetting.value as { email?: string; password?: string };
+        const adminSettings = adminSetting.value as { email?: string; password?: string; passwordHashed?: boolean };
         if (adminSettings.email && adminSettings.email.trim() !== '') {
           adminEmail = adminSettings.email;
         }
         // Only use database password if it was explicitly set (non-empty)
         if (adminSettings.password && adminSettings.password.trim() !== '') {
           adminPassword = adminSettings.password;
+          isDbPasswordHashed = adminSettings.passwordHashed === true;
         }
       }
     } catch (e) {
@@ -52,14 +68,53 @@ export async function POST(request: NextRequest) {
       console.log('[Admin Auth] Using env credentials (DB unavailable)');
     }
 
-    // Verify credentials (no debug logging of sensitive data)
-    if (email !== adminEmail || password !== adminPassword) {
+    // Verify credentials
+    const emailMatch = email === adminEmail;
+    let passwordMatch = false;
+
+    if (isDbPasswordHashed) {
+      // Reason: DB password was hashed on save — use bcrypt compare
+      passwordMatch = await bcrypt.compare(password, adminPassword);
+    } else {
+      // Env password or legacy plaintext DB password — direct compare
+      // Use constant-time comparison to prevent timing attacks
+      if (password.length === adminPassword.length) {
+        let result = 0;
+        for (let i = 0; i < password.length; i++) {
+          result |= password.charCodeAt(i) ^ adminPassword.charCodeAt(i);
+        }
+        passwordMatch = result === 0;
+      }
+    }
+
+    if (!emailMatch || !passwordMatch) {
       console.log('[Admin Auth] Login failed for:', email);
       return NextResponse.json(
         { success: false, error: 'Invalid credentials' },
         { status: 401 }
       );
     }
+
+    // SECURITY: If DB password was plaintext, auto-hash it for future logins
+    if (!isDbPasswordHashed) {
+      try {
+        const brandId = getBrandIdSync();
+        const settingsCollection = await getCollection(brandId, 'settings');
+        const hashedPw = await bcrypt.hash(adminPassword, 12);
+        await settingsCollection.updateOne(
+          { key: 'admin' },
+          { $set: { 'value.password': hashedPw, 'value.passwordHashed': true, updatedAt: new Date() } },
+          { upsert: true }
+        );
+        console.log('[Admin Auth] Auto-hashed admin password in database');
+      } catch (hashErr) {
+        // Non-fatal — login still succeeds, hashing will retry next login
+        console.error('[Admin Auth] Failed to auto-hash password:', hashErr);
+      }
+    }
+
+    // Reset rate limiter on successful login
+    authLimiter.reset(clientIp);
 
     console.log('[Admin Auth] Login successful for:', email);
 

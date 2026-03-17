@@ -3,6 +3,7 @@ import { getTrackingRepository, getCustomerRepository } from '@/lib/db';
 import { getBrandId } from '@/lib/brand/server';
 import { extractIpFromRequest } from '@/lib/services/msisdn-detection';
 import { TrackingEventCreateInput, TrackingEventType } from '@/lib/db/models/tracking-event';
+import { trackingLimiter } from '@/lib/utils/rate-limiter';
 
 const VALID_EVENT_TYPES: TrackingEventType[] = [
   'page_view',
@@ -23,6 +24,16 @@ const VALID_EVENT_TYPES: TrackingEventType[] = [
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit by IP
+    const clientIp = extractIpFromRequest(request);
+    const rateResult = trackingLimiter.check(clientIp);
+    if (!rateResult.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((rateResult.resetAt - Date.now()) / 1000)) } }
+      );
+    }
+
     const brandId = await getBrandId();
     const body = await request.json();
 
@@ -107,6 +118,16 @@ export async function POST(request: NextRequest) {
 // Batch events
 export async function PUT(request: NextRequest) {
   try {
+    // Rate limit by IP
+    const clientIp = extractIpFromRequest(request);
+    const rateResult = trackingLimiter.check(clientIp);
+    if (!rateResult.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((rateResult.resetAt - Date.now()) / 1000)) } }
+      );
+    }
+
     const brandId = await getBrandId();
     const body = await request.json();
 
