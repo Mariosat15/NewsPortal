@@ -269,36 +269,52 @@ export async function deployToServer(
       // Wait for any existing apt/dpkg processes to finish (common on fresh installs)
       onProgress({ stepId: 'prepare', status: 'running', log: 'Checking for running package managers...' });
       
-      // Try to stop unattended-upgrades gracefully first
+      // Step A: Stop and disable unattended-upgrades service
       await ssh.exec('sudo systemctl stop unattended-upgrades 2>/dev/null || true');
       await ssh.exec('sudo systemctl disable unattended-upgrades 2>/dev/null || true');
-      
-      // Check if apt/dpkg is actually running (exclude grep/pgrep from results)
-      const aptRunning = await ssh.exec('ps aux | grep -E "[a]pt-get|[d]pkg" | grep -v grep | head -1');
-      
-      if (aptRunning.stdout.trim()) {
-        onProgress({ stepId: 'prepare', status: 'running', log: 'Package manager is busy, waiting (max 60s)...' });
-        
-        // Wait max 60 seconds (not 5 minutes)
-        for (let i = 0; i < 12; i++) {
-          const stillRunning = await ssh.exec('ps aux | grep -E "[a]pt-get|[d]pkg" | grep -v grep | head -1');
-          if (!stillRunning.stdout.trim()) {
-            onProgress({ stepId: 'prepare', status: 'running', log: 'Package manager is now free' });
-            break;
-          }
-          onProgress({ stepId: 'prepare', status: 'running', log: `Waiting for package manager... (${i * 5}s)` });
-          await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // Step B: Force-kill unattended-upgrades AND any apt/dpkg child processes
+      // Reason: `systemctl stop` sends SIGTERM but unattended-upgr often ignores it
+      // while a transaction is in progress. We need SIGKILL (-9) to release the lock.
+      await ssh.exec('sudo killall -9 unattended-upgr unattended-upgrade 2>/dev/null || true');
+      await ssh.exec('sudo killall -9 apt apt-get dpkg 2>/dev/null || true');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Step C: Wait for the dpkg lock file to be released (max 90s)
+      // Reason: Even after killing processes, the lock file can linger briefly.
+      // We check the actual lock file instead of process list — more reliable.
+      let lockFree = false;
+      for (let i = 0; i < 18; i++) {
+        const lockCheck = await ssh.exec(
+          'sudo fuser /var/lib/dpkg/lock-frontend 2>/dev/null || echo "free"'
+        );
+        if (lockCheck.stdout.includes('free') || lockCheck.stdout.trim() === '') {
+          lockFree = true;
+          onProgress({ stepId: 'prepare', status: 'running', log: 'Package manager lock is free' });
+          break;
         }
-        
-        // Force kill any remaining stuck processes
-        await ssh.exec('sudo killall -9 apt apt-get dpkg 2>/dev/null || true');
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Lock still held — kill whatever is holding it
+        const holdingPid = lockCheck.stdout.trim().split(/\s+/).pop();
+        if (holdingPid) {
+          onProgress({ stepId: 'prepare', status: 'running', log: `Lock held by PID ${holdingPid}, killing...` });
+          await ssh.exec(`sudo kill -9 ${holdingPid} 2>/dev/null || true`);
+        }
+        onProgress({ stepId: 'prepare', status: 'running', log: `Waiting for lock release... (${i * 5}s)` });
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+
+      if (!lockFree) {
+        // Last resort: forcefully remove lock files
+        onProgress({ stepId: 'prepare', status: 'running', log: 'Force-removing stale lock files...' });
+        await ssh.exec('sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock');
       }
     } else {
       onProgress({ stepId: 'prepare', status: 'running', log: 'Skipping apt wait (re-deployment mode)' });
-      // Still try to stop unattended-upgrades
+      // Still kill unattended-upgrades + any stale locks
       await ssh.exec('sudo systemctl stop unattended-upgrades 2>/dev/null || true');
-      await ssh.exec('sudo killall -9 apt apt-get dpkg 2>/dev/null || true');
+      await ssh.exec('sudo killall -9 unattended-upgr unattended-upgrade apt apt-get dpkg 2>/dev/null || true');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await ssh.exec('sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock 2>/dev/null || true');
     }
 
     // Fix any broken dpkg state FIRST (critical!)
