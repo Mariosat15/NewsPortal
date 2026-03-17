@@ -24,10 +24,8 @@ export async function POST(request: NextRequest) {
     const brandId = getBrandIdSync();
     const userRepo = getUserRepository(brandId);
 
-    const headersList = await headers();
-    const ip = headersList.get('x-forwarded-for') || 
-               headersList.get('x-real-ip') || 
-               'unknown';
+    // Reuse headersList from rate-limit block above
+    const ip = clientIp;
     const userAgent = headersList.get('user-agent') || '';
     const referer = headersList.get('referer') || '';
 
